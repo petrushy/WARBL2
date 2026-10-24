@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- "Toggle Bluetooth on/off" button action: turns Bluetooth completely off (disconnects and stops advertising) and back on. USB MIDI is unaffected, and with Bluetooth off the firmware uses its fastest USB timing. Bluetooth is always on after power-up. Uses the extended CC 109 button-action namespace (action 29, CC 109 value 105).
+
 ## [4.8] - 2026-8-6
 
 ### Changed

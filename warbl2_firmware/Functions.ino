@@ -2696,11 +2696,11 @@ void handleControlChange(byte source, byte channel, byte number, byte value) {
                 || (number == MIDI_CC_109 && value >= MIDI_CUSTOM_CHARTS_START && value <= MIDI_CUSTOM_CHARTS_END)) {  // Indicates that value for IMUsettings variable will be sent on CC 105.
                 pressureReceiveMode = value + MIDI_CC_109_OFFSET;                                                      // Add to the value because lower pressureReceiveModes are used for other variables.
                 blinkNumber[GREEN_LED] = 0;
-            } else if (number == MIDI_CC_109 && value == MIDI_BUTTON_ACTIONS2_START) {
-                // Extended button-action namespace: CC109 value 104 = button action 28.
+            } else if (number == MIDI_CC_109 && value >= MIDI_BUTTON_ACTIONS2_START && value <= MIDI_BUTTON_ACTIONS2_END) {
+                // Extended button-action namespace: CC109 value 104 = button action 28, 105 = 29, etc.
                 for (byte i = 0; i < kGESTURESnVariables; i++) {
                     if (buttonReceiveMode == i) {
-                        buttonPrefs[preset][i][0] = NOTE_HOLD;
+                        buttonPrefs[preset][i][0] = NOTE_HOLD + (value - MIDI_BUTTON_ACTIONS2_START);
                     }
                 }
             }
@@ -3274,6 +3274,9 @@ void performAction(byte action, byte button) {
                 noteHold = false;  // If we're in momentary mode this is a release, so just turn off note hold.
             }
             break;
+        case BLUETOOTH_TOGGLE:
+            setBluetooth(!bleEnabled);  // In momentary mode this is the release, which toggles back.
+            break;
         default:
             return;
     }
@@ -3428,6 +3431,10 @@ void handleMomentary(byte button) {
             if (noteHold) {
                 heldNote = notePlaying;
             }
+        }
+
+        if (buttonPrefs[preset][button][0] == BLUETOOTH_TOGGLE) {
+            setBluetooth(!bleEnabled);
         }
     }
 }
@@ -3613,8 +3620,8 @@ void sendSettings() {
         // CC106 namespace; action 28 starts the extended CC109 namespace at value 104.
         if (buttonPrefs[preset][i][0] <= 27) {
             sendMIDICouplet(MIDI_CC_102, MIDI_GESTURE_START + i, MIDI_CC_106, MIDI_BUTTON_ACTIONS_START + buttonPrefs[preset][i][0]);
-        } else if (buttonPrefs[preset][i][0] == NOTE_HOLD) {
-            sendMIDICouplet(MIDI_CC_102, MIDI_GESTURE_START + i, MIDI_CC_109, MIDI_BUTTON_ACTIONS2_START);
+        } else if (buttonPrefs[preset][i][0] < kACTIONSnVariables) {
+            sendMIDICouplet(MIDI_CC_102, MIDI_GESTURE_START + i, MIDI_CC_109, MIDI_BUTTON_ACTIONS2_START + (buttonPrefs[preset][i][0] - NOTE_HOLD));
         }
 
         //This would require a "quadruplet mutex"...
@@ -4453,6 +4460,38 @@ void sendMIDI(uint8_t m, uint8_t c, uint8_t d) {
                 }
                 break;
             }
+    }
+}
+
+
+
+
+
+
+
+
+// Turn Bluetooth off (drop any connection and stop advertising so the radio is idle) or back on (resume advertising). USB MIDI is unaffected.
+void setBluetooth(bool enable) {
+
+    if (enable == bleEnabled) {
+        return;
+    }
+    bleEnabled = enable;
+
+    if (enable) {
+        Bluefruit.Advertising.restartOnDisconnect(true);
+        Bluefruit.Advertising.start(0);
+        blinkNumber[BLUE_LED] = 1;
+    } else {
+        Bluefruit.Advertising.restartOnDisconnect(false);  // Must be set before disconnecting, otherwise advertising would restart.
+        Bluefruit.Advertising.stop();
+        for (uint8_t i = 0; i < BLE_MAX_CONNECTION; i++) {
+            BLEConnection* connection = Bluefruit.Connection(i);
+            if (connection && connection->connected()) {
+                connection->disconnect();
+            }
+        }
+        blinkNumber[GREEN_LED] = 1;
     }
 }
 

@@ -1167,6 +1167,11 @@ function WARBL_Receive(event, source) {
 				else if (data1 == MIDI_CC_104) {
 					jumpFactorWrite = data2;
 				} // so we know which pressure setting is going to be received.
+				else if (data1 == MIDI_CC_109 && data2 >= MIDI_BUTTON_ACTIONS2_START && data2 <= MIDI_BUTTON_ACTIONS2_END) {
+					if (buttonRowWrite < numberOfGestures) { //extended button action for the row selected by the preceding CC 102
+						document.getElementById("row" + (buttonRowWrite)).value = data2 - MIDI_BUTTON_ACTIONS2_START + MIDI_BUTTON_ACTIONS2_FIRST_ACTION;
+					}
+				}
 				else if (data1 == MIDI_CC_109 && data2 != MIDI_CUSTOM_CHARTS_RCVD) {
 					jumpFactorWrite = data2 + MIDI_CC_109_OFFSET;
 				} // so we know which WARBL2 IMU setting is going to be received.
@@ -4472,10 +4477,14 @@ function sendRow(rowNum) {
 	blink(1);
 	updateCells();
 	sendToWARBL(MIDI_CC_102, MIDI_GESTURE_START + rowNum);
-	var y = (100) + parseFloat(document.getElementById("row" + rowNum).value);
+	var action = parseFloat(document.getElementById("row" + rowNum).value);
+	var y = (100) + action;
 	if (version < 4.0) {
 		sendToWARBL(MIDI_CC_102, y);
 		sendMIDIrow(rowNum); //this is just to fix an issue with the LED being stuck on with the old WARBL and this Config Tool version.
+	}
+	else if (action >= MIDI_BUTTON_ACTIONS2_FIRST_ACTION) { //actions 28 and up use the extended namespace on CC 109
+		sendToWARBL(MIDI_CC_109, MIDI_BUTTON_ACTIONS2_START + action - MIDI_BUTTON_ACTIONS2_FIRST_ACTION);
 	}
 	else sendToWARBL(MIDI_CC_106, y);
 	if (rowNum < 3) {

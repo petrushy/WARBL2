@@ -524,6 +524,9 @@ const MIDI_DIS_VIBRATO_HOLES_END = MIDI_CC_106_VALUE_38; //Bidirectional. disabl
 const MIDI_WARBL2_SETTINGS_START = MIDI_CC_106_VALUE_55; //Bidirectional. WARBL2 settings array (for settings that are independent of mode)
 const MIDI_WARBL2_SETTINGS_END = MIDI_CC_106_VALUE_74; //Bidirectional. WARBL2 settings array (for settings that are independent of mode)
 const MIDI_BUTTON_ACTIONS_START = MIDI_CC_106_VALUE_100; //Bidirectional. button action 0 
+const MIDI_BUTTON_ACTIONS2_START = 104; //Bidirectional, on CC 109. Extended button action 28 (note hold)
+const MIDI_BUTTON_ACTIONS2_END = 105; //Bidirectional, on CC 109. Extended button action 29 (toggle Bluetooth)
+const MIDI_BUTTON_ACTIONS2_FIRST_ACTION = 28; //Action number sent as MIDI_BUTTON_ACTIONS2_START
 
 const MIDI_CUSTOM_CHARTS_START = MIDI_CC_109_VALUE_100; //Beginning of WARBL2 CustomCharts
 const MIDI_CUSTOM_CHARTS_END = MIDI_CC_109_VALUE_103; //End of WARBL2 CustomCharts

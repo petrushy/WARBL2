@@ -216,7 +216,8 @@
 #define TOGGLE_SLIDE_MODES 17
 // 18-27 reserved for the original CC106 button-action namespace.
 #define NOTE_HOLD 28
-#define kACTIONSnVariables 29
+#define BLUETOOTH_TOGGLE 29
+#define kACTIONSnVariables 30
 
 // Variables in the WARBL2settings array (independent of PRESET)
 #define MIDI_DESTINATION 0  // 0 means send MIDI to USB only, 1 means send to BLE only, 2 means send to both, see defines below
@@ -718,7 +719,8 @@
 #define MIDI_CC_109_VALUE_103 103  // Bidirectional. Indicates that  WARBL2 custom fingering chart 4 is about to be sent on CC 105.
 
 #define MIDI_CC_109_VALUE_104 104  // Bidirectional. button action 28 (note hold)
-                                   /* 105-125 can be used for more button actions */
+#define MIDI_CC_109_VALUE_105 105  // Bidirectional. button action 29 (toggle Bluetooth)
+                                   /* 106-125 can be used for more button actions */
 
 #define MIDI_CC_109_VALUE_126 126  // From WARBL. Indicates that firmware patch number will be sent on CC 105
 #define MIDI_CC_109_VALUE_127 127  // From WARBL. Indicates button/gesture action will be sent on CC 105
@@ -805,6 +807,7 @@
 #define MIDI_WARBL2_SETTINGS_END MIDI_CC_106_VALUE_74      // Bidirectional. WARBL2 settings array (for settings that are independent of preset)
 #define MIDI_BUTTON_ACTIONS_START MIDI_CC_106_VALUE_100    // Bidirectional. Button actions 0-27
 #define MIDI_BUTTON_ACTIONS2_START MIDI_CC_109_VALUE_104   // Bidirectional. Extended button action 28
+#define MIDI_BUTTON_ACTIONS2_END MIDI_CC_109_VALUE_105     // Bidirectional. Extended button action 29
 
 #define MIDI_CUSTOM_CHARTS_START MIDI_CC_109_VALUE_100                                   // Beginning of WARBL2 CustomCharts
 #define MIDI_CUSTOM_CHARTS_END MIDI_CC_109_VALUE_103                                     // End of WARBL2 CustomCharts
