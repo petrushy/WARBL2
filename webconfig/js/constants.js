@@ -587,7 +587,6 @@ const MIDI_EXPRESSION_CURVE_LOW = MIDI_CC_104_VALUE_94; // Bidirectional. Settin
 const MIDI_EXPRESSION_CURVE_HIGH = MIDI_CC_104_VALUE_95; // Bidirectional. Settings for current instrument: indicates ED[46] is about to be sent with CC 105.
 const MIDI_AFTERTOUCH_MPEPLUS = MIDI_CC_104_VALUE_96;  // Bidirectional. Settings for current instrument: indicates ED[47] is about to be sent with CC 105.
 const MIDI_OVERBLOW_SEMITONES = MIDI_CC_104_VALUE_98;  // Bidirectional. Settings for current instrument: indicates ED[49] is about to be sent with CC 105.
-const MIDI_LOWER_HOLES = 117;  // Bidirectional. Settings for current instrument: indicates ED[68] (lower holes) is about to be sent with CC 105.
 
 const MIDI_SEND_ROLL = MIDI_CC_109_VALUE_0; // Bidirectional. Settings for current instrument: indicates IMUsettings[0] is about to be sent with CC 105. 
 const MIDI_SEND_PITCH = MIDI_CC_109_VALUE_1; // Bidirectional. Settings for current instrument: indicates IMUsettings[1] is about to be sent with CC 105. 
