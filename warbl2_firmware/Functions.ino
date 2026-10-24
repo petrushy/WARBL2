@@ -3139,6 +3139,14 @@ void performAction(byte action, byte button) {
             }
             break;
 
+        case BLUETOOTH_TOGGLE:
+            if (button != 127 && !momentary[preset][button]) {
+                setBluetooth(!bleEnabled);
+            } else {
+                setBluetooth(!bleEnabled);  // Toggle again if we're in momentary mode and this is a release.
+            }
+            break;
+
         default:
             return;
     }
@@ -4312,6 +4320,32 @@ void sendMIDI(uint8_t m, uint8_t c, uint8_t d) {
 
 
 // Retrieve BLE connection information.
+// Turn Bluetooth off (drop any connection and stop advertising so the radio is idle) or back on (resume advertising). USB MIDI is unaffected.
+void setBluetooth(bool enable) {
+
+    if (enable == bleEnabled) {
+        return;
+    }
+    bleEnabled = enable;
+
+    if (enable) {
+        Bluefruit.Advertising.restartOnDisconnect(true);
+        Bluefruit.Advertising.start(0);
+        blinkNumber[BLUE_LED] = 1;
+    } else {
+        Bluefruit.Advertising.restartOnDisconnect(false);  // Must be set before disconnecting, otherwise advertising would restart.
+        Bluefruit.Advertising.stop();
+        for (uint8_t i = 0; i < BLE_MAX_CONNECTION; i++) {
+            BLEConnection* connection = Bluefruit.Connection(i);
+            if (connection && connection->connected()) {
+                connection->disconnect();
+            }
+        }
+        blinkNumber[GREEN_LED] = 1;
+    }
+}
+
+
 void connect_callback(uint16_t conn_handle) {
 
     BLEConnection* connection = Bluefruit.Connection(conn_handle);

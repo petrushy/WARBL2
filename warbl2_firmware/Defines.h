@@ -213,7 +213,8 @@
 #define SHOW_BATTERY_LEVEL 15
 #define REGISTER_HOLD 16
 #define TOGGLE_SLIDE_MODES 17
-#define kACTIONSnVariables 18
+#define BLUETOOTH_TOGGLE 18
+#define kACTIONSnVariables 19
 
 // Variables in the WARBL2settings array (independent of PRESET)
 #define MIDI_DESTINATION 0  // 0 means send MIDI to USB only, 1 means send to BLE only, 2 means send to both, see defines below

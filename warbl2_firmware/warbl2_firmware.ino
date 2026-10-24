@@ -338,6 +338,7 @@ bool noteOnOffToggle[] = { 0, 0, 0 };  // If using a button to toggle a noteOn/n
 bool longPressUsed[] = { 0, 0, 0 };    // If we used a long button press, we set a flag so we don't use it again unless the button has been released first.
 bool specialPressUsed[] = { 0, 0, 0 };
 bool dronesOn = 0;                         //used to monitor drones on/off.
+bool bleEnabled = true;                    // False when Bluetooth has been turned off with a button action (advertising stopped, no connections). Always true after boot.
 bool waitingSecondClick[3] = { 0, 0, 0 };  //20240629 MrMep - Double-click Action
 unsigned int doubleClickTimer = 0;
 
