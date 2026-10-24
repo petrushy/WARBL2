@@ -71,6 +71,7 @@
 #define kPitchBendNone 2
 #define kPitchBendLegatoSlideVibrato 3
 #define kPitchBendNModes 4
+#define NATURAL_VIBRATO_BIT 9  // Bit in vibratoHolesSelector[] (above the nine hole bits) that turns on "natural" vibrato
 
 // Register control modes
 #define kPressureSingle 0
@@ -608,7 +609,8 @@
 //
 #define MIDI_CC_106_VALUE_16 16  // Bidirectional. custom vibrato off
 #define MIDI_CC_106_VALUE_17 17  // Bidirectional. custom vibrato on
-/* 18-19 unused */
+#define MIDI_CC_106_VALUE_18 18  // Bidirectional. natural vibrato off
+#define MIDI_CC_106_VALUE_19 19  // Bidirectional. natural vibrato on
 
 //Vibrato holes
 #define MIDI_CC_106_VALUE_20 20  // Bidirectional. enable vibrato hole, 0
@@ -793,6 +795,8 @@
 #define MIDI_ENA_VIBRATO_HOLES_END MIDI_CC_106_VALUE_28    // Bidirectional. Enable vibrato hole, 8
 #define MIDI_DIS_VIBRATO_HOLES_START MIDI_CC_106_VALUE_30  // Bidirectional. Disable vibrato hole, 0
 #define MIDI_DIS_VIBRATO_HOLES_END MIDI_CC_106_VALUE_38    // Bidirectional. Disable vibrato hole, 8
+#define MIDI_NATURAL_VIBRATO_OFF MIDI_CC_106_VALUE_18      // Bidirectional. Natural vibrato off
+#define MIDI_NATURAL_VIBRATO_ON MIDI_CC_106_VALUE_19       // Bidirectional. Natural vibrato on
 #define MIDI_WARBL2_SETTINGS_START MIDI_CC_106_VALUE_55    // Bidirectional. WARBL2 settings array (for settings that are independent of preset)
 #define MIDI_WARBL2_SETTINGS_END MIDI_CC_106_VALUE_74      // Bidirectional. WARBL2 settings array (for settings that are independent of preset)
 #define MIDI_BUTTON_ACTIONS_START MIDI_CC_106_VALUE_100    // Bidirectional. Button action 0

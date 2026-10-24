@@ -2285,6 +2285,21 @@ input:disabled + .vibratoSlider:before {
 }
 
 
+#switchNaturalVibrato {
+	display: none;
+	top: 218px;
+	left: 355px;
+}
+
+.naturalVibratoLabel {
+	display: none;
+	position: absolute;
+	left: 250px;
+	top: 222px;
+	z-index: 99;
+	font-size: 14px;
+}
+
 #switch5 {
 	top: 248px;
 	left: 355px;

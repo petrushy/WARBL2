@@ -1214,6 +1214,14 @@ if (!isiOS && ("serviceWorker" in navigator)) {
               <span class="slider round">
               </span>
             </label>
+            <div class="naturalVibratoLabel noTouch" id="naturalVibratoLabel">
+              Natural vibrato
+            </div>
+            <label class="switch" id="switchNaturalVibrato">
+              <input class="checkboxes" id="naturalVibratoCheck" onchange="sendNaturalVibrato(this.checked)" type="checkbox"/>
+              <span class="slider round">
+              </span>
+            </label>
             <div class="customLabel noTouch" id="customLabel">
               Custom vibrato
             </div>
@@ -3233,6 +3241,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                         <p>You can select at the bottom of the panel which holes you'd like to have available for vibrato. If you normally only use a few fingers for vibrato, you may want to select only those holes, to prevent unwanted behavior.</p>
                         <p><b> Custom vibrato </b> is a different vibrato option that is only available for some fingering patterns (currently tin whistle, uilleann pipes, GHB, and Northumbrian pipes). For <b> tin whistle and uilleann pipes </b> , the differences from normal vibrato are as follows: 1. Only the first and/or second fingers of the right hand are available for vibrato, depending on the fingering pattern (you cannot select vibrato holes if this option is turned on). 2. Vibrato is not cumulative, meaning that lowering more than one finger doesn't increase the vibrato depth. 3. If a vibrato hole is covered when a note is triggered, the note is immediately flattened (this is the major difference and may be more natural in certain circumstances). 4. When playing a back D with uilleann fingering, uncovering a vibrato hole actually lowers the pitch instead of raising it, which is how real pipes behave. For <b> GHB and Northumbrian pipes </b> , the custom vibrato is designed for closed fingering systems, and sharpens the note when finger R2 or R3 is raised from a closed fingering position (as opposed to the normal vibrato, where lowering a finger from an open position flattens a note).</p>
                         <p>Note that custom vibrato is not available when any unsupported fingering pattern has been chosen.</p>
+                        <p><b> Natural vibrato </b> makes normal vibrato behave more like a real instrument. Only the holes just below the hole the current note sounds from give vibrato, with a falling effect further down: the first hole below gives the full vibrato depth, the second half of it, the third a quarter, and holes further down (or above the sounding hole) give none. For example, on B with tin whistle fingering, shading L3 gives full vibrato, R1 half, R2 a quarter, and R3 nothing. Shading several holes adds up, but never to more than the vibrato depth. The sounding hole itself also gives full vibrato if it isn't being used for slide. Only the holes selected as vibrato holes are used. Natural vibrato does not apply when <b> Custom vibrato </b> is in use.</p>
                         <p>If you'd like to prevent the thumb hole from being used for slide, you can turn off the <b> Use thumb for slide </b> switch.</p>
                         <p>The pitch bend value received from the WARBL is shown at the right, along with a "wheel"-type display. Note that any received pitch bend messages will be displayed here, including those resulting from IMU vibrato or pitch expression, which are controlled in other panels.</p>
                       </div>

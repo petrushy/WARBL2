@@ -278,7 +278,8 @@ const MIDI_CC_106_VALUE_15 = 15; //Bidirectional. MIDI channel 16
 ; //
 const MIDI_CC_106_VALUE_16 = 16; //Bidirectional. custom vibrato off
 const MIDI_CC_106_VALUE_17 = 17; //Bidirectional. custom vibrato on
-/* 18-19 unused */
+const MIDI_CC_106_VALUE_18 = 18; //Bidirectional. natural vibrato off
+const MIDI_CC_106_VALUE_19 = 19; //Bidirectional. natural vibrato on
 
 ; //Vibrato holes
 const MIDI_CC_106_VALUE_20 = 20; //Bidirectional. enable vibrato hole, 0	
@@ -524,6 +525,8 @@ const MIDI_ENA_VIBRATO_HOLES_START = MIDI_CC_106_VALUE_20; //Bidirectional. enab
 const MIDI_ENA_VIBRATO_HOLES_END = MIDI_CC_106_VALUE_28; //Bidirectional. enable vibrato hole, 8	
 const MIDI_DIS_VIBRATO_HOLES_START = MIDI_CC_106_VALUE_30; //Bidirectional. disable vibrato hole, 0	
 const MIDI_DIS_VIBRATO_HOLES_END = MIDI_CC_106_VALUE_38; //Bidirectional. disable vibrato hole, 8	
+const MIDI_NATURAL_VIBRATO_OFF = MIDI_CC_106_VALUE_18; //Bidirectional. natural vibrato off
+const MIDI_NATURAL_VIBRATO_ON = MIDI_CC_106_VALUE_19; //Bidirectional. natural vibrato on
 const MIDI_WARBL2_SETTINGS_START = MIDI_CC_106_VALUE_55; //Bidirectional. WARBL2 settings array (for settings that are independent of mode)
 const MIDI_WARBL2_SETTINGS_END = MIDI_CC_106_VALUE_74; //Bidirectional. WARBL2 settings array (for settings that are independent of mode)
 const MIDI_BUTTON_ACTIONS_START = MIDI_CC_106_VALUE_100; //Bidirectional. button action 0 
