@@ -3295,6 +3295,10 @@ void handleMomentary(byte button) {
         if (buttonPrefs[preset][button][0] == 17) {
             toggleSlideMode();
         }
+
+        if (buttonPrefs[preset][button][0] == BLUETOOTH_TOGGLE) {
+            setBluetooth(!bleEnabled);
+        }
     }
 }
 
@@ -4319,7 +4323,6 @@ void sendMIDI(uint8_t m, uint8_t c, uint8_t d) {
 
 
 
-// Retrieve BLE connection information.
 // Turn Bluetooth off (drop any connection and stop advertising so the radio is idle) or back on (resume advertising). USB MIDI is unaffected.
 void setBluetooth(bool enable) {
 
@@ -4346,6 +4349,7 @@ void setBluetooth(bool enable) {
 }
 
 
+// Retrieve BLE connection information.
 void connect_callback(uint16_t conn_handle) {
 
     BLEConnection* connection = Bluefruit.Connection(conn_handle);
