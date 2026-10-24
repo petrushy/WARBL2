@@ -2165,6 +2165,12 @@ void sendNote() {
             sendMIDI(NOTE_OFF, mainMidiChannel, notewasplaying, 64);
         }
 
+        // If a bend is still active from the previous note (e.g. at the end of a slide), the synth would apply it to the new note
+        // until the next pitchbend tick (9-12 ms), briefly sounding an in-between pitch. Replace it right away instead.
+        if (!switches[preset][IMMEDIATE_PB] && prevPitchBend != 8192) {
+            calculateAndSendPitchbend();
+        }
+
         pitchBendTimer = millis();  // For some reason it sounds best if we don't send pitchbend right away after starting a new note.
         noteOnTimestamp = millis();
         powerDownTimer = pitchBendTimer;  // Reset the powerDown timer because we're actively sending notes.
