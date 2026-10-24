@@ -111,6 +111,7 @@ var instrument = 0; //currently selected preset tab
 var lsb = 0; //used for reassembling pressure bytes from WARBL
 
 var connIntvlLSB = 0; //used for reassembling connection interval from WARBL
+var bluetoothOn = true; //Bluetooth on/off status reported by WARBL2
 
 var defaultInstr = 0; //default preset
 
@@ -229,6 +230,8 @@ function showWARBLNotDetected() {
 	document.getElementById("pressure").innerHTML = "";
 	document.getElementById("connLabel").innerHTML = "BLE not connected";
 	document.getElementById("connLabel").style.left = "95px";
+	document.getElementById("bluetoothLabel").style.display = "none"; //only shown once WARBL reports its Bluetooth status
+	document.getElementById("switchBluetooth").style.display = "none";
 	for (var m = 0; m < 9; m++) { //turn off toneholes
 		document.getElementById("dot" + m).style.backgroundColor = "#333";
 		if (m == 0) {
@@ -2308,6 +2311,21 @@ function WARBL_Receive(event, source) {
 						WARBL2SettingsReceive = data2 - MIDI_WARBL2_SETTINGS_START;
 					}
 
+					if (data2 == MIDI_BLUETOOTH_OFF || data2 == MIDI_BLUETOOTH_ON) { //Bluetooth on/off status
+						bluetoothOn = data2 == MIDI_BLUETOOTH_ON;
+						document.getElementById("bluetoothCheck").checked = bluetoothOn;
+						document.getElementById("bluetoothLabel").style.display = "block";
+						document.getElementById("switchBluetooth").style.display = "inline-block";
+						if (!bluetoothOn) {
+							document.getElementById("connLabel").innerHTML = "Bluetooth off";
+							document.getElementById("connLabel").style.left = "112px";
+						}
+						else if (document.getElementById("connLabel").innerHTML == "Bluetooth off") {
+							document.getElementById("connLabel").innerHTML = "BLE not connected";
+							document.getElementById("connLabel").style.left = "95px";
+						}
+					}
+
 
 					if (data2 >= MIDI_BUTTON_ACTIONS_START && version > 3.9) {
 
@@ -2378,7 +2396,11 @@ function WARBL_Receive(event, source) {
 						x = x / 100;              // convert back to decimal
 						x = parseFloat(x.toFixed(1));   // keep 1 digit after decimal					
 
-						if (x == 0) {
+						if (x == 0 && !bluetoothOn) {
+							document.getElementById("connLabel").innerHTML = "Bluetooth off";
+							document.getElementById("connLabel").style.left = "112px";
+						}
+						else if (x == 0) {
 							document.getElementById("connLabel").innerHTML = "BLE not connected";
 							document.getElementById("connLabel").style.left = "95px";
 						}
@@ -4931,6 +4953,11 @@ function WARBL2Radio(selection) {
 	sendToWARBL(MIDI_CC_119, selection);
 }
 
+
+function sendBluetooth(selection) {
+	blink(1);
+	sendToWARBL(MIDI_CC_106, selection ? MIDI_BLUETOOTH_ON : MIDI_BLUETOOTH_OFF);
+}
 
 function sendHost(selection) {
 	blink(1);

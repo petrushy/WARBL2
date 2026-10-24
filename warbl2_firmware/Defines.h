@@ -661,7 +661,9 @@
 #define MIDI_CC_106_VALUE_72 72  // from WARBL. WARBL2 BLE connection interval low byte
 #define MIDI_CC_106_VALUE_73 73  // from WARBL. WARBL2 BLE connection interval high byte
 #define MIDI_CC_106_VALUE_74 74  // from WARBL. WARBL2 battery percentage
-                                 /* 75-99	unused -- can be used for WARBL2 */
+                                 /* 75-97	unused -- can be used for WARBL2 */
+#define MIDI_CC_106_VALUE_98 98  // Bidirectional. WARBL2 Bluetooth off
+#define MIDI_CC_106_VALUE_99 99  // Bidirectional. WARBL2 Bluetooth on
 
 //Button Actions, see above 102  90/99
 #define MIDI_CC_106_VALUE_100 100  // Bidirectional. button action 0
@@ -811,6 +813,8 @@
 
 #define MIDI_BLE_INTERVAL_LSB MIDI_CC_106_VALUE_72  // from WARBL. WARBL2 BLE connection interval low byte
 #define MIDI_BLE_INTERVAL_MSB MIDI_CC_106_VALUE_73  // from WARBL. WARBL2 BLE connection interval high byte
+#define MIDI_BLUETOOTH_OFF MIDI_CC_106_VALUE_98     // Bidirectional. WARBL2 Bluetooth off (sent by WARBL whenever it changes)
+#define MIDI_BLUETOOTH_ON MIDI_CC_106_VALUE_99      // Bidirectional. WARBL2 Bluetooth on (sent by WARBL whenever it changes)
 
 
 /* General sendMidi Args - NO VALUE - <CONTROL_CHANGE, MIDI channel, CC Number> */
