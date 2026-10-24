@@ -1004,14 +1004,6 @@ if (!isiOS && ("serviceWorker" in navigator)) {
               <span class="slider round">
               </span>
             </label>
-            <div class="lowerHolesLabel noTouch">
-              Lower holes
-            </div>
-            <label class="switch" id="switchLowerHoles">
-              <input class="checkboxes" id="lowerHolesCheck" onchange="sendLowerHoles(this.checked)" type="checkbox"/>
-              <span class="slider round">
-              </span>
-            </label>
             <button class="smallbutton noTouch advanced" onclick="advanced()" type="button">
               Advanced...
             </button>
@@ -3209,7 +3201,6 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                         <p>Starting with firmware v. 4.4, you can select the number of semitones in a register. The default is 12, which means that all three above methods of controlling the register will change the pitch by one octave. You can change this to any number of semitones (up to 24), which is useful for emulating wind presets like the kaval that naturally overblow at an interval less than an octave. It also can serve other purposes, like playing accidentals using the above methods.</p>
                         <p>Note you can also use the IMU (elevation angle) to control the register. This is discussed in the <b> Pressure and IMU Mapping </b> section.</p>
                         <p>Turning on <b> Bagless mode </b> will allow you to configure a button to start/stop the sound instead of using the pressure sensor. This will be similar to many electronic bagpipe chanters that don't use pressure sensing. If you choose you can still select one of the options for controlling the register when using bagless mode. <b> Note: </b> if you choose the bagless option you must also configure a button to <b> Play/stop (bagless mode) </b> .</p>
-                        <p>Turning on <b> Lower holes </b> shifts the fingering down by one hole: the six holes from L2 to R4 play as L1 to R3 normally would, and the L1 hole is ignored. This lets you play six-hole fingerings such as <b> Tin whistle </b> on the lower part of the instrument. Overblowing behaves exactly as with the standard hole layout. Note that the <b> Vibrato holes </b> settings still refer to the physical holes.</p>
                         <p>The pressure sensor will normally be calibrated at startup, meaning that the pressure when you plug in the device will be used as a basepoint for determining the pressure level at which sound will be triggered. This is desirable if you are using breath to control the preset. If you are using a bag with this setting, you will want to squeeze the bag when you plug WARBL in to "tell" it the pressure at which you want notes to begin playing. Alternatively, you can select <b> Learn or enter pressure </b> to use a different pressure. This is usually preferable if you are using a bag instead of breath, and you want to trigger notes at a higher pressure. You can squeeze the bag at the pressure that you would like to use for initial triggering of sound and then click <b> Learn </b> , which will cause WARBL to use the current pressure (as with all settings, you can save this pressure by saving the settings for the current preset). After clicking <b> Learn </b> , the pressure input cell will flash green and the learned pressure will be displayed. You can also enter the desired pressure manually if you prefer. Simply type in a pressure between 0.0 and 24.0 (inches water) and hit return or enter. The input cell will momentarily turn green to indicate that the pressure setting was sent to WARBL.</p>
                         <p>Selecting <b> Bag </b> will cause the overblowing settings for bagpipe bags to be used, while selecting <b> Breath </b> will cause the settings for breath (mouthpiece) to be used. These settings are customizable using the <b> Advanced </b> panel if desired (please see the help file within the Advanced panel for information about these settings). If you have an original WARBL with firmware version 2.0 or earlier, you will see a "Vented" switch instead of the bag/breath options.</p>
                       </div>

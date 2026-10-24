@@ -2,13 +2,6 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-
-## [Unreleased]
-
-### Added
-
-- "Lower holes" setting (per preset, in the register control panel): shifts the fingering down by one hole, so the six holes from L2 to R4 play as L1 to R3 normally would and the L1 hole is ignored. This allows six-hole fingerings such as tin whistle on the lower part of the instrument, with the same overblowing behavior as the standard hole layout. Custom vibrato for whistle uses R4/R3 instead of R3/R2 when this is on.
-
 ## [Released]
 
 ## [4.7] - 2026-6-15
