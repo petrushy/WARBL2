@@ -121,7 +121,8 @@ const MIDI_CC_102_VALUE_101 = 101; // Bidirectional. WARBL2 custom fingering cha
 const MIDI_CC_102_VALUE_102 = 102; // Bidirectional. WARBL2 custom fingering chart 3
 const MIDI_CC_102_VALUE_103 = 103; // Bidirectional. WARBL2 custom fingering chart 4
 const MIDI_CC_102_VALUE_104 = 104; //from Config Tool. exit communication mode (previously 102 99)
-/* 105-111	unused -- can be used for WARBL2 */
+/* 105-110	unused -- can be used for WARBL2 */
+const MIDI_CC_102_VALUE_111 = 111; // Bidirectional. Tin whistle, lower holes
 const MIDI_CC_102_VALUE_112 = 112; // Bidirectional. send midi note on/note off
 const MIDI_CC_102_VALUE_113 = 113; // Bidirectional. Send midi CC
 const MIDI_CC_102_VALUE_114 = 114; // Bidirectional. Send MIDI PC
@@ -501,6 +502,7 @@ const MIDI_DEFAULT_MODE_START = MIDI_CC_102_VALUE_85; // Bidirectional. default 
 const MIDI_GESTURE_START = MIDI_CC_102_VALUE_90; // Bidirectional. Sending data for click 1 (dropdown row 0)
 const MIDI_CUST_FINGERING_PATTERN_START = MIDI_CC_102_VALUE_100; // Bidirectional. WARBL2 custom fingering chart 1
 const MIDI_CUST_FINGERING_PATTERN_END = MIDI_CC_102_VALUE_103; // Bidirectional. WARBL2 custom fingering chart 4
+const MIDI_LOWER_HOLES_FINGERING_PATTERN = MIDI_CC_102_VALUE_111; // Bidirectional. Tin whistle, lower holes (fingering pattern 78)
 const MIDI_ACTION_MIDI_START = MIDI_CC_102_VALUE_112; // Bidirectional. send midi note on/note off
 
 const MIDI_PRESS_SELECT_VARS_START = MIDI_CC_104_VALUE_1; // Bidirectional. Settings for current instrument: indicates ""bag threshold"" is about to be sent with CC 105.
@@ -587,7 +589,6 @@ const MIDI_EXPRESSION_CURVE_LOW = MIDI_CC_104_VALUE_94; // Bidirectional. Settin
 const MIDI_EXPRESSION_CURVE_HIGH = MIDI_CC_104_VALUE_95; // Bidirectional. Settings for current instrument: indicates ED[46] is about to be sent with CC 105.
 const MIDI_AFTERTOUCH_MPEPLUS = MIDI_CC_104_VALUE_96;  // Bidirectional. Settings for current instrument: indicates ED[47] is about to be sent with CC 105.
 const MIDI_OVERBLOW_SEMITONES = MIDI_CC_104_VALUE_98;  // Bidirectional. Settings for current instrument: indicates ED[49] is about to be sent with CC 105.
-const MIDI_LOWER_HOLES = 117;  // Bidirectional. Settings for current instrument: indicates ED[68] (lower holes) is about to be sent with CC 105.
 
 const MIDI_SEND_ROLL = MIDI_CC_109_VALUE_0; // Bidirectional. Settings for current instrument: indicates IMUsettings[0] is about to be sent with CC 105. 
 const MIDI_SEND_PITCH = MIDI_CC_109_VALUE_1; // Bidirectional. Settings for current instrument: indicates IMUsettings[1] is about to be sent with CC 105. 

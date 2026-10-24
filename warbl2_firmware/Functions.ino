@@ -1150,10 +1150,26 @@ void sendToConfig(bool newPattern, bool newPressure) {
 
 
 
+// "Lower holes" fingering patterns aren't charts of their own: they're stored and sent with their own ID, but play the base chart with the fingering shifted down one hole.
+// Keeping modeSelector[] as the base chart means all the chart-specific behavior (vibrato, thumb register, etc.) applies unchanged.
+void setModeSelector(byte i, byte pattern) {
+    lowerHoles[i] = (pattern == kModeWhistleLowerHoles);
+    modeSelector[i] = lowerHoles[i] ? kModeWhistle : pattern;
+}
+
+
+
+// The fingering pattern ID to save or send to the Config Tool for preset i.
+byte getModeSelectorID(byte i) {
+    return lowerHoles[i] ? kModeWhistleLowerHoles : modeSelector[i];
+}
+
+
+
 // Convert the physical hole pattern to the pattern used for fingering lookups.
 // With "lower holes" the fingering is shifted down one hole: L2-R4 play as L1-R3, L1 is ignored, and the R4 position reads as uncovered. Thumb and bell are unchanged.
 unsigned int getFingeringPattern(unsigned int fingerPattern) {
-    if (ED[preset][LOWER_HOLES]) {
+    if (lowerHoles[preset]) {
         return (fingerPattern & 0b100000001) | ((fingerPattern & 0b001111110) << 1);
     }
     return fingerPattern;
@@ -1714,7 +1730,7 @@ int findStepsOffsetFor(int hole) {
 
 // Custom pitchbend algorithms, tin whistle and uilleann by Michael Eskin
 void handleCustomPitchBend() {
-    const byte v1 = ED[preset][LOWER_HOLES] ? 1 : 2;  // The two vibrato holes (R3 and R2, or R4 and R3 with "lower holes").
+    const byte v1 = lowerHoles[preset] ? 1 : 2;  // The two vibrato holes (R3 and R2, or R4 and R3 with "lower holes" fingering).
     const byte v2 = v1 + 1;
 
     for (byte i = 0; i < 9; i++) {  // Reset all holes
@@ -2425,8 +2441,8 @@ void handleControlChange(byte source, byte channel, byte number, byte value) {
                     }
                 }
 
-                if ((value >= MIDI_FINGERING_PATTERN_START && value <= MIDI_FINGERING_PATTERN_END) || (value >= MIDI_CUST_FINGERING_PATTERN_START && value <= MIDI_CUST_FINGERING_PATTERN_END)) {
-                    modeSelector[fingeringReceiveMode] = value - MIDI_FINGERING_PATTERN_START;
+                if ((value >= MIDI_FINGERING_PATTERN_START && value <= MIDI_FINGERING_PATTERN_END) || (value >= MIDI_CUST_FINGERING_PATTERN_START && value <= MIDI_CUST_FINGERING_PATTERN_END) || value == MIDI_LOWER_HOLES_FINGERING_PATTERN) {
+                    setModeSelector(fingeringReceiveMode, value - MIDI_FINGERING_PATTERN_START);
                     loadPrefs();
                 }
 
@@ -3448,7 +3464,7 @@ void sendSettings() {
 
 
     for (byte i = 0; i < 3; i++) {
-        sendMIDICouplet(MIDI_CC_102, MIDI_FINGERING_PATTERN_MODE_START + i, MIDI_CC_102, MIDI_FINGERING_PATTERN_START + modeSelector[i]);  //Send the fingering pattern for preset i.
+        sendMIDICouplet(MIDI_CC_102, MIDI_FINGERING_PATTERN_MODE_START + i, MIDI_CC_102, MIDI_FINGERING_PATTERN_START + getModeSelectorID(i));  //Send the fingering pattern for preset i.
 
         if (noteShiftSelector[i] >= 0) {
             sendMIDI(MIDI_SEND_CC, MIDI_CC_111 + i, noteShiftSelector[i]);
@@ -3549,11 +3565,11 @@ void sendSettings() {
 // Load saved fingering patterns
 void loadFingering() {
     for (byte i = 0; i < 3; i++) {
-        modeSelector[i] = readEEPROM(EEPROM_FINGERING_PATTERN_START + i);
+        setModeSelector(i, readEEPROM(EEPROM_FINGERING_PATTERN_START + i));
         noteShiftSelector[i] = (int8_t)readEEPROM(EEPROM_NOTE_SHIFT_SEL_START + i);
 
         if (communicationMode) {
-            sendMIDICouplet(MIDI_CC_102, MIDI_FINGERING_PATTERN_MODE_START + i, MIDI_CC_102, MIDI_FINGERING_PATTERN_START + modeSelector[i]);  //Send the fingering pattern for preset i.
+            sendMIDICouplet(MIDI_CC_102, MIDI_FINGERING_PATTERN_MODE_START + i, MIDI_CC_102, MIDI_FINGERING_PATTERN_START + getModeSelectorID(i));  //Send the fingering pattern for preset i.
 
             if (noteShiftSelector[i] >= 0) {
                 sendMIDI(MIDI_SEND_CC, (MIDI_CC_111 + i), noteShiftSelector[i]);
@@ -3577,7 +3593,7 @@ void loadFingering() {
 // Save settings for current preset as defaults for given preset (i).
 void saveSettings(byte i) {
 
-    writeEEPROM(EEPROM_FINGERING_PATTERN_START + i, modeSelector[preset]);
+    writeEEPROM(EEPROM_FINGERING_PATTERN_START + i, getModeSelectorID(preset));
     writeEEPROM(EEPROM_NOTE_SHIFT_SEL_START + i, noteShiftSelector[preset]);
     writeEEPROM(EEPROM_SENS_DISTANCE_START + i, senseDistanceSelector[preset]);
 
@@ -3686,10 +3702,6 @@ void loadSettingsForAllPresets() {
 
         for (byte n = 0; n < kEXPRESSIONnVariables; n++) {
             ED[i][n] = readEEPROM(EEPROM_ED_VARS_START + i + (n * 3));
-        }
-
-        if (ED[i][LOWER_HOLES] > 1) {
-            ED[i][LOWER_HOLES] = 0;  // Never saved yet (blank EEPROM reads 255), so default to off.
         }
 
         for (byte p = 0; p < kIMUnVariables; p++) {
