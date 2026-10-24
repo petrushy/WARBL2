@@ -229,6 +229,8 @@ function showWARBLNotDetected() {
 	document.getElementById("pressure").innerHTML = "";
 	document.getElementById("connLabel").innerHTML = "BLE not connected";
 	document.getElementById("connLabel").style.left = "95px";
+	document.getElementById("naturalVibratoLabel").style.display = "none"; //only shown once WARBL reports its natural vibrato setting
+	document.getElementById("switchNaturalVibrato").style.display = "none";
 	for (var m = 0; m < 9; m++) { //turn off toneholes
 		document.getElementById("dot" + m).style.backgroundColor = "#333";
 		if (m == 0) {
@@ -2251,6 +2253,12 @@ function WARBL_Receive(event, source) {
 						document.getElementById("vibratoCheckbox" + (data2 - MIDI_ENA_VIBRATO_HOLES_START)).checked = true;
 					}
 
+					if (data2 == MIDI_NATURAL_VIBRATO_OFF || data2 == MIDI_NATURAL_VIBRATO_ON) {
+						document.getElementById("naturalVibratoCheck").checked = data2 == MIDI_NATURAL_VIBRATO_ON;
+						document.getElementById("naturalVibratoLabel").style.display = "block"; //only shown with firmware that supports it
+						document.getElementById("switchNaturalVibrato").style.display = "inline-block";
+					}
+
 					if (data2 >= MIDI_DIS_VIBRATO_HOLES_START && data2 <= MIDI_DIS_VIBRATO_HOLES_END) {
 						//console.log(data2);
 						document.getElementById("vibratoCheckbox" + (data2 - MIDI_DIS_VIBRATO_HOLES_START)).checked = false;
@@ -3830,11 +3838,15 @@ function updateCustom() { //keep correct settings enabled/disabled with respect 
 			document.getElementById("vibratoCheckbox" + i).disabled = true;
 			document.getElementById("vibratoCheckbox" + i).style.cursor = "default";
 		}
+		document.getElementById("naturalVibratoCheck").disabled = true; //natural vibrato doesn't apply to custom vibrato
+		document.getElementById("switchNaturalVibrato").style.cursor = "default";
 	} else {
 		for (var i = 0; i < 9; i++) {
 			document.getElementById("vibratoCheckbox" + i).disabled = false;
 			document.getElementById("vibratoCheckbox" + i).style.cursor = "pointer";
 		}
+		document.getElementById("naturalVibratoCheck").disabled = false;
+		document.getElementById("switchNaturalVibrato").style.cursor = "pointer";
 	}
 
 	if (document.getElementById("checkbox18").checked == true) {
@@ -4552,6 +4564,11 @@ function sendInvert(selection) {
 	blink(1);
 	sendToWARBL(MIDI_CC_104, MIDI_SWITCHES_VARS_START + 3);
 	sendToWARBL(MIDI_CC_105, selection);
+}
+
+function sendNaturalVibrato(selection) {
+	blink(1);
+	sendToWARBL(MIDI_CC_106, selection ? MIDI_NATURAL_VIBRATO_ON : MIDI_NATURAL_VIBRATO_OFF);
 }
 
 function sendCustom(selection) {

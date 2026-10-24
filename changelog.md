@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [Unreleased]
+
+### Added
+
+- "Natural vibrato" switch (per preset, in the Finger Vibrato and Slide panel): normal vibrato only comes from the holes just below the hole the note sounds from, with a falling effect further down (first hole below 100%, second 50%, third 25%, further down none). Shading several holes adds up but never above the vibrato depth.
+
 ## [Released]
 
 ## [4.7] - 2026-6-15
