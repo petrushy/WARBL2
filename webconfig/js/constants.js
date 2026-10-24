@@ -329,7 +329,9 @@ const MIDI_CC_106_VALUE_71 = 71; //from WARBL. WARBL2 charging status
 const MIDI_CC_106_VALUE_72 = 72; //from WARBL. WARBL2 BLE connection interval low byte
 const MIDI_CC_106_VALUE_73 = 73; //from WARBL. WARBL2 BLE connection interval high byte
 const MIDI_CC_106_VALUE_74 = 74; //from WARBL. WARBL2 battery percentage
-/* 75-99	unused -- can be used for WARBL2 */
+/* 75-97	unused -- can be used for WARBL2 */
+const MIDI_CC_106_VALUE_98 = 98; //Bidirectional. WARBL2 Bluetooth off
+const MIDI_CC_106_VALUE_99 = 99; //Bidirectional. WARBL2 Bluetooth on
 
 ; //Button Actions, see above 102 90/00
 const MIDI_CC_106_VALUE_100 = 100; //Bidirectional. button action 0 
@@ -544,6 +546,8 @@ const MIDI_STARTUP_CALIB = MIDI_CC_106_VALUE_39; //Bidirectional. calibrate at s
 const MIDI_USE_LEARNED_CALIB = MIDI_CC_106_VALUE_40; //Bidirectional. use learned calibration
 const MIDI_BLE_INTERVAL_LSB = MIDI_CC_106_VALUE_72; //from WARBL. WARBL2 BLE connection interval low byte
 const MIDI_BLE_INTERVAL_MSB = MIDI_CC_106_VALUE_73; //from WARBL. WARBL2 BLE connection interval high byte
+const MIDI_BLUETOOTH_OFF = MIDI_CC_106_VALUE_98; //Bidirectional. WARBL2 Bluetooth off (sent by WARBL whenever it changes)
+const MIDI_BLUETOOTH_ON = MIDI_CC_106_VALUE_99; //Bidirectional. WARBL2 Bluetooth on (sent by WARBL whenever it changes)
 
 //END of Human readable constants
 //END of constants To Be Sync'd with Defines.h in firmware

@@ -2754,6 +2754,10 @@ void handleControlChange(byte source, byte channel, byte number, byte value) {
                     resetExpressionOverrideDefaults();
                 }
 
+                else if (value == MIDI_BLUETOOTH_OFF || value == MIDI_BLUETOOTH_ON) {  // Turn Bluetooth off/on from the Config Tool.
+                    setBluetooth(value == MIDI_BLUETOOTH_ON);
+                }
+
                 else if (value >= MIDI_BUTTON_ACTIONS_START) {
                     for (byte i = 0; i < kGESTURESnVariables; i++) {  // Update button configuration
                         if (buttonReceiveMode == i) {
@@ -3175,11 +3179,7 @@ void performAction(byte action, byte button) {
             break;
 
         case BLUETOOTH_TOGGLE:
-            if (button != 127 && !momentary[preset][button]) {
-                setBluetooth(!bleEnabled);
-            } else {
-                setBluetooth(!bleEnabled);  // Toggle again if we're in momentary mode and this is a release.
-            }
+            setBluetooth(!bleEnabled);  // In momentary mode handleMomentary() has already toggled on the press, so this toggles back on the release.
             break;
 
         default:
@@ -3552,6 +3552,8 @@ void sendSettings() {
     }
 
     manageBattery(true);  // Do this to send voltage and charging status to Config Tool.
+
+    sendMIDI(MIDI_CC_106_MSG, bleEnabled ? MIDI_BLUETOOTH_ON : MIDI_BLUETOOTH_OFF);  // Send Bluetooth on/off status (before the connection interval).
 
     uint16_t interval_x100 = (uint16_t)(connIntvl * 100.0f);
     sendMIDICouplet(MIDI_CC_106, MIDI_BLE_INTERVAL_LSB,
@@ -4359,27 +4361,34 @@ void sendMIDI(uint8_t m, uint8_t c, uint8_t d) {
 
 
 // Turn Bluetooth off (drop any connection and stop advertising so the radio is idle) or back on (resume advertising). USB MIDI is unaffected.
+// The LED blinks blue three times when turning on and red three times when turning off.
 void setBluetooth(bool enable) {
 
-    if (enable == bleEnabled) {
-        return;
-    }
-    bleEnabled = enable;
+    if (enable != bleEnabled) {
+        bleEnabled = enable;
 
-    if (enable) {
-        Bluefruit.Advertising.restartOnDisconnect(true);
-        Bluefruit.Advertising.start(0);
-        blinkNumber[BLUE_LED] = 1;
-    } else {
-        Bluefruit.Advertising.restartOnDisconnect(false);  // Must be set before disconnecting, otherwise advertising would restart.
-        Bluefruit.Advertising.stop();
-        for (uint8_t i = 0; i < BLE_MAX_CONNECTION; i++) {
-            BLEConnection* connection = Bluefruit.Connection(i);
-            if (connection && connection->connected()) {
-                connection->disconnect();
+        if (enable) {
+            Bluefruit.Advertising.restartOnDisconnect(true);
+            Bluefruit.Advertising.start(0);
+        } else {
+            Bluefruit.Advertising.restartOnDisconnect(false);  // Must be set before disconnecting, otherwise advertising would restart.
+            Bluefruit.Advertising.stop();
+            for (uint8_t i = 0; i < BLE_MAX_CONNECTION; i++) {
+                BLEConnection* connection = Bluefruit.Connection(i);
+                if (connection && connection->connected()) {
+                    connection->disconnect();
+                }
             }
         }
-        blinkNumber[GREEN_LED] = 1;
+    }
+
+    // Indicate the new state even if it didn't change, so pressing the button always confirms whether Bluetooth is on or off.
+    blinkNumber[GREEN_LED] = 0;  // Override the single green blink for a received Config Tool message.
+    blinkNumber[RED_LED] = enable ? 0 : 3;
+    blinkNumber[BLUE_LED] = enable ? 3 : 0;
+
+    if (communicationMode) {
+        sendMIDI(MIDI_CC_106_MSG, bleEnabled ? MIDI_BLUETOOTH_ON : MIDI_BLUETOOTH_OFF);
     }
 }
 
