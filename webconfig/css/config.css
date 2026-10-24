@@ -2316,11 +2316,6 @@ input:disabled + .vibratoSlider:before {
 	left: 160px;
 }
 
-#switchLowerHoles {
-	top: 320px;
-	left: 160px;
-}
-
 #switchDoubleClick {
 	top: 27px;
 	left: 55px;
@@ -2374,15 +2369,6 @@ input:disabled + .vibratoSlider:before {
 	position: absolute;
 	left: 52px;
 	top: 288px;
-	z-index: 99;
-	font-size: 14px;
-}
-
-.lowerHolesLabel {
-	display: block;
-	position: absolute;
-	left: 59px;
-	top: 323px;
 	z-index: 99;
 	font-size: 14px;
 }
