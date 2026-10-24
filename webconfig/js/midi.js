@@ -1538,6 +1538,10 @@ function WARBL_Receive(event, source) {
 						// custom velocity curve value
 						customPressureCurve[3] = data2;
 					}
+					else if (jumpFactorWrite == MIDI_LOWER_HOLES) {
+						// lower holes
+						document.getElementById("lowerHolesCheck").checked = data2 == 1;
+					}
 
 
 
@@ -2928,6 +2932,13 @@ function sendClampExpr(selection) {
 	selection = +selection;
 	blink(1);
 	sendToWARBL(MIDI_CC_104, MIDI_EXPRESSION_OUT_CLAMP);
+	sendToWARBL(MIDI_CC_105, selection);
+}
+
+function sendLowerHoles(selection) {
+	selection = +selection;
+	blink(1);
+	sendToWARBL(MIDI_CC_104, MIDI_LOWER_HOLES);
 	sendToWARBL(MIDI_CC_105, selection);
 }
 
