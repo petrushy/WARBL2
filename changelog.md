@@ -7,7 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- "Natural vibrato" switch (per preset, in the Finger Vibrato and Slide panel): normal vibrato only comes from the holes just below the hole the note sounds from, with a falling effect further down (first hole below 100%, second 50%, third 25%, further down none). Shading several holes adds up but never above the vibrato depth.
+- "Natural vibrato" switch (per preset, in the Finger Vibrato and Slide panel): normal vibrato only comes from the holes just below the hole the note sounds from, with a falling effect further down (by default the sounding hole 100%, first hole below 70%, second 40%, third 10%, further down none). The four levels can be set per preset in a "Natural Vibrato Levels" panel, opened with the "..." button next to the switch. Shading several holes adds up but never above the vibrato depth.
 
 ## [Released]
 
