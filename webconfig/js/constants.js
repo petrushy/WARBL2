@@ -252,6 +252,11 @@ const MIDI_CC_104_VALUE_108 = 108; // Bidirectional. Settings for current instru
 const MIDI_CC_104_VALUE_109 = 109; // Bidirectional. Settings for current instrument: indicates ED[60] is about to be sent with CC 105. 
 const MIDI_CC_104_VALUE_110 = 110; // Bidirectional. Settings for current instrument: indicates ED[61] is about to be sent with CC 105. 
 const MIDI_CC_104_VALUE_111 = 111; // Bidirectional. Settings for current instrument: indicates ED[62] is about to be sent with CC 105. 
+/* 112-115 not used by the Config Tool */
+const MIDI_CC_104_VALUE_116 = 116; // Bidirectional. Settings for current instrument: indicates ED[67] (natural vibrato level, sounding hole) is about to be sent with CC 105. 
+const MIDI_CC_104_VALUE_117 = 117; // Bidirectional. Settings for current instrument: indicates ED[68] (natural vibrato level, first hole below) is about to be sent with CC 105. 
+const MIDI_CC_104_VALUE_118 = 118; // Bidirectional. Settings for current instrument: indicates ED[69] (natural vibrato level, second hole below) is about to be sent with CC 105. 
+const MIDI_CC_104_VALUE_119 = 119; // Bidirectional. Settings for current instrument: indicates ED[70] (natural vibrato level, third hole below) is about to be sent with CC 105. 
 ; //
 /* 112-127 unused */
 
@@ -278,7 +283,8 @@ const MIDI_CC_106_VALUE_15 = 15; //Bidirectional. MIDI channel 16
 ; //
 const MIDI_CC_106_VALUE_16 = 16; //Bidirectional. custom vibrato off
 const MIDI_CC_106_VALUE_17 = 17; //Bidirectional. custom vibrato on
-/* 18-19 unused */
+const MIDI_CC_106_VALUE_18 = 18; //Bidirectional. natural vibrato off
+const MIDI_CC_106_VALUE_19 = 19; //Bidirectional. natural vibrato on
 
 ; //Vibrato holes
 const MIDI_CC_106_VALUE_20 = 20; //Bidirectional. enable vibrato hole, 0	
@@ -524,6 +530,11 @@ const MIDI_ENA_VIBRATO_HOLES_START = MIDI_CC_106_VALUE_20; //Bidirectional. enab
 const MIDI_ENA_VIBRATO_HOLES_END = MIDI_CC_106_VALUE_28; //Bidirectional. enable vibrato hole, 8	
 const MIDI_DIS_VIBRATO_HOLES_START = MIDI_CC_106_VALUE_30; //Bidirectional. disable vibrato hole, 0	
 const MIDI_DIS_VIBRATO_HOLES_END = MIDI_CC_106_VALUE_38; //Bidirectional. disable vibrato hole, 8	
+const MIDI_NATURAL_VIBRATO_OFF = MIDI_CC_106_VALUE_18; //Bidirectional. natural vibrato off
+const MIDI_NATURAL_VIBRATO_ON = MIDI_CC_106_VALUE_19; //Bidirectional. natural vibrato on
+const MIDI_NATURAL_VIBRATO_WEIGHTS_START = MIDI_CC_104_VALUE_116; //Bidirectional. natural vibrato level of the sounding hole, about to be sent with CC 105
+const MIDI_NATURAL_VIBRATO_WEIGHTS_END = MIDI_CC_104_VALUE_119; //Bidirectional. natural vibrato level of the third hole below, about to be sent with CC 105
+const NATURAL_VIBRATO_DEFAULT_WEIGHTS = [100, 70, 40, 10]; //natural vibrato levels (%) of the sounding hole and the three holes below it
 const MIDI_WARBL2_SETTINGS_START = MIDI_CC_106_VALUE_55; //Bidirectional. WARBL2 settings array (for settings that are independent of mode)
 const MIDI_WARBL2_SETTINGS_END = MIDI_CC_106_VALUE_74; //Bidirectional. WARBL2 settings array (for settings that are independent of mode)
 const MIDI_BUTTON_ACTIONS_START = MIDI_CC_106_VALUE_100; //Bidirectional. button action 0 

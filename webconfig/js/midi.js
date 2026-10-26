@@ -232,6 +232,9 @@ function showWARBLNotDetected() {
 	document.getElementById("connLabel").style.left = "95px";
 	document.getElementById("bluetoothLabel").style.display = "none"; //only shown once WARBL reports its Bluetooth status
 	document.getElementById("switchBluetooth").style.display = "none";
+	document.getElementById("naturalVibratoLabel").style.display = "none"; //only shown once WARBL reports its natural vibrato setting
+	document.getElementById("switchNaturalVibrato").style.display = "none";
+	document.getElementById("naturalVibratoLevelsButton").style.display = "none"; //only shown once WARBL reports its natural vibrato levels
 	for (var m = 0; m < 9; m++) { //turn off toneholes
 		document.getElementById("dot" + m).style.backgroundColor = "#333";
 		if (m == 0) {
@@ -1544,6 +1547,13 @@ function WARBL_Receive(event, source) {
 						// custom velocity curve value
 						customPressureCurve[3] = data2;
 					}
+					else if (jumpFactorWrite >= MIDI_NATURAL_VIBRATO_WEIGHTS_START && jumpFactorWrite <= MIDI_NATURAL_VIBRATO_WEIGHTS_END) {
+						// natural vibrato levels
+						var k = document.getElementById("naturalVibratoWeight" + (jumpFactorWrite - MIDI_NATURAL_VIBRATO_WEIGHTS_START));
+						k.value = data2;
+						k.dispatchEvent(new Event('input'));
+						document.getElementById("naturalVibratoLevelsButton").style.display = "block"; //only shown with firmware that supports it
+					}
 
 
 
@@ -2262,6 +2272,12 @@ function WARBL_Receive(event, source) {
 					if (data2 >= MIDI_ENA_VIBRATO_HOLES_START && data2 <= MIDI_ENA_VIBRATO_HOLES_END) {
 						//console.log(data2);
 						document.getElementById("vibratoCheckbox" + (data2 - MIDI_ENA_VIBRATO_HOLES_START)).checked = true;
+					}
+
+					if (data2 == MIDI_NATURAL_VIBRATO_OFF || data2 == MIDI_NATURAL_VIBRATO_ON) {
+						document.getElementById("naturalVibratoCheck").checked = data2 == MIDI_NATURAL_VIBRATO_ON;
+						document.getElementById("naturalVibratoLabel").style.display = "block"; //only shown with firmware that supports it
+						document.getElementById("switchNaturalVibrato").style.display = "inline-block";
 					}
 
 					if (data2 >= MIDI_DIS_VIBRATO_HOLES_START && data2 <= MIDI_DIS_VIBRATO_HOLES_END) {
@@ -3862,11 +3878,17 @@ function updateCustom() { //keep correct settings enabled/disabled with respect 
 			document.getElementById("vibratoCheckbox" + i).disabled = true;
 			document.getElementById("vibratoCheckbox" + i).style.cursor = "default";
 		}
+		document.getElementById("naturalVibratoCheck").disabled = true; //natural vibrato doesn't apply to custom vibrato
+		document.getElementById("switchNaturalVibrato").style.cursor = "default";
+		document.getElementById("naturalVibratoLevelsButton").disabled = true;
 	} else {
 		for (var i = 0; i < 9; i++) {
 			document.getElementById("vibratoCheckbox" + i).disabled = false;
 			document.getElementById("vibratoCheckbox" + i).style.cursor = "pointer";
 		}
+		document.getElementById("naturalVibratoCheck").disabled = false;
+		document.getElementById("switchNaturalVibrato").style.cursor = "pointer";
+		document.getElementById("naturalVibratoLevelsButton").disabled = false;
 	}
 
 	if (document.getElementById("checkbox18").checked == true) {
@@ -4019,6 +4041,25 @@ function okayOverride() {
 function advancedOkayPB() {
 	document.getElementById("box4").style.display = "none";
 	document.getElementById("box5").style.display = "block";
+}
+
+function naturalVibratoSettings() {
+	document.getElementById("naturalVibratoBox").style.display = "block";
+	document.getElementById("box5").style.display = "none";
+}
+
+function naturalVibratoBack() {
+	document.getElementById("naturalVibratoBox").style.display = "none";
+	document.getElementById("box5").style.display = "block";
+}
+
+function naturalVibratoDefaults() {
+	for (var i = 0; i < 4; i++) {
+		var k = document.getElementById("naturalVibratoWeight" + i);
+		k.value = NATURAL_VIBRATO_DEFAULT_WEIGHTS[i];
+		k.dispatchEvent(new Event('input'));
+		sendNaturalVibratoWeight(i, k.value);
+	}
 }
 
 function configureCustomFingering() {
@@ -4584,6 +4625,17 @@ function sendInvert(selection) {
 	blink(1);
 	sendToWARBL(MIDI_CC_104, MIDI_SWITCHES_VARS_START + 3);
 	sendToWARBL(MIDI_CC_105, selection);
+}
+
+function sendNaturalVibrato(selection) {
+	blink(1);
+	sendToWARBL(MIDI_CC_106, selection ? MIDI_NATURAL_VIBRATO_ON : MIDI_NATURAL_VIBRATO_OFF);
+}
+
+function sendNaturalVibratoWeight(hole, selection) {
+	blink(1);
+	sendToWARBL(MIDI_CC_104, MIDI_NATURAL_VIBRATO_WEIGHTS_START + hole);
+	sendToWARBL(MIDI_CC_105, parseInt(selection));
 }
 
 function sendCustom(selection) {
@@ -5188,6 +5240,14 @@ function sliderLimitChange() {
 	output18.innerHTML = slideLimitSlider.value;
 }
 
+
+for (let i = 0; i < 4; i++) { //natural vibrato level readouts
+	let naturalVibratoSlider = document.getElementById("naturalVibratoWeight" + i);
+	naturalVibratoSlider.addEventListener('input', function () {
+		document.getElementById("naturalVibratoWeightDemo" + i).innerHTML = naturalVibratoSlider.value + "%";
+	});
+	naturalVibratoSlider.dispatchEvent(new Event('input'));
+}
 
 var output14 = document.getElementById("demo14");
 var depthSlider = document.getElementById('depth');
