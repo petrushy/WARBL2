@@ -2287,7 +2287,7 @@ input:disabled + .vibratoSlider:before {
 
 #switchNaturalVibrato {
 	display: none;
-	top: 218px;
+	top: 228px;
 	left: 355px;
 }
 
@@ -2295,13 +2295,115 @@ input:disabled + .vibratoSlider:before {
 	display: none;
 	position: absolute;
 	left: 250px;
-	top: 222px;
+	top: 232px;
 	z-index: 99;
 	font-size: 14px;
 }
 
+.naturalVibratoLevelsButton {
+	display: none;
+	position: absolute;
+	height: 24px;
+	width: 40px;
+	top: 228px;
+	left: 410px;
+	line-height: 14px;
+	padding: 0px;
+}
+
+#naturalVibratoBox {
+	display: none;
+	left: 30px;
+}
+
+#naturalVibratoSliders {
+	display: block;
+	position: absolute;
+	left: 160px;
+	top: 20px;
+	width: 500px;
+	z-index: 99;
+}
+
+.naturalVibratoWeightContainer {
+	display: block;
+	position: absolute;
+	left: -10px;
+	z-index: 99;
+}
+
+.naturalVibratoWeightLabel {
+	display: block;
+	position: absolute;
+	left: -10px;
+	width: 150px;
+	text-align: center;
+	z-index: 99;
+	font-size: 14px;
+}
+
+.naturalVibratoWeightValue {
+	left: 160px;
+}
+
+.naturalVibratoDefaults {
+	position: absolute;
+	height: 30px;
+	width: 70px;
+	top: 103px;
+	left: 40px;
+}
+
+#naturalVibratoWeightLabel0 {
+	top: 70px;
+}
+
+#naturalVibratoWeightContainer0 {
+	top: 95px;
+}
+
+#naturalVibratoWeightValue0 {
+	top: 80px;
+}
+
+#naturalVibratoWeightLabel1 {
+	top: 140px;
+}
+
+#naturalVibratoWeightContainer1 {
+	top: 165px;
+}
+
+#naturalVibratoWeightValue1 {
+	top: 150px;
+}
+
+#naturalVibratoWeightLabel2 {
+	top: 210px;
+}
+
+#naturalVibratoWeightContainer2 {
+	top: 235px;
+}
+
+#naturalVibratoWeightValue2 {
+	top: 220px;
+}
+
+#naturalVibratoWeightLabel3 {
+	top: 280px;
+}
+
+#naturalVibratoWeightContainer3 {
+	top: 305px;
+}
+
+#naturalVibratoWeightValue3 {
+	top: 290px;
+}
+
 #switch5 {
-	top: 248px;
+	top: 256px;
 	left: 355px;
 }
 
@@ -2309,14 +2411,14 @@ input:disabled + .vibratoSlider:before {
 	display: block;
 	position: absolute;
 	left: 248px;
-	top: 252px;
+	top: 260px;
 	z-index: 99;
 	font-size: 14px;
 }
 
 #switch34 {
 	display: block;
-	top: 278px;
+	top: 284px;
 	left: 355px;
 }
 
@@ -2324,7 +2426,7 @@ input:disabled + .vibratoSlider:before {
 	display: block;
 	position: absolute;
 	left: 223px;
-	top: 282px;
+	top: 288px;
 	z-index: 99;
 	font-size: 14px;
 }

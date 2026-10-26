@@ -1922,15 +1922,13 @@ int findSoundingHole() {
 
 
 
-// For "natural" vibrato: how much (%) a hole contributes, by how many holes it is below the sounding hole. As on a real instrument, the effect falls off quickly further down, and holes above the sounding hole have no effect.
+// For "natural" vibrato: how much (%) a hole contributes, by how many holes it is below the sounding hole (0 is the sounding hole itself, which is only used for vibrato if it isn't being used for slide).
+// The levels are set in the Config Tool. As on a real instrument, the effect falls off further down, and holes above the sounding hole or more than three below it have no effect.
 int naturalVibratoWeight(int holesBelow) {
-    switch (holesBelow) {
-        case 0: return 100;  // The sounding hole itself (only used for vibrato if it isn't being used for slide).
-        case 1: return 100;
-        case 2: return 50;
-        case 3: return 25;
-        default: return 0;
+    if (holesBelow < 0 || holesBelow > 3) {
+        return 0;
     }
+    return min(ED[preset][NATURAL_VIBRATO_WEIGHT_0 + holesBelow], 100);
 }
 
 
@@ -3776,7 +3774,11 @@ void loadSettingsForAllPresets() {
 
 
         for (byte n = 0; n < kEXPRESSIONnVariables; n++) {
-            ED[i][n] = readEEPROM(EEPROM_ED_VARS_START + i + (n * 3));
+            byte value = readEEPROM(EEPROM_ED_VARS_START + i + (n * 3));
+            if (n >= NATURAL_VIBRATO_WEIGHT_0 && n <= NATURAL_VIBRATO_WEIGHT_3 && value > 100) {
+                continue;  // Natural vibrato levels that haven't been saved yet (unwritten EEPROM) keep their defaults.
+            }
+            ED[i][n] = value;
         }
 
         for (byte p = 0; p < kIMUnVariables; p++) {

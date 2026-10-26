@@ -180,7 +180,11 @@
 #define CUSTOM_VELOCITY_CURVE 64         // 0 -> 127, where 64 is linear, 0 is most log, 127 is most exponential
 #define CUSTOM_AFTERTOUCH_CURVE 65       // 0 -> 127, where 64 is linear, 0 is most log, 127 is most exponential
 #define CUSTOM_POLYPRESSURE_CURVE 66     // 0 -> 127, where 64 is linear, 0 is most log, 127 is most exponential
-#define kEXPRESSIONnVariables 67
+#define NATURAL_VIBRATO_WEIGHT_0 67      // Natural vibrato: how much (0-100%) the sounding hole contributes.
+#define NATURAL_VIBRATO_WEIGHT_1 68      // Natural vibrato: how much (0-100%) the first hole below the sounding hole contributes.
+#define NATURAL_VIBRATO_WEIGHT_2 69      // Natural vibrato: how much (0-100%) the second hole below the sounding hole contributes.
+#define NATURAL_VIBRATO_WEIGHT_3 70      // Natural vibrato: how much (0-100%) the third hole below the sounding hole contributes.
+#define kEXPRESSIONnVariables 71
 
 // Button combinations/gestures
 #define CLICK_1 0
@@ -583,6 +587,10 @@
 #define MIDI_CC_104_VALUE_113 113  // Bidirectional. Settings for current preset: indicates ED[64] is about to be sent with CC 105.
 #define MIDI_CC_104_VALUE_114 114  // Bidirectional. Settings for current preset: indicates ED[65] is about to be sent with CC 105.
 #define MIDI_CC_104_VALUE_115 115  // Bidirectional. Settings for current preset: indicates ED[66] is about to be sent with CC 105.
+#define MIDI_CC_104_VALUE_116 116  // Bidirectional. Settings for current preset: indicates ED[67] is about to be sent with CC 105.
+#define MIDI_CC_104_VALUE_117 117  // Bidirectional. Settings for current preset: indicates ED[68] is about to be sent with CC 105.
+#define MIDI_CC_104_VALUE_118 118  // Bidirectional. Settings for current preset: indicates ED[69] is about to be sent with CC 105.
+#define MIDI_CC_104_VALUE_119 119  // Bidirectional. Settings for current preset: indicates ED[70] is about to be sent with CC 105.
 //
 /* 112-127 unused */
 
@@ -785,7 +793,7 @@
 #define MIDI_SWITCHES_VARS_START MIDI_CC_104_VALUE_40                     // Bidirectional. Settings for current preset: indicates that switches[0] is about to be sent with CC 105.
 #define MIDI_SWITCHES_VARS_END MIDI_CC_104_VALUE_53                       // Bidirectional. Settings for current preset: indicates that switches[13] is about to be sent with CC 105. UNUSED?
 #define MIDI_ED_VARS2_START MIDI_CC_104_VALUE_70                          // Bidirectional. Settings for current preset: indicates ED[21] is about to be sent with CC 105.
-#define MIDI_ED_VARS2_END MIDI_CC_104_VALUE_115                           // Bidirectional. Settings for current preset: indicates ED[] is about to be sent with CC 105.
+#define MIDI_ED_VARS2_END MIDI_CC_104_VALUE_119                           // Bidirectional. Settings for current preset: indicates ED[] is about to be sent with CC 105.
 #define MIDI_ED_VARS_NUMBER (MIDI_ED_VARS_END - MIDI_ED_VARS_START + 1)   // ED array number of vars for the first slot
 #define MIDI_ED_VARS2_OFFSET (MIDI_ED_VARS2_START - MIDI_ED_VARS_NUMBER)  // ED array index for 2nd slot of MIDI Msgs
 
@@ -911,8 +919,8 @@
                                             // 343 low byte of vibrato depth  for PRESET 2 (344 high byte)
 #define EEPROM_USE_LEARNED_PRESS_START 345  //values 0-1	use learned calibration - 3 bytes 345-347
 /* 348-350 unused */
-#define EEPROM_ED_VARS_START 351  // 351-551	expression and drones (ED) variables
-/* 552-599 unused, room for extending above array or other variables */
+#define EEPROM_ED_VARS_START 351  // 351-563	expression and drones (ED) variables
+/* 564-599 unused, room for extending above array or other variables */
 #define EEPROM_WARBL2_SETTINGS_START 600  // 600-603 WARBL2settings array
 /* 604-625 unused, room for extending above array or other variables */
 #define EEPROM_IMU_SETTINGS_START 625  // 625-841 WARBL2 IMUsettings array
