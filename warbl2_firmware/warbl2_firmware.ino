@@ -280,6 +280,8 @@ float mappedPressureHiRes[4] = { 0.0f, 0.0f, 0.0f, 0.0f };  // used for hi-res M
 unsigned int toneholeCovered[] = { 10, 100, 100, 100, 100, 100, 100, 100, 100 };  // Value at which each tone hole is considered to be covered. These are set to a low value initially for testing sensors after assembly.
 int toneholeBaseline[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };                            // Baseline (uncovered) hole tonehole sensor readings
 int toneholeRead[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };                                // Tonehole sensor readings after being reassembled from above bytes
+int toneholeRaw[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };                                 // Tonehole readings as received from the ATmega, before smoothing and baseline subtraction (for the sensor stream)
+bool toneholeRawUpdated = false;                                                   // Whether toneholeRaw[] got new readings since the last sensor stream frame
 unsigned int holeCovered = 0;                                                      // Whether each hole is covered-- each bit corresponds to a tonehole.
 bool fingersChanged = 1;                                                           // Keeps track of when the fingering pattern has changed.
 unsigned int prevHoleCovered = 1;                                                  // So we can track changes.
@@ -301,6 +303,10 @@ int prevPitchBend = 8192;                            // A record of the previous
 bool resetBendFilter = true;
 int iPitchBend[] = { 8192, 8192, 8192, 8192, 8192, 8192, 8192, 8192, 8192 };  // Current pitchbend value for each tonehole
 float pitchBendPerSemi = 4096.0f;
+
+// Sensor stream (see Sensor_stream.ino)
+bool sensorStreamOn = false;               // Whether we stream sensor readings to the host over USB SysEx
+bool sensorStreamSuppressNotes = false;    // Whether note, pressure, pitchbend and IMU MIDI output is turned off while streaming
 int prevChanPressure = 0;
 int prevChanPressureLSB = 0;
 int prevCCPressure = 0;
@@ -432,6 +438,7 @@ void setup() {
     MIDI.turnThruOff();
     MIDI.setHandleControlChange(handleControlChangeFromUSB);  // Handle received MIDI CC messages.
     MIDI.setHandleProgramChange(handleProgramChangeFromUSB);  // Handle received MIDI PC messages.
+    MIDI.setHandleSystemExclusive(handleSysExFromUSB);        // Handle received SysEx (sensor stream commands).
 
     //delay(2000); // Makes it so button 3 must be held down for two seconds to power on.
 
@@ -543,8 +550,11 @@ void loop() {
     getState();                             // Get the breath state. 3 us.
     debounceFingerHoles();                  // Get the new MIDI note if the fingering has changed.
     getShift();                             // Shift the next note up or down based on register and key.
-    sendNote();                             // Send the note as soon as we know the note, state, and shift.
-    readMIDI();                             // Read incoming MIDI messages.
+    if (!sensorStreamSuppressNotes) {
+        sendNote();  // Send the note as soon as we know the note, state, and shift.
+    }
+    sendSensorFrame();  // Stream the readings to the host if the sensor stream is on.
+    readMIDI();         // Read incoming MIDI messages.
 
 
 
@@ -553,7 +563,9 @@ void loop() {
     byte pressureInterval = calculatePressureInterval();  // Determine how frequently to send MIDI messages based on pressure.
     if ((wakeTime - pressureTimer) >= pressureInterval) {
         pressureTimer = wakeTime;
-        calculateAndSendPressure();
+        if (!sensorStreamSuppressNotes) {
+            calculateAndSendPressure();
+        }
     }
 
 
@@ -582,9 +594,11 @@ void loop() {
 
     if ((wakeTime - pitchBendTimer) >= pbsendinterval) {
         pitchBendTimer = wakeTime;    // This timer is also reset when we send a note, so none if these things will happen until the next connection interval if using BLE.
-        calculateAndSendPitchbend();  // 5 us with no pitchbend turned on, 50 us with vibrato, 65 us with slide/vibrato, 45 us with shake vibrato only, 30 us with half hole only, ~ 65 us with all of the above.
         printStuff();                 // Debug
-        sendIMU();                    // ~ 130 us
+        if (!sensorStreamSuppressNotes) {
+            calculateAndSendPitchbend();  // 5 us with no pitchbend turned on, 50 us with vibrato, 65 us with slide/vibrato, 45 us with shake vibrato only, 30 us with half hole only, ~ 65 us with all of the above.
+            sendIMU();                    // ~ 130 us
+        }
     }
 
 

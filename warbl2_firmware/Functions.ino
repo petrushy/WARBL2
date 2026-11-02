@@ -195,6 +195,11 @@ void getSensors(void) {
 
         toneholeRead[8] |= ((toneholePacked[11] & 0x03) << 8);
 
+        for (byte i = 0; i < 9; i++) {
+            toneholeRaw[i] = toneholeRead[i];  // Keep the unfiltered readings for the sensor stream.
+        }
+        toneholeRawUpdated = true;
+
 
         for (byte i = 0; i < 9; i++) {
             // Run through adaptive smoothing filter. Takes 50 us.
@@ -3873,7 +3878,9 @@ void loadPrefs() {
     customCurve[2] = ED[preset][CUSTOM_AFTERTOUCH_CURVE];
     customCurve[3] = ED[preset][CUSTOM_POLYPRESSURE_CURVE];
 
-    if (ED[preset][ENABLE_REGISTER_HOLD] || IMUsettings[preset][SEND_ROLL] || IMUsettings[preset][SEND_PITCH] || IMUsettings[preset][SEND_YAW] || IMUsettings[preset][PITCH_REGISTER] || IMUsettings[preset][STICKS_MODE] || IMUsettings[preset][MAP_ROLL_TO_PITCHBEND] || IMUsettings[preset][MAP_ELEVATION_TO_PITCHBEND] || IMUsettings[preset][MAP_YAW_TO_PITCHBEND]) {
+    if (sensorStreamOn) {
+        // Leave the gyro running at the sensor stream rate (see setSensorStream()).
+    } else if (ED[preset][ENABLE_REGISTER_HOLD] || IMUsettings[preset][SEND_ROLL] || IMUsettings[preset][SEND_PITCH] || IMUsettings[preset][SEND_YAW] || IMUsettings[preset][PITCH_REGISTER] || IMUsettings[preset][STICKS_MODE] || IMUsettings[preset][MAP_ROLL_TO_PITCHBEND] || IMUsettings[preset][MAP_ELEVATION_TO_PITCHBEND] || IMUsettings[preset][MAP_YAW_TO_PITCHBEND]) {
         sox.setGyroDataRate(LSM6DS_RATE_208_HZ);  // Turn on the gyro if we need it.
     } else {
         sox.setGyroDataRate(LSM6DS_RATE_SHUTDOWN);
