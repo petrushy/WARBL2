@@ -26,15 +26,22 @@ private:
     whistle::Geometry geometry;
 };
 
-// Predicted resonances (from the geometry) for the plain scale fingerings.
+// Every fingering of a standard whistle chart, with how far the geometry's resonance is from its note.
 class TuningTable : public juce::Component
 {
 public:
-    void setResults (std::vector<std::vector<double>> r) { results = std::move (r); repaint(); }
+    struct Entry
+    {
+        juce::String note;
+        juce::String pattern;
+        double cents = 0.0;
+    };
+
+    void setEntries (std::vector<Entry> e) { entries = std::move (e); repaint(); }
     void paint (juce::Graphics&) override;
 
 private:
-    std::vector<std::vector<double>> results;  // Per fingering (all covered first), resonances in Hz.
+    std::vector<Entry> entries;
 };
 
 class InstrumentPage : public juce::Component, private juce::Timer
@@ -72,6 +79,8 @@ private:
 
     juce::ComboBox presetBox, materialBox, keyBox, octaveBox;
     juce::TextButton tuneButton { "Tune holes" };
+    juce::ToggleButton crossButton { "Also tune the cross-fingered flat 7th (oxxooo) with L1's size" };
+    double lowestNoteHz() const;
     juce::Label tuneStatus;
 
     std::vector<Row> rows;

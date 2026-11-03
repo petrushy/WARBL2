@@ -4,6 +4,7 @@
 //   WhistleCheck table            predicted resonances for the scale fingerings of every preset
 //   WhistleCheck play [preset]    run the time-domain model at fixed fingerings and pressures, measure what it plays
 //   WhistleCheck slide [hole] [Pa]  open one hole gradually (half-holing) and measure the pitch
+//   WhistleCheck chart [preset]   every fingering of a standard whistle chart: predicted and played tuning
 
 #include "Whistle/Acoustics.h"
 #include "Whistle/WhistleModel.h"
@@ -187,9 +188,81 @@ static void slide (const Geometry& g, int hole, double pressure)
     }
 }
 
+// Run the model at one fingering and pressure; returns the played frequency (0 if no clear pitch).
+static double playOnce (const Geometry& g, const Openness& open, double pressure)
+{
+    constexpr double rate = 48000.0;
+    WhistleModel model;
+    model.setGeometry (g);
+    model.prepare (rate);
+    model.jetStrouhal = strouhal;
+    model.jetQ = jetQ;
+    model.jetConvection = convection;
+    model.jetStages = stages;
+
+    Controls controls;
+    for (int i = 0; i < kNumHoles; ++i)
+        controls.openness[(size_t) i] = (float) open[(size_t) i];
+
+    std::vector<float> out ((size_t) (rate * 0.6), 0.0f);
+    const int block = (int) (rate * 0.002);
+    for (int start = 0; start < (int) out.size(); start += block)
+    {
+        controls.mouthPressure = (float) (pressure * std::min (1.0, start / (rate * 0.04)));
+        model.setControls (controls);
+        model.render (out.data() + start, std::min (block, (int) out.size() - start));
+    }
+    double clarity = 0.0;
+    const double f = measurePitch (out, rate, clarity);
+    return clarity > 0.8 ? f : 0.0;
+}
+
+// For each chart fingering: the resonance the geometry predicts in that note's register, and the pressures at
+// which the model plays that note, with its pitch at the lowest and highest of those pressures.
+static void chart (const Geometry& g)
+{
+    const double lowest = lowestNote (g);
+    std::printf ("\n%s\n  note      fingering  predicted (geometry)   model plays it at    pitch at lowest / highest\n", g.name.toRawUTF8());
+
+    for (const auto& c : standardChart())
+    {
+        const auto open = c.openness();
+        const double target = lowest * std::pow (2.0, c.semitones / 12.0);
+        const double cents = predictedCents (g, c, lowest);
+
+        std::vector<std::pair<double, double>> hits;  // Pressure, cents from target
+        for (double pressure = 200.0; pressure <= 3000.0; pressure += 100.0)
+        {
+            const double f = playOnce (g, open, pressure);
+            if (f > 0.0 && std::abs (1200.0 * std::log2 (f / target)) < 150.0)
+                hits.push_back ({ pressure, 1200.0 * std::log2 (f / target) });
+        }
+
+        std::printf ("  %-8s  %s     %+5.0f c               ", c.name, c.pattern, cents);
+        if (hits.empty())
+            std::printf ("never\n");
+        else
+            std::printf ("%4.0f-%4.0f Pa        %+5.0f / %+5.0f c\n", hits.front().first, hits.back().first, hits.front().second, hits.back().second);
+    }
+}
+
 int main (int argc, char* argv[])
 {
     const juce::String mode = argc > 1 ? argv[1] : "table";
+
+    if (mode == "chart" || mode == "chartc")  // chart [preset]; chartc retunes with the cross-fingered C natural first
+    {
+        const int index = argc > 2 ? juce::String (argv[2]).getIntValue() : 0;
+        auto g = presets()[(size_t) juce::jlimit (0, (int) presets().size() - 1, index)];
+        if (mode == "chartc")
+        {
+            const bool ok = tuneToScale (g, lowestNote (g), true);
+            std::printf ("Retuned with C natural: %s, L1 diameter %.2f mm at %.1f mm\n", ok ? "ok" : "closest possible",
+                         g.holes[0].diameter * 1000.0, g.holes[0].position * 1000.0);
+        }
+        chart (g);
+        return 0;
+    }
 
     if (mode == "slide")  // slide <hole 1-6> <pressure>
     {
@@ -216,12 +289,12 @@ int main (int argc, char* argv[])
 
     for (auto g : presets())
     {
-        if (mode == "tune")
+        if (mode == "tune" || mode == "tunec")  // tunec: also tune the cross-fingered C natural with L1's size
         {
-            const bool ok = tuneToScale (g, lowestNote (g));
-            std::printf ("%s: %s\n  bore %.4f  holes", g.name.toRawUTF8(), ok ? "tuned" : "DID NOT CONVERGE", g.boreLength);
+            const bool ok = tuneToScale (g, lowestNote (g), mode == "tunec");
+            std::printf ("%s: %s\n  bore %.4f  holes (position/diameter)", g.name.toRawUTF8(), ok ? "tuned" : "DID NOT CONVERGE", g.boreLength);
             for (const auto& h : g.holes)
-                std::printf ("  %.4f", h.position);
+                std::printf ("  %.4f/%.4f", h.position, h.diameter);
             std::printf ("\n");
         }
         printTable (g);

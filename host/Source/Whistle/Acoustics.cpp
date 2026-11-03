@@ -120,8 +120,105 @@ Openness scaleFingering (int closed)
     return open;
 }
 
-bool tuneToScale (Geometry& g, double lowestHz)
+Openness crossFingeredSeventh()
 {
+    return { 1.0, 0.0, 0.0, 1.0, 1.0, 1.0 };
+}
+
+Openness ChartFingering::openness() const
+{
+    Openness open {};
+    for (int i = 0; i < kNumHoles; ++i)
+        open[(size_t) i] = pattern[i] == 'x' ? 0.0 : 1.0;
+    return open;
+}
+
+const std::vector<ChartFingering>& standardChart()
+{
+    static const std::vector<ChartFingering> chart {
+        { "D", "xxxxxx", 0, 1 },        { "E", "xxxxxo", 2, 1 },       { "F#", "xxxxoo", 4, 1 },      { "G", "xxxooo", 5, 1 },
+        { "A", "xxoooo", 7, 1 },        { "B", "xooooo", 9, 1 },       { "C nat", "oxxooo", 10, 1 },  { "C#", "oooooo", 11, 1 },
+        { "high D", "oxxxxx", 12, 2 },  { "high D", "xxxxxx", 12, 2 }, { "high E", "xxxxxo", 14, 2 }, { "high F#", "xxxxoo", 16, 2 },
+        { "high G", "xxxooo", 17, 2 },  { "high A", "xxoooo", 19, 2 }, { "high B", "xooooo", 21, 2 },
+    };
+    return chart;
+}
+
+double predictedCents (const Geometry& g, const ChartFingering& c, double lowestHz)
+{
+    const double target = lowestHz * std::pow (2.0, c.semitones / 12.0);
+    double nearest = 0.0;
+    for (double f : resonances (g, c.openness(), target * 0.7, target * 1.4))
+        if (nearest == 0.0 || std::abs (std::log2 (f / target)) < std::abs (std::log2 (nearest / target)))
+            nearest = f;
+    return nearest > 0.0 ? 1200.0 * std::log2 (nearest / target) : 0.0;
+}
+
+bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingering)
+{
+    if (tuneCrossFingering)
+    {
+        // Outer loop on L1's diameter: a smaller top hole vents less, so the covered holes below it pull the
+        // cross-fingered note further down. For each diameter the whole scale (including L1's position) is retuned.
+        const double target = lowestHz * std::pow (2.0, 10.0 / 12.0);
+        auto crossError = [&] (double diameter)
+        {
+            g.holes[0].diameter = diameter;
+            if (! tuneToScale (g, lowestHz, false))
+                return 1.0e9;
+            const auto r = resonances (g, crossFingeredSeventh(), target * 0.8, target * 1.25);
+            return r.empty() ? 1.0e9 : 1200.0 * std::log2 (r.front() / target);
+        };
+
+        const Geometry original = g;
+
+        // Scan diameters for a sign change of the error, then bisect.
+        double lo = 0.0, hi = 0.0, errorLo = 0.0;
+        double previousDiameter = 0.0, previousError = 1.0e9;
+        const double scale = std::max (0.0015, 0.2 * original.holes[0].diameter);
+        for (double d = scale; d <= original.holes[0].diameter * 1.6; d += 0.1 * original.holes[0].diameter)
+        {
+            const double error = crossError (d);
+            if (error < 1.0e8 && previousError < 1.0e8 && (error > 0.0) != (previousError > 0.0))
+            {
+                lo = previousDiameter;
+                errorLo = previousError;
+                hi = d;
+                break;
+            }
+            previousDiameter = d;
+            previousError = error;
+        }
+
+        if (hi == 0.0)
+        {
+            g = original;  // The top hole's size alone can't put it in tune: leave the instrument as it was.
+            return tuneToScale (g, lowestHz, false) && false;
+        }
+
+        for (int iteration = 0; iteration < 25 && hi - lo > 0.00002; ++iteration)
+        {
+            const double mid = 0.5 * (lo + hi);
+            const double errorMid = crossError (mid);
+            if (errorMid > 1.0e8)
+                break;
+            if ((errorMid > 0.0) == (errorLo > 0.0))
+            {
+                lo = mid;
+                errorLo = errorMid;
+            }
+            else
+            {
+                hi = mid;
+            }
+        }
+        if (std::abs (crossError (0.5 * (lo + hi))) < 5.0)
+            return true;
+        g = original;
+        tuneToScale (g, lowestHz, false);
+        return false;
+    }
+
     static const int majorScale[kNumHoles + 1] = { 0, 2, 4, 5, 7, 9, 11 };  // Semitones above the lowest note.
 
     auto firstResonance = [&] (const Openness& open, double guessHz)

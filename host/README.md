@@ -49,11 +49,11 @@ Settings, all live:
 - **Voicing:** the jet's band (Strouhal number), how fast disturbances travel along the jet, and breath noise.
 - **Player:** breath scale (multiplies the measured pressure; WARBL's sensor gives about 1.66 Pa per count) and output level.
 
-The table on the right is a design aid. It shows the resonances the geometry gives for each scale fingering, calculated in the frequency domain with the transfer-matrix method, and how far each second register is from a true octave. **Tune holes** moves the bore length and hole positions so the scale is in tune in the chosen key, keeping the hole sizes. The played pitch differs a little from the table, because blowing harder raises it, as on a real whistle.
+The table on the right is a design aid. For every fingering of a standard whistle chart (including the cross-fingered C natural, oxxooo, and high D with L1 vented), it shows how far the resonance the geometry gives is from the note, in that note's register. The resonances are calculated in the frequency domain with the transfer-matrix method. **Tune holes** moves the bore length and hole positions so the scale is in tune in the chosen key. With the cross-fingering option on (the default, also used for the presets), it also sets L1's diameter: a smaller top hole makes C natural flatter, and L1's position still sets C#. Without it, C natural comes out about 55 cents sharp, as on many real whistles. The played pitch rises above the table as you blow harder (see `WhistleCheck chart`).
 
 **Play from screen** plays the model without WARBL. Click a hole to cover or uncover it, right-click to half-cover it, and set the breath pressure with the slider. On the default D whistle the low register starts at around 400 Pa and the second register takes over above about 1000 Pa.
 
-`WhistleCheck play [preset]` runs the model at each scale fingering and a range of pressures and reports which register it plays and how far from the predicted pitch. `WhistleCheck slide <hole> <Pa>` opens one hole gradually and reports the pitch.
+`WhistleCheck play [preset]` runs the model at each scale fingering and a range of pressures and reports which register it plays and how far from the predicted pitch. `WhistleCheck slide <hole> <Pa>` opens one hole gradually and reports the pitch. `WhistleCheck chart [preset]` goes through the whole chart: the predicted tuning, the pressure range in which the model plays each note, and its pitch at the bottom and top of that range.
 
 ## Reverb
 

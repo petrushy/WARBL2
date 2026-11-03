@@ -36,7 +36,8 @@ const std::vector<Geometry>& presets()
         return g;
     };
 
-    // Hole positions and bore lengths below are starting points; they are tuned when the list is first made.
+    // Hole positions and bore lengths below are starting points; they are tuned when the list is first made
+    // (which also sets L1's diameter so the cross-fingered C natural is in tune).
     static const std::vector<Geometry> list = [&]
     {
         std::vector<Geometry> whistles {
@@ -54,7 +55,7 @@ const std::vector<Geometry>& presets()
               0.0010, 1.0, 0.0016, 0.0090, 0.0150),
         };
         for (auto& g : whistles)
-            tuneToScale (g, g.boreLength > 0.4 ? 293.66 : 587.33);  // D4 / D5
+            tuneToScale (g, g.boreLength > 0.4 ? 293.66 : 587.33, true);  // D4 / D5, with C natural in tune too
         return whistles;
     }();
     return list;

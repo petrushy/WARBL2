@@ -18,12 +18,6 @@ juce::String noteName (double hz)
     return juce::String (names[(midi % 12 + 12) % 12]) + juce::String (midi / 12 - 1);
 }
 
-int centsFromNearest (double hz)
-{
-    const double midi = 69.0 + 12.0 * std::log2 (hz / 440.0);
-    return (int) std::lround ((midi - std::round (midi)) * 100.0);
-}
-
 juce::String signedCents (int cents) { return (cents >= 0 ? "+" : "") + juce::String (cents); }
 } // namespace
 
@@ -124,40 +118,24 @@ void TuningTable::paint (juce::Graphics& g)
 
     auto header = area.removeFromTop (20);
     g.setColour (text.withAlpha (0.7f));
-    const int columns[] = { 110, 170, 170 };
-    g.drawText ("Fingering", header.removeFromLeft (columns[0]), juce::Justification::centredLeft);
-    g.drawText ("Low register", header.removeFromLeft (columns[1]), juce::Justification::centredLeft);
-    g.drawText ("Second register (octave)", header, juce::Justification::centredLeft);
+    const int columns[] = { 80, 120 };
+    g.drawText ("Note", header.removeFromLeft (columns[0]), juce::Justification::centredLeft);
+    g.drawText ("Fingering", header.removeFromLeft (columns[1]), juce::Justification::centredLeft);
+    g.drawText ("Resonance vs. the note (> 10 c highlighted)", header, juce::Justification::centredLeft);
 
-    for (size_t row = 0; row < results.size(); ++row)
+    for (const auto& e : entries)
     {
-        auto line = area.removeFromTop (20);
-        const int closed = whistle::kNumHoles - (int) row;
+        auto line = area.removeFromTop (19);
         juce::String pattern;
-        for (int i = 0; i < whistle::kNumHoles; ++i)
-            pattern += juce::String (juce::CharPointer_UTF8 (i < closed ? "\xe2\x97\x8f" : "\xe2\x97\x8b"));  // Filled / open circle
+        for (auto ch : e.pattern)
+            pattern += juce::String (juce::CharPointer_UTF8 (ch == 'x' ? "\xe2\x97\x8f" : "\xe2\x97\x8b"));  // Filled / open circle
 
         g.setColour (text);
-        g.drawText (pattern, line.removeFromLeft (columns[0]), juce::Justification::centredLeft);
-
-        const auto& r = results[row];
-        if (r.empty())
-        {
-            g.drawText ("-", line, juce::Justification::centredLeft);
-            continue;
-        }
-
-        const int cents1 = centsFromNearest (r[0]);
-        g.setColour (std::abs (cents1) > 10 ? coveredColour : text);
-        g.drawText (noteName (r[0]) + "  " + signedCents (cents1) + " c   (" + juce::String (r[0], 1) + " Hz)",
-                    line.removeFromLeft (columns[1]), juce::Justification::centredLeft);
-
-        if (r.size() > 1)
-        {
-            const int stretch = (int) std::lround (1200.0 * std::log2 (r[1] / r[0]) - 1200.0);
-            g.setColour (std::abs (stretch) > 10 ? coveredColour : text);
-            g.drawText (noteName (r[1]) + "  octave " + signedCents (stretch) + " c", line, juce::Justification::centredLeft);
-        }
+        g.drawText (e.note, line.removeFromLeft (columns[0]), juce::Justification::centredLeft);
+        g.drawText (pattern, line.removeFromLeft (columns[1]), juce::Justification::centredLeft);
+        const int cents = (int) std::lround (e.cents);
+        g.setColour (std::abs (cents) > 10 ? coveredColour : text);
+        g.drawText (signedCents (cents) + " c", line, juce::Justification::centredLeft);
     }
 }
 
@@ -191,14 +169,22 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     octaveBox.addItem ("high (tin whistle)", 1);
     octaveBox.addItem ("low (low whistle)", 2);
     octaveBox.setSelectedId (1, juce::dontSendNotification);
+    keyBox.onChange = octaveBox.onChange = [this]
+    {
+        tuningDirty = true;
+        tuningCountdown = 0;
+    };
+
+    crossButton.setColour (juce::ToggleButton::textColourId, text);
+    crossButton.setToggleState (true, juce::dontSendNotification);
+    crossButton.setTooltip ("A smaller top hole makes the cross-fingered flat 7th (C natural on a D whistle) flatter; "
+                            "this picks L1's size so that note is in tune, with C# still set by L1's position.");
+
     tuneButton.onClick = [this]
     {
-        // Lowest note in octave 5 (high whistles: C5..B5) or 4 (low whistles).
-        const int semitone = keyBox.getSelectedId() - 1;
-        const int midi = (octaveBox.getSelectedId() == 1 ? 72 : 60) + semitone;
-        const double hz = 440.0 * std::pow (2.0, (midi - 69) / 12.0);
+        const double hz = lowestNoteHz();
         auto tuned = geometry;
-        if (whistle::tuneToScale (tuned, hz))
+        if (whistle::tuneToScale (tuned, hz, crossButton.getToggleState()))
         {
             geometry = tuned;
             tuneStatus.setText ("Holes placed for " + noteName (hz), juce::dontSendNotification);
@@ -211,7 +197,7 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
         }
     };
 
-    for (auto* c : std::initializer_list<juce::Component*> { &presetBox, &materialBox, &keyBox, &octaveBox, &tuneButton, &tuneStatus })
+    for (auto* c : std::initializer_list<juce::Component*> { &presetBox, &materialBox, &keyBox, &octaveBox, &tuneButton, &tuneStatus, &crossButton })
         addAndMakeVisible (c);
     tuneStatus.setColour (juce::Label::textColourId, text);
 
@@ -284,7 +270,7 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
         addAndMakeVisible (l);
     }
     addAndMakeVisible (manualBreath);
-    tableTitle.setText ("Resonances predicted from the geometry (design aid; the sound comes from the simulation)", juce::dontSendNotification);
+    tableTitle.setText ("Tuning predicted from the geometry, for the key above (design aid; the sound comes from the simulation)", juce::dontSendNotification);
 
     loadPreset (0);
     startTimerHz (30);
@@ -353,6 +339,9 @@ void InstrumentPage::loadPreset (int index)
         if (std::abs (whistle::materials()[i].wallThickness - geometry.wallThickness) < 1e-6)
             materialBox.setSelectedId ((int) i + 1, juce::dontSendNotification);
 
+    // The presets are all in D; low whistles an octave down.
+    keyBox.setSelectedId (3, juce::dontSendNotification);
+    octaveBox.setSelectedId (geometry.boreLength > 0.4 ? 2 : 1, juce::dontSendNotification);
     tuneStatus.setText ({}, juce::dontSendNotification);
     refreshSliders();
     geometryChanged();
@@ -371,16 +360,11 @@ void InstrumentPage::timerCallback()
     if (tuningDirty && --tuningCountdown <= 0)
     {
         tuningDirty = false;
-        const double lowest = 343.0 / (2.0 * geometry.boreLength + 0.05);  // Rough, to choose the search range.
-        std::vector<std::vector<double>> results;
-        for (int closed = whistle::kNumHoles; closed >= 0; --closed)
-        {
-            auto r = whistle::resonances (geometry, whistle::scaleFingering (closed), lowest * 0.5, lowest * 8.0);
-            if (r.size() > 2)
-                r.resize (2);
-            results.push_back (std::move (r));
-        }
-        tuningTable.setResults (std::move (results));
+        const double lowest = lowestNoteHz();
+        std::vector<TuningTable::Entry> entries;
+        for (const auto& c : whistle::standardChart())
+            entries.push_back ({ noteName (lowest * std::pow (2.0, c.semitones / 12.0)), c.pattern, whistle::predictedCents (geometry, c, lowest) });
+        tuningTable.setEntries (std::move (entries));
     }
 
     const float pressure = audio.shownPressure.load();
@@ -390,6 +374,13 @@ void InstrumentPage::timerCallback()
                            + juce::String (juce::roundToInt (juce::Decibels::gainToDecibels (level, -90.0f))) + " dBFS",
                        juce::dontSendNotification);
     whistleView.repaint();
+}
+
+double InstrumentPage::lowestNoteHz() const
+{
+    // Lowest note in octave 5 (high whistles: C5..B5) or 4 (low whistles).
+    const int midi = (octaveBox.getSelectedId() == 1 ? 72 : 60) + keyBox.getSelectedId() - 1;
+    return 440.0 * std::pow (2.0, (midi - 69) / 12.0);
 }
 
 void InstrumentPage::paint (juce::Graphics& g)
@@ -413,6 +404,7 @@ void InstrumentPage::resized()
     keyBox.setBounds (tuneRow.removeFromLeft (70).reduced (2));
     octaveBox.setBounds (tuneRow.removeFromLeft (160).reduced (2));
     tuneStatus.setBounds (tuneRow);
+    crossButton.setBounds (left.removeFromTop (24));
     left.removeFromTop (4);
 
     // Rows: holes get two sliders side by side to save space.
@@ -462,5 +454,5 @@ void InstrumentPage::resized()
     liveLabel.setBounds (area.removeFromTop (24));
     area.removeFromTop (8);
     tableTitle.setBounds (area.removeFromTop (22));
-    tuningTable.setBounds (area.removeFromTop (190));
+    tuningTable.setBounds (area.removeFromTop (330));
 }

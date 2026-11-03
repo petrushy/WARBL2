@@ -27,7 +27,27 @@ std::vector<double> resonances (const Geometry&, const Openness&, double fMin = 
 Openness scaleFingering (int closed);
 
 // Moves the bore length and hole positions so the scale fingerings give an equal-tempered major scale whose
-// lowest note (all holes covered) is `lowestHz`. Keeps hole diameters. Returns false if it couldn't converge.
-bool tuneToScale (Geometry&, double lowestHz);
+// lowest note (all holes covered) is `lowestHz`. Keeps hole diameters, except that with `tuneCrossFingering`
+// the top hole's (L1) diameter is also chosen so the cross-fingered flat seventh (oxxooo, C natural on a D
+// whistle) is in tune. Returns false if it couldn't converge.
+bool tuneToScale (Geometry&, double lowestHz, bool tuneCrossFingering = false);
+
+// The cross-fingering for the flat seventh: top hole open, the next two covered, the rest open.
+Openness crossFingeredSeventh();
+
+// The fingerings of a standard whistle chart, with the note each should give.
+struct ChartFingering
+{
+    const char* name;      // For a D whistle; the same fingerings give the same scale degrees in other keys.
+    const char* pattern;   // Top hole first, x = covered, o = open.
+    int semitones;         // Above the lowest note.
+    int reg;               // 1 = low register, 2 = second (overblown).
+    Openness openness() const;
+};
+
+const std::vector<ChartFingering>& standardChart();
+
+// Cents from the target note to the nearest resonance the geometry gives for this fingering.
+double predictedCents (const Geometry&, const ChartFingering&, double lowestHz);
 
 } // namespace whistle
