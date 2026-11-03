@@ -185,7 +185,7 @@ response::Breath AudioEngine::breathResponse() const
 
 response::Hole AudioEngine::holeResponse() const
 {
-    return { holeOpenBelow.load(), holeClosedAt.load(), holeCurve.load() };
+    return { holeOpenBelow.load(), holeClosedAt.load(), holeCurve.load(), holeSCurve.load(), holeCentre.load() };
 }
 
 whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& frame)

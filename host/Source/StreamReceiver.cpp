@@ -11,6 +11,8 @@ StreamReceiver::~StreamReceiver()
 bool StreamReceiver::connect()
 {
     disconnect();
+    if (leaveDevicesAlone)
+        return false;
 
     for (const auto& d : juce::MidiInput::getAvailableDevices())
         if (d.name.containsIgnoreCase ("WARBL"))

@@ -35,7 +35,7 @@ Host app:
 
 - The first configure downloads JUCE 9.0.5. LTO is deliberately off, because linking took many minutes.
 - To check the app without anyone at the screen, use `"build/WarblStream_artefacts/Release/WARBL Stream.app/Contents/MacOS/WARBL Stream" --simulate --instrument --snapshot out.png`. Other options: `--sensors`, `--play`, `--output <device>`. Read the PNG.
-- App state lives in `~/Library/Application Support/WARBL Stream/WARBL Stream.settings`; it's the user's real settings. A `--snapshot` run doesn't save state on exit, and it may run alongside the user's own copy of the app. If a test edits the file, put it back afterwards.
+- App state lives in `~/Library/Application Support/WARBL Stream/WARBL Stream.settings`; it's the user's real settings. A `--snapshot` run doesn't save state on exit, doesn't connect to MIDI devices (so it can't disturb the user's WARBL session; use `--simulate`), and may run alongside the user's own copy of the app. If a test edits the file, put it back afterwards.
 - A MacBook with its lid closed runs no audio at all: the app shows "blocks 0", and even `afplay` hangs. That isn't an app bug.
 
 ## Conventions

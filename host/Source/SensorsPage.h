@@ -56,6 +56,7 @@ private:
     CurveView holeCurve { "Coverage (1 = covered at WARBL calibration)", "How closed (0 = open, 1 = closed)" };
     std::vector<Row> breathRows, holeRows;
     juce::TextButton breathDefaults { "Defaults" }, holeDefaults { "Defaults" };
+    juce::ComboBox holeShape;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SensorsPage)
 };

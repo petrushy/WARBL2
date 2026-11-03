@@ -116,9 +116,18 @@ SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
         .setTooltip ("Coverage below this leaves the hole fully open, so a finger hovering above it has no effect.");
     addRow (holeRows, "Closed at", 0.3, 1.3, 0.01, "", audio.holeClosedAt)
         .setTooltip ("Coverage at which the hole is fully closed. Lower = closes sooner (more sensitive).");
-    addRow (holeRows, "Curve (64 = linear)", 0.0, 127.0, 1.0, "", audio.holeCurve)
-        .setTooltip ("Below 64: the hole closes quickly as the finger arrives. Above 64: it stays mostly open until the finger is nearly down, "
-                     "leaving more room for half-holing and slides.");
+    addRow (holeRows, "Curve (64 = straight)", 0.0, 127.0, 1.0, "", audio.holeCurve)
+        .setTooltip ("Power curve: below 64 the hole closes quickly as the finger arrives, above 64 it stays mostly open until the finger "
+                     "is nearly down. S-curve: how steep the S is (above 64 flat at both ends, below 64 an inverted S).");
+    addRow (holeRows, "Centre (S-curve)", 0.1, 0.9, 0.01, "", audio.holeCentre)
+        .setTooltip ("Where between 'open below' and 'closed at' the S-curve is steepest: lower moves it towards the open end.");
+
+    holeShape.addItem ("Power curve", 1);
+    holeShape.addItem ("S-curve", 2);
+    holeShape.setSelectedId (audio.holeSCurve.load() ? 2 : 1, juce::dontSendNotification);
+    holeShape.setTooltip ("S-curve: little change while the finger is far away and in the last bit before it's down, steep in between.");
+    holeShape.onChange = [this] { audio.holeSCurve = holeShape.getSelectedId() == 2; };
+    addAndMakeVisible (holeShape);
 
     holeCurve.curve = [this] (float x) { return audio.holeResponse().closedness (x); };
     holeCurve.points = [this]
@@ -146,7 +155,8 @@ SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
     holeDefaults.onClick = [this, resetRows]
     {
         const response::Hole d;
-        resetRows (holeRows, { d.openBelow, d.closedAt, d.curve });
+        resetRows (holeRows, { d.openBelow, d.closedAt, d.curve, d.centre });
+        holeShape.setSelectedId (2, juce::sendNotificationSync);  // The default shape is the S-curve
     };
     addAndMakeVisible (breathDefaults);
     addAndMakeVisible (holeDefaults);
@@ -204,7 +214,7 @@ void SensorsPage::resized()
     auto right = area.withTrimmedLeft (8);
 
     auto layout = [] (juce::Rectangle<int> column, juce::Label& title, juce::TextButton& defaults, std::vector<Row>& rows,
-                      juce::Label& info, CurveView& view)
+                      juce::Label& info, CurveView& view, juce::Component* shape)
     {
         auto top = column.removeFromTop (28);
         defaults.setBounds (top.removeFromRight (90).reduced (2));
@@ -215,11 +225,13 @@ void SensorsPage::resized()
             row.label->setBounds (line.removeFromLeft (190));
             row.slider->setBounds (line);
         }
+        if (shape != nullptr)
+            shape->setBounds (column.removeFromTop (28).removeFromLeft (220).reduced (0, 2));
         column.removeFromTop (6);
         info.setBounds (column.removeFromTop (40));
         view.setBounds (column.removeFromTop (std::min (column.getHeight(), column.getWidth())));
     };
 
-    layout (left, breathTitle, breathDefaults, breathRows, breathInfo, breathCurve);
-    layout (right, holeTitle, holeDefaults, holeRows, holeInfo, holeCurve);
+    layout (left, breathTitle, breathDefaults, breathRows, breathInfo, breathCurve, nullptr);
+    layout (right, holeTitle, holeDefaults, holeRows, holeInfo, holeCurve, &holeShape);
 }

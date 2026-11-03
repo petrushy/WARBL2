@@ -12,6 +12,10 @@ public:
 
     void initialise (const juce::String& commandLine) override
     {
+        // A test run must not talk to WARBL (it would e.g. stop the user's stream when it quits).
+        if (commandLine.contains ("--snapshot"))
+            StreamReceiver::leaveDevicesAlone = true;
+
         mainWindow = std::make_unique<MainWindow> (getApplicationName());
 
         // For testing: "--simulate" turns on the built-in simulated WARBL;

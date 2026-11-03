@@ -80,7 +80,7 @@ How the readings become the model's controls, with live dots on each curve. Curv
 - **Tone holes:** coverage is calibrated by WARBL, with 0 = open and 1 = covered at calibration.
   - **Open below:** a finger hovering above the hole has no effect.
   - **Closed at:** lower makes the hole close sooner.
-  - **Curve:** above 64 the hole stays open longer as the finger arrives, which leaves more room for half-holing.
+  - **Shape:** an **S-curve** (the default): little change while the finger is far away and in the last bit before it's down, steep in between. Here **Curve** sets how steep the S is (64 = straight) and **Centre** where the steep part sits. Or a **power curve**: above 64 the hole stays open longer as the finger arrives.
 
 The table on the right is a design aid. For every fingering of a standard whistle chart (including the cross-fingered C natural, oxxooo, and high D with L1 vented), it shows how far the resonance the geometry gives is from the note, in that note's register. The resonances are calculated in the frequency domain with the transfer-matrix method. **Tune holes** moves the bore length and hole positions so the scale is in tune in the chosen key. With the cross-fingering option on (the default, also used for the presets), it also sets L1's diameter: a smaller top hole makes C natural flatter, and L1's position still sets C#. Without it, C natural comes out about 55 cents sharp, as on many real whistles. The played pitch rises above the table as you blow harder (see `WhistleCheck chart`).
 

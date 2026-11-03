@@ -63,6 +63,10 @@ public:
     // pairing or a simulator under that name). Commands go to all of them, and frames are taken from the first
     // input that streams. Returns true if at least one input and output were opened.
     bool connect();
+
+    // Test runs (--snapshot) never touch WARBL: connect() then does nothing, so they can't interfere with the
+    // user's own copy of the app. Set before the receiver is used.
+    static inline std::atomic<bool> leaveDevicesAlone { false };
     void disconnect();
     bool isConnected() const { return ! inputs.empty() && ! outputs.empty(); }
     juce::String getPortNames() const;

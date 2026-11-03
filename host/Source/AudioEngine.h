@@ -68,7 +68,8 @@ public:
     std::atomic<float> breathInputMin { response::Breath().inputMin }, breathInputMax { response::Breath().inputMax },
         breathCurve { response::Breath().curve }, breathOutputMax { response::Breath().outputMax };
     std::atomic<float> holeOpenBelow { response::Hole().openBelow }, holeClosedAt { response::Hole().closedAt },
-        holeCurve { response::Hole().curve };
+        holeCurve { response::Hole().curve }, holeCentre { response::Hole().centre };
+    std::atomic<bool> holeSCurve { response::Hole().sCurve };
     response::Breath breathResponse() const;
     response::Hole holeResponse() const;
 
