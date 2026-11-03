@@ -43,7 +43,8 @@ public:
     // Adds the radiated sound (mono) to out.
     void render (float* out, int numSamples);
 
-    std::atomic<float> breathNoise { 0.25f };  // Turbulence at the jet and edge, 0..1 (its level grows with jet speed)
+    std::atomic<float> noiseStrouhal { 0.08f };  // Turbulence band centre, as f h / U (0.08: ~2-3 kHz when playing)
+    std::atomic<float> breathNoise { 0.1f };  // Turbulence at the jet and edge, 0..1 (its level grows with jet speed)
     std::atomic<float> directNoise { 0.3f };   // How much of the edge noise escapes straight from the window, 0..1
     std::atomic<float> outputGainDb { 0.0f };
     // Jet behaviour (see tick()): the frequency it amplifies most (Strouhal number f h / U), how broad that

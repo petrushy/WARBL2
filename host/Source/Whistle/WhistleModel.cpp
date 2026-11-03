@@ -14,7 +14,6 @@ constexpr float c = (float) kSpeedOfSound;
 constexpr double kMaxSectionLength = 0.03;
 constexpr double kMaxHeadSectionLength = 0.008;  // Finer sections where a head section changes the diameter.
 constexpr double kListenerDistance = 0.5;  // m in front of the window, for the radiation delays and level.
-constexpr float kNoiseStrouhal = 0.08f;   // Turbulence band centre, as f h / U (breath, not hiss: ~2-3 kHz)
 constexpr float kEdgeNoise = 0.15f;       // Edge pressure fluctuation at 20 m/s, as a fraction of rho U^2 (Breath noise 1)
 constexpr float kDirectNoise = 1.0f;      // Share of the edge noise radiated straight from the window (at 1)
 
@@ -272,7 +271,7 @@ float WhistleModel::tick()
     if ((noiseFilterCountdown--) <= 0)
     {
         noiseFilterCountdown = 8;
-        const float centre = juce::jlimit (300.0f, 0.3f * (float) rate, kNoiseStrouhal * speed / h);
+        const float centre = juce::jlimit (300.0f, 0.3f * (float) rate, noiseStrouhal.load (std::memory_order_relaxed) * speed / h);
         noiseLowA = 1.0f - std::exp (-2.0f * (float) kPi * 1.5f * centre / (float) rate);  // Lowpass above the centre (2 poles)
         noiseHighA = 1.0f - std::exp (-2.0f * (float) kPi * 0.5f * centre / (float) rate);  // Highpass an octave below
         noiseNorm = 1.0f / std::sqrt (noiseLowA / (2.0f - noiseLowA));  // Keeps the band's level independent of its centre
