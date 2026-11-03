@@ -311,17 +311,25 @@ int main (int argc, char* argv[])
     if (mode == "scale")  // scale [preset]: the test scale the app plays (pressure per note, found with the model)
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
-        const auto& g = presets()[index];
+        auto g = presets()[index];
+        auto scaleVoicing = presetVoicing (index);
+        for (int i = 4; i < argc; ++i)  // edge=<mm> noise=<0-1>: try voicing changes
+        {
+            const juce::String arg (argv[i]);
+            const double value = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+            if (arg.startsWith ("edge=")) g.edgeOffset = value * 0.001;
+            if (arg.startsWith ("noise=")) scaleVoicing.breathNoise = (float) value;
+        }
         const double lowest = lowestNote (g);
         const auto planStart = juce::Time::getMillisecondCounterHiRes();
-        const auto steps = planScale (g, presetVoicing (index), lowest);
+        const auto steps = planScale (g, scaleVoicing, lowest);
         std::printf ("%s: %d notes, planned in %.0f ms\n", g.name.toRawUTF8(), (int) steps.size(), juce::Time::getMillisecondCounterHiRes() - planStart);
         // Play it exactly as the app does (same timing and breath envelope), measure every note, and save a WAV.
         constexpr double rate = 48000.0;
         WhistleModel model;
         model.setGeometry (g);
         model.prepare (rate);
-        const auto voicing = presetVoicing (index);
+        const auto& voicing = scaleVoicing;
         model.jetStrouhal = voicing.jetStrouhal;
         model.jetConvection = voicing.jetConvection;
         model.breathNoise = voicing.breathNoise;
