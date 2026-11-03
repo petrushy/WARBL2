@@ -315,7 +315,7 @@ int main (int argc, char* argv[])
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
         const auto& g = presets()[index];
         auto voicing = presetVoicing (index);
-        float direct = 0.3f, noiseBand = 0.08f;
+        float direct = 0.0f, noiseBand = 0.08f, pulse = 0.8f;
         juce::String wavPath;
         for (int i = 3; i < argc; ++i)
         {
@@ -324,6 +324,7 @@ int main (int argc, char* argv[])
             if (arg.startsWith ("noise=")) voicing.breathNoise = value.getFloatValue();
             if (arg.startsWith ("direct=")) direct = value.getFloatValue();
             if (arg.startsWith ("band=")) noiseBand = value.getFloatValue();
+            if (arg.startsWith ("pulse=")) pulse = value.getFloatValue();
             if (arg.startsWith ("wav=")) wavPath = value;
         }
 
@@ -338,6 +339,7 @@ int main (int argc, char* argv[])
             model->breathNoise = voicing.breathNoise;
             model->directNoise = direct;
             model->noiseStrouhal = noiseBand;
+            model->noisePulsing = pulse;
             return model;
         };
 

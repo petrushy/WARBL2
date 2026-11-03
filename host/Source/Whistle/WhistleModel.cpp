@@ -284,7 +284,7 @@ float WhistleModel::tick()
     const float amount = breathNoise.load (std::memory_order_relaxed);
     // Edge noise: of order rho U^2, growing a little faster (U^2.5): the edge-dipole law (U^3) let the hiss
     // overtake the tone at the high pressures of the top notes.
-    const float edgeNoise = amount * kEdgeNoise * rho * jetSpeed * jetSpeed * std::sqrt (jetSpeed / 20.0f) * band;  // Pa
+    const float steadyEdgeNoise = amount * kEdgeNoise * rho * jetSpeed * jetSpeed * std::sqrt (jetSpeed / 20.0f) * band;  // Pa
     const float turbulence = amount * 0.15f * band;  // In jet half-widths: a slight unsteadiness, not roughness
 
     // A jet amplifies disturbances most around one frequency, set by its speed and thickness (Strouhal number
@@ -316,6 +316,13 @@ float WhistleModel::tick()
     const float jetHalfWidth = 0.4f * h;
     const float deflection = cfg.jetGrowth * h * filtered / speed + turbulence * jetHalfWidth * std::min (1.0f, jetSpeed / 20.0f);
     const float jetFlow = cfg.windowWidth * jetHalfWidth * jetSpeed * std::tanh ((deflection - cfg.edgeOffset) / jetHalfWidth);
+
+    // The edge turbulence comes in bursts as the jet sweeps across the edge (pulsed noise, locked to the tone),
+    // which the ear hears as breathiness in the note rather than as a separate hiss. Below the playing threshold
+    // the jet hardly moves off the edge, so the airy noise stays steady.
+    const float acrossEdge = 1.0f / std::cosh ((deflection - cfg.edgeOffset) / jetHalfWidth);
+    const float pulsing = noisePulsing.load (std::memory_order_relaxed);
+    const float edgeNoise = steadyEdgeNoise * (1.0f - pulsing + pulsing * acrossEdge * acrossEdge);
     const float jetFlowRate = (jetFlow - lastJetFlow) * (float) rate;
     lastJetFlow = jetFlow;
 
