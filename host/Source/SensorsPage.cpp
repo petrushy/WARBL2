@@ -102,8 +102,10 @@ SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
         .setTooltip ("The measured pressure that gives the full output. Lower = more sensitive.");
     addRow (breathRows, "Curve (64 = linear)", 0.0, 127.0, 1.0, "", audio.breathCurve)
         .setTooltip ("Below 64: logarithmic, more response to soft blowing. Above 64: exponential, more response to hard blowing.");
-    addRow (breathRows, "Output maximum", 200.0, 6000.0, 10.0, "Pa", audio.breathOutputMax)
-        .setTooltip ("Breath pressure the model gets at the input maximum. A D whistle's low register starts around 400 Pa and overblows above about 1000 Pa.");
+    addRow (breathRows, "Output maximum", 200.0, 10000.0, 10.0, "Pa", audio.breathOutputMax)
+        .setTooltip ("Breath pressure the model gets at the input maximum. A D whistle's low register starts around 400 Pa, overblows to the octave "
+                     "above about 1000 Pa, to the twelfth around 4000 Pa and the double octave around 7000 Pa. Raise this (above WARBL's ~6 kPa "
+                     "sensor range if needed) to reach the upper registers.");
 
     breathCurve.curve = [this] (float x) { return audio.breathResponse().map (x); };
     breathCurve.points = [this] { return std::vector<CurveView::Point> { { audio.measuredPressure.load(), {} } }; };

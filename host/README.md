@@ -80,7 +80,7 @@ The table on the right is a design aid. For every fingering of a standard whistl
 
 **Play from screen** plays the model without WARBL. Click a hole to cover or uncover it, right-click to half-cover it, and set the breath pressure with the slider. On the default D whistle the low register starts at around 400 Pa and the second register takes over above about 1000 Pa.
 
-`WhistleCheck play [preset]` runs the model at each scale fingering and a range of pressures and reports which register it plays and how far from the predicted pitch. `WhistleCheck slide <hole> <Pa>` opens one hole gradually and reports the pitch. `WhistleCheck chart [preset]` goes through the whole chart: the predicted tuning, the pressure range in which the model plays each note, and its pitch at the bottom and top of that range.
+`WhistleCheck play [preset]` runs the model at each scale fingering and a range of pressures and reports which register it plays and how far from the predicted pitch. `WhistleCheck modes [preset]` shows which register each fingering plays as the pressure rises to 8.5 kPa. Blowing harder climbs through the resonances in the model: the D whistle's low D gives the octave from ~1000 Pa, the twelfth (A6) from ~4000 Pa and the double octave from ~7000 Pa, with pitch rising (sharp) in the upper registers. The screen's breath slider goes to 9 kPa. With WARBL, raise **Output maximum** on the Sensors tab, since WARBL's sensor reads up to about 6 kPa. `WhistleCheck slide <hole> <Pa>` opens one hole gradually and reports the pitch. `WhistleCheck chart [preset]` goes through the whole chart: the predicted tuning, the pressure range in which the model plays each note, and its pitch at the bottom and top of that range.
 
 ## Reverb
 

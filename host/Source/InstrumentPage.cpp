@@ -344,12 +344,14 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     enableButton.onClick = [this] { audio.whistleEnabled = enableButton.getToggleState(); };
     manualButton.onClick = [this] { audio.manualPlay = manualButton.getToggleState(); };
 
-    manualBreath.setRange (0.0, 2500.0, 1.0);
+    manualBreath.setRange (0.0, 9000.0, 1.0);
+    manualBreath.setSkewFactorFromMidPoint (1500.0);  // Fine control in the low register, room for the third and fourth.
     manualBreath.setTextValueSuffix (" Pa");
     manualBreath.setTextBoxStyle (juce::Slider::TextBoxRight, false, 70, 20);
     manualBreath.setValue (0.0, juce::dontSendNotification);
     manualBreath.onValueChange = [this] { audio.manualPressure = (float) manualBreath.getValue(); };
-    manualBreath.setTooltip ("Breath pressure when playing from the screen. A D whistle's low register starts around 400 Pa; above ~1000 Pa it jumps to the second register.");
+    manualBreath.setTooltip ("Breath pressure when playing from the screen. A D whistle's low register starts around 400 Pa; "
+                             "it jumps to the octave above ~1000 Pa, the twelfth around 4000 Pa and the double octave around 7000 Pa.");
 
     for (auto* l : { &manualBreathLabel, &liveLabel, &tableTitle })
     {

@@ -6,6 +6,7 @@
 //   WhistleCheck slide [hole] [Pa]  open one hole (1 = L1 ... 6 = R3) gradually (half-holing) and measure the pitch
 //   WhistleCheck chart [preset]   every fingering of a standard whistle chart: predicted and played tuning
 //   WhistleCheck head [preset]    how a narrower head section changes the second register's tuning
+//   WhistleCheck modes [preset]   which register (resonance) each fingering plays as the pressure rises to 8.5 kPa
 
 #include "Whistle/Acoustics.h"
 #include "Whistle/WhistleModel.h"
@@ -326,6 +327,37 @@ int main (int argc, char* argv[])
                          g.holes[0].diameter * 1000.0, g.holes[0].position * 1000.0);
         }
         chart (g);
+        return 0;
+    }
+
+    if (mode == "modes")  // modes <preset>: which resonance (register) each chart fingering plays as pressure rises
+    {
+        const auto g = presets()[(size_t) juce::String (argc > 2 ? argv[2] : "0").getIntValue()];
+        const double pressures[] = { 300, 600, 1000, 1500, 2200, 3000, 4000, 5500, 7000, 8500 };
+        std::printf ("\n%s: resonance played (1 = low register, 2 = octave, 3 = twelfth, 4 = double octave) and note\n  fingering  ", g.name.toRawUTF8());
+        for (double p : pressures)
+            std::printf ("%7.0f Pa  ", p);
+        std::printf ("\n");
+        for (const auto& c : chartFor (g.chart))
+        {
+            if (c.reg != 1)
+                continue;
+            const auto r = resonances (g, c.openness(), 150.0, 8000.0);
+            std::printf ("  %s  ", c.pattern);
+            for (double p : pressures)
+            {
+                const double f = playOnce (g, c.openness(), p);
+                int resonance = 0;  // 0 = not within 100 cents of any resonance
+                for (size_t i = 0; i < r.size(); ++i)
+                    if (f > 0.0 && std::abs (1200.0 * std::log2 (f / r[i])) < 100.0)
+                        resonance = (int) i + 1;
+                if (f <= 0.0)
+                    std::printf ("    -       ");
+                else
+                    std::printf (" %d %-6s   ", resonance, noteName (f).c_str());
+            }
+            std::printf ("\n");
+        }
         return 0;
     }
 
