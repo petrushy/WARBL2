@@ -56,7 +56,7 @@ public:
     std::atomic<float> level { 0.0f };         // Output RMS, linear
 
 private:
-    static constexpr int kMaxSegments = 48;
+    static constexpr int kMaxSegments = 64;
     static constexpr int kLineSize = 64;      // Per bore section; sections are at most ~3 cm.
     static constexpr int kJetLineSize = 1024;
     static constexpr int kRadiationSize = 512;

@@ -44,6 +44,7 @@ The sound comes from a time-domain simulation of a whistle (`Source/Whistle/`). 
 Settings, all live:
 
 - **Bore:** length, diameter at the top and at the foot (cylindrical or tapered), wall thickness (sets the chimney height of the tone holes) and wall roughness. Choosing a material sets the last two.
+- **Head section:** a part of the bore from the window down with its own diameter, widening (or narrowing) to the bore over its length, like the narrower head of Goldie whistles. Narrowing the bore near the window lowers the low register more than the second, which widens the octaves. In the model, a head 30 mm long and 10.5 mm at the window (12 mm bore) brings the played second register from 7–28 cents flat to close to in tune. Narrower or longer heads overshoot. Compare designs with `WhistleCheck head [preset]` (tuning) and `WhistleCheck chart [preset] headlength=<mm> headdiameter=<mm>` (played). The "D whistle, narrow head" preset uses 30 mm / 10.5 mm.
 - **Tone holes:** position and diameter of each hole.
 - **Fipple:** windway height (jet thickness), window length (flue exit to edge), window width, and edge offset.
 - **Voicing:** the jet's band (Strouhal number), how fast disturbances travel along the jet, and breath noise.

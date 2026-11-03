@@ -47,6 +47,17 @@ const std::vector<Geometry>& presets()
         make ("D whistle, conical metal", 0.2550, 0.0130, 0.0105,
               { { { 0.1010, 0.0065 }, { 0.1235, 0.0070 }, { 0.1445, 0.0065 }, { 0.1730, 0.0072 }, { 0.1960, 0.0068 }, { 0.2170, 0.0058 } } },
               0.0005, 1.0, 0.0010, 0.0050, 0.0080),
+        [&]
+        {
+            // A narrower bore around the fipple, widening to the 12 mm bore over 30 mm: widens the octaves,
+            // which in the model brings the played second register close to in tune (WhistleCheck head).
+            auto g = make ("D whistle, narrow head", 0.2550, 0.0120, 0.0120,
+                           { { { 0.1010, 0.0065 }, { 0.1235, 0.0070 }, { 0.1445, 0.0065 }, { 0.1730, 0.0072 }, { 0.1960, 0.0068 }, { 0.2170, 0.0058 } } },
+                           0.0005, 1.0, 0.0010, 0.0050, 0.0080);
+            g.headLength = 0.030;
+            g.headDiameter = 0.0105;
+            return g;
+        }(),
         make ("D whistle, wood", 0.2550, 0.0125, 0.0125,
               { { { 0.1010, 0.0080 }, { 0.1235, 0.0085 }, { 0.1445, 0.0080 }, { 0.1730, 0.0070 }, { 0.1960, 0.0092 }, { 0.2170, 0.0072 } } },
               0.0040, 1.3, 0.0010, 0.0050, 0.0085),

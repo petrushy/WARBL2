@@ -47,15 +47,23 @@ void WhistleView::paint (juce::Graphics& g)
 
     const float scale = xFor (1.0) - xFor (0.0);
     const float centre = getHeight() * 0.55f;
-    const float topHalf = (float) geometry.boreDiameterTop * scale * 0.5f + 4.0f;
-    const float footHalf = (float) geometry.boreDiameterFoot * scale * 0.5f + 4.0f;
+    const float topHalf = (float) geometry.radiusAt (0.0) * scale + 4.0f;
 
-    // Body
+    // Body: the bore profile (including any head section), drawn 4 px wider than the bore for the wall.
     juce::Path body;
-    const float x0 = xFor (0.0), x1 = xFor (geometry.boreLength);
+    const float x0 = xFor (0.0);
+    constexpr int steps = 100;
     body.startNewSubPath (x0 - 50.0f, centre - topHalf);
-    body.lineTo (x1, centre - footHalf);
-    body.lineTo (x1, centre + footHalf);
+    for (int i = 0; i <= steps; ++i)
+    {
+        const double x = geometry.boreLength * i / steps;
+        body.lineTo (xFor (x), centre - (float) geometry.radiusAt (x) * scale - 4.0f);
+    }
+    for (int i = steps; i >= 0; --i)
+    {
+        const double x = geometry.boreLength * i / steps;
+        body.lineTo (xFor (x), centre + (float) geometry.radiusAt (x) * scale + 4.0f);
+    }
     body.lineTo (x0 - 50.0f, centre + topHalf);
     body.closeSubPath();
     g.setColour (metal.withAlpha (0.35f));
@@ -218,6 +226,8 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     addLength ("Length (window to foot)", geometry.boreLength, 100.0, 700.0);
     addLength ("Diameter at top", geometry.boreDiameterTop, 6.0, 30.0);
     addLength ("Diameter at foot", geometry.boreDiameterFoot, 6.0, 30.0);
+    addLength ("Head section length (0 = none)", geometry.headLength, 0.0, 150.0, 0.5);
+    addLength ("Head diameter at the window", geometry.headDiameter, 4.0, 30.0);
     addLength ("Wall thickness", geometry.wallThickness, 0.2, 8.0);
     addRow ("Wall roughness (losses)", 1.0, 2.0, 0.01, "x", [this] { return geometry.wallLoss; }, [this] (double v) { geometry.wallLoss = v; });
 

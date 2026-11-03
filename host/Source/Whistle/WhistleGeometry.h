@@ -35,6 +35,12 @@ struct Geometry
     double boreDiameterTop = 0.012;
     double boreDiameterFoot = 0.012;
 
+    // Optional head section (e.g. a narrower bore around the fipple, as in Goldie whistles): from the window
+    // down to headLength the diameter goes linearly from headDiameter to the bore's own diameter there.
+    // headLength = 0 means no head section.
+    double headLength = 0.0;
+    double headDiameter = 0.012;
+
     std::array<ToneHole, kNumHoles> holes {};
     double wallThickness = 0.0005;  // Sets the height of the tone hole chimneys.
 
@@ -48,8 +54,17 @@ struct Geometry
 
     double radiusAt (double x) const
     {
-        const double t = juce::jlimit (0.0, 1.0, x / boreLength);
-        return 0.5 * (boreDiameterTop + t * (boreDiameterFoot - boreDiameterTop));
+        const auto body = [this] (double at)
+        {
+            const double t = juce::jlimit (0.0, 1.0, at / boreLength);
+            return 0.5 * (boreDiameterTop + t * (boreDiameterFoot - boreDiameterTop));
+        };
+        if (headLength > 0.0 && x < headLength)
+        {
+            const double t = juce::jlimit (0.0, 1.0, x / headLength);
+            return 0.5 * headDiameter + t * (body (headLength) - 0.5 * headDiameter);
+        }
+        return body (x);
     }
 
     double windowArea() const { return windowLength * windowWidth; }

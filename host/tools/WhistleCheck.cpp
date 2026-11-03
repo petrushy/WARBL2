@@ -5,6 +5,7 @@
 //   WhistleCheck play [preset]    run the time-domain model at fixed fingerings and pressures, measure what it plays
 //   WhistleCheck slide [hole] [Pa]  open one hole gradually (half-holing) and measure the pitch
 //   WhistleCheck chart [preset]   every fingering of a standard whistle chart: predicted and played tuning
+//   WhistleCheck head [preset]    how a narrower head section changes the second register's tuning
 
 #include "Whistle/Acoustics.h"
 #include "Whistle/WhistleModel.h"
@@ -246,6 +247,42 @@ static void chart (const Geometry& g)
     }
 }
 
+// Effect of a narrower head section on tuning: for each head shape the whistle is retuned (holes and bore),
+// then the second register's octave and the vented high D are reported per note.
+static void head (const Geometry& base)
+{
+    const double lowest = lowestNote (base);
+    std::printf ("\n%s: head section effect (whistle retuned for each), second register vs. octave in cents\n", base.name.toRawUTF8());
+    std::printf ("  head            ");
+    for (const auto& c : standardChart())
+        if (c.reg == 2)
+            std::printf ("%-9s", c.name + 5);
+    std::printf ("  bore length\n");
+
+    const double diameters[] = { 0.012, 0.0105, 0.009, 0.0075 };
+    const double lengths[] = { 0.03, 0.06, 0.10 };
+    for (double length : lengths)
+    {
+        for (double diameter : diameters)
+        {
+            auto g = base;
+            g.headLength = diameter < base.boreDiameterTop ? length : 0.0;
+            g.headDiameter = diameter;
+            if (diameter >= base.boreDiameterTop && length > lengths[0])
+                continue;  // No head: show once.
+            const bool ok = tuneToScale (g, lowest, true);
+            if (g.headLength == 0.0)
+                std::printf ("  none            ");
+            else
+                std::printf ("  %3.0f mm, %4.1f mm", length * 1000.0, diameter * 1000.0);
+            for (const auto& c : standardChart())
+                if (c.reg == 2)
+                    std::printf ("%+5.0f    ", predictedCents (g, c, lowest));
+            std::printf ("  %.1f mm%s\n", g.boreLength * 1000.0, ok ? "" : "  (tuning didn't converge)");
+        }
+    }
+}
+
 int main (int argc, char* argv[])
 {
     const juce::String mode = argc > 1 ? argv[1] : "table";
@@ -254,6 +291,18 @@ int main (int argc, char* argv[])
     {
         const int index = argc > 2 ? juce::String (argv[2]).getIntValue() : 0;
         auto g = presets()[(size_t) juce::jlimit (0, (int) presets().size() - 1, index)];
+        for (int i = 3; i < argc; ++i)  // headlength=<mm> headdiameter=<mm>: add a head section and retune
+        {
+            const juce::String arg (argv[i]);
+            const double value = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue() * 0.001;
+            if (arg.startsWith ("headlength=")) g.headLength = value;
+            if (arg.startsWith ("headdiameter=")) g.headDiameter = value;
+        }
+        if (g.headLength > 0.0)
+        {
+            const bool ok = tuneToScale (g, lowestNote (g), true);
+            std::printf ("Head section %.0f mm long, %.1f mm at the window; retuned: %s\n", g.headLength * 1000.0, g.headDiameter * 1000.0, ok ? "ok" : "closest possible");
+        }
         if (mode == "chartc")
         {
             const bool ok = tuneToScale (g, lowestNote (g), true);
@@ -261,6 +310,13 @@ int main (int argc, char* argv[])
                          g.holes[0].diameter * 1000.0, g.holes[0].position * 1000.0);
         }
         chart (g);
+        return 0;
+    }
+
+    if (mode == "head")  // head [preset]
+    {
+        const int index = argc > 2 ? juce::String (argv[2]).getIntValue() : 0;
+        head (presets()[(size_t) juce::jlimit (0, (int) presets().size() - 1, index)]);
         return 0;
     }
 

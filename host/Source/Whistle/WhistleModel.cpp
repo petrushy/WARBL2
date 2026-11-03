@@ -12,6 +12,7 @@ constexpr double kPi = juce::MathConstants<double>::pi;
 constexpr float rho = (float) kAirDensity;
 constexpr float c = (float) kSpeedOfSound;
 constexpr double kMaxSectionLength = 0.03;
+constexpr double kMaxHeadSectionLength = 0.008;  // Finer sections where a head section changes the diameter.
 constexpr double kListenerDistance = 0.5;  // m in front of the window, for the radiation delays and level.
 
 // Amplitude attenuation per metre from viscous and thermal wall losses at frequency hz (tube radius a).
@@ -101,21 +102,32 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
 
     // Junction positions: window (0), each hole, foot (L); long stretches are split into short sections.
     std::vector<std::pair<double, int>> points { { 0.0, -1 } };
+    const bool hasHead = g.headLength > 0.001 && g.headLength < g.boreLength - 0.01;
+    if (hasHead)
+        points.push_back ({ g.headLength, -1 });
     for (int i = 0; i < kNumHoles; ++i)
         points.push_back ({ juce::jlimit (0.005, g.boreLength - 0.005, g.holes[(size_t) i].position), i });
     std::sort (points.begin(), points.end());
     points.push_back ({ g.boreLength, -1 });
 
+    // Split into sections; on a very long bore, use longer sections so they fit in kMaxSegments.
     std::vector<std::pair<double, int>> junctions;
-    for (size_t i = 0; i + 1 < points.size(); ++i)
+    for (double sectionScale = 1.0;; sectionScale *= 1.25)
     {
-        junctions.push_back (points[i]);
-        const double span = points[i + 1].first - points[i].first;
-        const int pieces = (int) std::ceil (span / kMaxSectionLength);
-        for (int p = 1; p < pieces; ++p)
-            junctions.push_back ({ points[i].first + span * p / pieces, -1 });
+        junctions.clear();
+        for (size_t i = 0; i + 1 < points.size(); ++i)
+        {
+            junctions.push_back (points[i]);
+            const double span = points[i + 1].first - points[i].first;
+            const bool inHead = hasHead && points[i].first < g.headLength;
+            const int pieces = (int) std::ceil (span / ((inHead ? kMaxHeadSectionLength : kMaxSectionLength) * sectionScale));
+            for (int p = 1; p < pieces; ++p)
+                junctions.push_back ({ points[i].first + span * p / pieces, -1 });
+        }
+        junctions.push_back (points.back());
+        if ((int) junctions.size() - 1 <= kMaxSegments)
+            break;
     }
-    junctions.push_back (points.back());
 
     out.numSegments = std::min ((int) junctions.size() - 1, kMaxSegments);
     out.holeAt.fill (-1);

@@ -47,6 +47,8 @@ juce::var toVar (const Instrument& instrument)
     set (bore, "diameterFoot_mm", g.boreDiameterFoot * 1000.0);
     set (bore, "wallThickness_mm", g.wallThickness * 1000.0);
     set (bore, "wallLoss", g.wallLoss);
+    set (bore, "headLength_mm", g.headLength * 1000.0);
+    set (bore, "headDiameter_mm", g.headDiameter * 1000.0);
     root.getDynamicObject()->setProperty ("bore", bore);
 
     juce::Array<juce::var> holes;
@@ -103,6 +105,8 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     read (bore, "diameterFoot_mm", g.boreDiameterFoot, 0.001);
     read (bore, "wallThickness_mm", g.wallThickness, 0.001);
     read (bore, "wallLoss", g.wallLoss);
+    read (bore, "headLength_mm", g.headLength, 0.001);
+    read (bore, "headDiameter_mm", g.headDiameter, 0.001);
 
     if (const auto* holes = root["holes"].getArray())
     {
@@ -133,7 +137,8 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
         return condition;
     };
     bad (g.boreLength < 0.05 || g.boreLength > 2.0, "Bore length must be between 50 and 2000 mm");
-    bad (g.boreDiameterTop < 0.002 || g.boreDiameterFoot < 0.002, "Bore diameters must be at least 2 mm");
+    bad (g.boreDiameterTop < 0.002 || g.boreDiameterFoot < 0.002 || g.headDiameter < 0.002, "Bore diameters must be at least 2 mm");
+    bad (g.headLength < 0.0 || g.headLength >= g.boreLength, "The head section must be shorter than the bore");
     bad (g.windwayHeight <= 0.0 || g.windowLength <= 0.0 || g.windowWidth <= 0.0, "Fipple sizes must be positive");
     for (const auto& h : g.holes)
         bad (h.diameter <= 0.0 || h.position <= 0.0 || h.position >= g.boreLength, "Every hole needs a positive size and a position inside the bore");
