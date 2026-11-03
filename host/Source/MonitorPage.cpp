@@ -241,8 +241,8 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
     preDelaySlider.onValueChange = [this] { audio.reverb.preDelayMs = (float) preDelaySlider.getValue(); };
     addAndMakeVisible (preDelaySlider);
 
-    playButton.onClick = [this] { audio.testPhrase.start(); };
-    playButton.setTooltip ("Plays a short whistle phrase through the reverb (space bar does the same).");
+    playButton.onClick = [this] { audio.playScale(); };
+    playButton.setTooltip ("Plays the instrument (Instrument tab) through a scale of its own fingerings, two octaves up, with the breath each note needs (space bar does the same).");
     simulateButton.setTooltip ("Plays a scripted scale as if from WARBL, through the same path as the real stream.");
     simulateButton.onClick = [this]
     {
@@ -405,7 +405,7 @@ bool MonitorPage::keyPressed (const juce::KeyPress& key)
 {
     if (key == juce::KeyPress::spaceKey)
     {
-        audio.testPhrase.start();
+        audio.playScale();
         return true;
     }
     return false;

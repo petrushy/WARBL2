@@ -58,6 +58,115 @@ AudioEngine::~AudioEngine()
     deviceManager.removeAudioCallback (this);
 }
 
+void AudioEngine::setScaleInstrument (const whistle::Geometry& g, double lowestHz)
+{
+    const juce::ScopedLock lock (scaleLock);
+    scaleGeometry = g;
+    scaleLowestHz = lowestHz;
+    scaleCacheValid = false;
+}
+
+void AudioEngine::playScale()
+{
+    if (scalePlaying)
+    {
+        scalePlaying = false;
+        return;
+    }
+    if (scalePlanning)
+        return;
+
+    const whistle::Voicing voicing { whistleModel.jetStrouhal.load(), whistleModel.jetConvection.load(), whistleModel.breathNoise.load(),
+                                     whistleModel.outputGainDb.load() };
+    whistle::Geometry g;
+    double lowest;
+    {
+        const juce::ScopedLock lock (scaleLock);
+        // Voicing is set from sliders: compare to within a tiny tolerance.
+        auto same = [] (float a, float b) { return std::abs (a - b) < 1.0e-6f; };
+        const bool sameVoicing = same (voicing.jetStrouhal, scaleVoicing.jetStrouhal) && same (voicing.jetConvection, scaleVoicing.jetConvection)
+                                 && same (voicing.breathNoise, scaleVoicing.breathNoise);
+        if (scaleCacheValid && sameVoicing)
+        {
+            startScale (scaleCache);
+            return;
+        }
+        g = scaleGeometry;
+        lowest = scaleLowestHz;
+        scaleVoicing = voicing;
+    }
+
+    // Finding each note's pressure plays the model offline for a few seconds: do it in the background.
+    scalePlanning = true;
+    scalePlanner.addJob ([this, g, voicing, lowest, weakAlive = std::weak_ptr<bool> (alive)]
+    {
+        auto planned = whistle::planScale (g, voicing, lowest);
+        juce::MessageManager::callAsync ([this, weakAlive, steps = std::move (planned)]
+        {
+            if (weakAlive.lock() == nullptr)
+                return;
+            {
+                const juce::ScopedLock lock (scaleLock);
+                scaleCache = steps;
+                scaleCacheValid = true;
+            }
+            scalePlanning = false;
+            startScale (steps);
+        });
+    });
+}
+
+void AudioEngine::startScale (std::vector<whistle::ScaleStep> steps)
+{
+    if (steps.empty())
+        return;
+    {
+        const juce::SpinLock::ScopedLockType lock (scaleAudioLock);
+        scaleSteps = std::move (steps);
+    }
+    scaleSample = 0;
+    scaleStepIndex = 0;
+    scalePlaying = true;
+}
+
+juce::String AudioEngine::getScaleStatus() const
+{
+    if (scalePlanning)
+        return "Preparing the scale (finding each note's breath pressure)...";
+    if (! scalePlaying)
+        return {};
+    const juce::ScopedLock lock (scaleLock);
+    const int i = scaleStepIndex.load();
+    if (i < 0 || i >= (int) scaleCache.size())
+        return {};
+    const auto& s = scaleCache[(size_t) i];
+    return "Scale: " + juce::String (s.name) + " at " + juce::String (juce::roundToInt (s.pressure)) + " Pa (" + juce::String (i + 1) + " of "
+           + juce::String ((int) scaleCache.size()) + ")";
+}
+
+bool AudioEngine::scaleControls (whistle::Controls& controls, int numSamples)
+{
+    if (! scalePlaying)
+        return false;
+
+    const juce::SpinLock::ScopedTryLockType lock (scaleAudioLock);
+    if (! lock.isLocked())
+        return false;
+
+    const int position = scaleSample.load();
+    const int step = whistle::scaleControlsAt (scaleSteps, position / sampleRate, controls);
+    if (step < 0)
+    {
+        scalePlaying = false;
+        scaleStepIndex = -1;
+        return true;  // Breath off
+    }
+
+    scaleStepIndex = step;
+    scaleSample = position + numSamples;
+    return true;
+}
+
 void AudioEngine::setCalibration (const warbl::DeviceInfo& info)
 {
     for (int i = 0; i < warbl::kNumHoles; ++i)
@@ -116,7 +225,6 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
     dryCapacity = maxBlock;
 
     clickModel.prepare (rate, maxBlock);
-    testPhrase.prepare (rate);
     reverb.prepare (rate, maxBlock);
     whistleModel.prepare (rate);
 }
@@ -143,7 +251,11 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         ++count;
     }
 
-    if (manualPlay)
+    if (scaleControls (controls, numSamples))
+    {
+        haveControls = true;
+    }
+    else if (manualPlay)
     {
         for (int i = 0; i < whistle::kNumHoles; ++i)
             controls.openness[(size_t) i] = manualOpenness[(size_t) i].load();
@@ -181,11 +293,10 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     if (numSamples > dryCapacity || numOutputs < 2 || outputs[0] == nullptr || outputs[1] == nullptr)
         return;
 
-    // Instrument and test phrase -> dry to both channels + room reverb.
+    // Instrument -> dry to both channels + room reverb.
     juce::FloatVectorOperations::clear (dry.get(), numSamples);
     if (whistleEnabled)
         whistleModel.render (dry.get(), numSamples);
-    testPhrase.render (dry.get(), numSamples);
 
     juce::FloatVectorOperations::copy (outputs[0], dry.get(), numSamples);
     juce::FloatVectorOperations::copy (outputs[1], dry.get(), numSamples);

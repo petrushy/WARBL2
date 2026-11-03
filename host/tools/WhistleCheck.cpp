@@ -6,9 +6,14 @@
 //   WhistleCheck slide [hole] [Pa]  open one hole (1 = L1 ... 6 = R3) gradually (half-holing) and measure the pitch
 //   WhistleCheck chart [preset]   every fingering of a standard whistle chart: predicted and played tuning
 //   WhistleCheck head [preset]    how a narrower head section changes the second register's tuning
+//   WhistleCheck scale [preset] [file.wav]  the app's test scale: plan, play, measure each note (and save it)
 //   WhistleCheck modes [preset]   which register (resonance) each fingering plays as the pressure rises to 8.5 kPa
 
+#include <juce_audio_formats/juce_audio_formats.h>
+
 #include "Whistle/Acoustics.h"
+#include "Whistle/PitchDetect.h"
+#include "Whistle/ScalePlan.h"
 #include "Whistle/WhistleModel.h"
 
 #include <cmath>
@@ -87,49 +92,6 @@ static int presetArg (const char* arg)
             return (int) i;
     std::printf ("No preset matches \"%s\"\n", arg);
     std::exit (1);
-}
-
-// Fundamental frequency of the last part of a signal (normalised autocorrelation), 0 if not periodic.
-static double measurePitch (const std::vector<float>& x, double rate, double& clarity)
-{
-    const size_t window = (size_t) (0.1 * rate);
-    const size_t start = x.size() - window - (size_t) (rate / 100.0);
-    const int minLag = (int) (rate / 3000.0), maxLag = (int) (rate / 120.0);
-    std::vector<double> r ((size_t) maxLag + 2, 0.0);
-    double energy = 0.0;
-    for (size_t i = 0; i < window; ++i)
-        energy += (double) x[start + i] * x[start + i];
-    if (energy <= 1e-20)
-    {
-        clarity = 0.0;
-        return 0.0;
-    }
-    for (int lag = minLag; lag <= maxLag + 1; ++lag)
-    {
-        double sum = 0.0, e2 = 0.0;
-        for (size_t i = 0; i < window; ++i)
-        {
-            sum += (double) x[start + i] * x[start + i + (size_t) lag];
-            e2 += (double) x[start + i + (size_t) lag] * x[start + i + (size_t) lag];
-        }
-        r[(size_t) lag] = sum / std::sqrt (energy * e2 + 1e-30);
-    }
-    double best = 0.0;
-    for (int lag = minLag + 1; lag <= maxLag; ++lag)
-        best = std::max (best, r[(size_t) lag]);
-    // First peak that is nearly as high as the best one (avoids picking a multiple of the period).
-    for (int lag = minLag + 1; lag <= maxLag; ++lag)
-    {
-        if (r[(size_t) lag] >= 0.9 * best && r[(size_t) lag] >= r[(size_t) lag - 1] && r[(size_t) lag] >= r[(size_t) lag + 1])
-        {
-            const double denom = r[(size_t) lag - 1] - 2.0 * r[(size_t) lag] + r[(size_t) lag + 1];
-            const double offset = denom < 0.0 ? 0.5 * (r[(size_t) lag - 1] - r[(size_t) lag + 1]) / denom : 0.0;
-            clarity = r[(size_t) lag];
-            return rate / (lag + offset);
-        }
-    }
-    clarity = 0.0;
-    return 0.0;
 }
 
 static float strouhal = 0.02f, jetQ = 0.7f, convection = 0.6f;
@@ -343,6 +305,61 @@ int main (int argc, char* argv[])
                          g.holes[0].diameter * 1000.0, g.holes[0].position * 1000.0);
         }
         chart (g);
+        return 0;
+    }
+
+    if (mode == "scale")  // scale [preset]: the test scale the app plays (pressure per note, found with the model)
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        const auto& g = presets()[index];
+        const double lowest = lowestNote (g);
+        const auto planStart = juce::Time::getMillisecondCounterHiRes();
+        const auto steps = planScale (g, presetVoicing (index), lowest);
+        std::printf ("%s: %d notes, planned in %.0f ms\n", g.name.toRawUTF8(), (int) steps.size(), juce::Time::getMillisecondCounterHiRes() - planStart);
+        // Play it exactly as the app does (same timing and breath envelope), measure every note, and save a WAV.
+        constexpr double rate = 48000.0;
+        WhistleModel model;
+        model.setGeometry (g);
+        model.prepare (rate);
+        const auto voicing = presetVoicing (index);
+        model.jetStrouhal = voicing.jetStrouhal;
+        model.jetConvection = voicing.jetConvection;
+        model.breathNoise = voicing.breathNoise;
+        std::vector<float> out ((size_t) (rate * (kScaleNoteSeconds * (double) steps.size() + 0.5)), 0.0f);
+        const int block = 64;
+        for (int start = 0; start < (int) out.size(); start += block)
+        {
+            Controls controls;
+            scaleControlsAt (steps, start / rate, controls);
+            model.setControls (controls);
+            model.render (out.data() + start, std::min (block, (int) out.size() - start));
+        }
+
+        for (size_t i = 0; i < steps.size(); ++i)
+        {
+            // The steady part of each note: from its start to just before its release.
+            const auto from = (size_t) (rate * kScaleNoteSeconds * (double) i);
+            const auto to = from + (size_t) (rate * (kScaleNoteSeconds - kScaleGap - kScaleRelease));
+            std::vector<float> note (out.begin() + (long) from, out.begin() + (long) to);
+            double clarity = 0.0;
+            const double f = measurePitch (note, rate, clarity);
+            const double target = lowest * std::pow (2.0, std::round (12.0 * std::log2 (f > 0.0 ? f / lowest : 1.0)) / 12.0);
+            std::printf ("  %-5s  %5.0f Pa  planned %+4.0f c   played %s\n", steps[i].name.c_str(), steps[i].pressure, steps[i].cents,
+                         f > 0.0 && clarity > 0.8 ? (noteName (f) + " " + std::to_string ((int) std::lround (1200.0 * std::log2 (f / target))) + " c").c_str() : "-");
+        }
+
+        if (argc > 3)
+        {
+            juce::AudioBuffer<float> buffer (1, (int) out.size());
+            buffer.copyFrom (0, 0, out.data(), (int) out.size());
+            const juce::File file = juce::File::getCurrentWorkingDirectory().getChildFile (argv[3]);
+            file.deleteFile();
+            std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (file);
+            juce::WavAudioFormat wav;
+            if (auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions().withSampleRate (rate).withNumChannels (1).withBitsPerSample (24)))
+                writer->writeFromAudioSampleBuffer (buffer, 0, buffer.getNumSamples());
+            std::printf ("Saved %s\n", file.getFullPathName().toRawUTF8());
+        }
         return 0;
     }
 

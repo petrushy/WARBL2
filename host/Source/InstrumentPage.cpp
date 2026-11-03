@@ -214,6 +214,7 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     {
         tuningDirty = true;
         tuningCountdown = 0;
+        audio.setScaleInstrument (geometry, lowestNoteHz());
     };
 
     crossButton.setColour (juce::ToggleButton::textColourId, text);
@@ -346,6 +347,11 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     enableButton.setToggleState (audio.whistleEnabled.load(), juce::dontSendNotification);
     enableButton.onClick = [this] { audio.whistleEnabled = enableButton.getToggleState(); };
     manualButton.onClick = [this] { audio.manualPlay = manualButton.getToggleState(); };
+    scaleButton.setWantsKeyboardFocus (false);
+    scaleButton.setTooltip ("Plays this instrument through its own fingerings from the lowest note up two octaves, with the breath "
+                            "pressure the model needs for each note (found by playing the model first, which takes a few seconds).");
+    scaleButton.onClick = [this] { audio.playScale(); };
+    addAndMakeVisible (scaleButton);
 
     manualBreath.setRange (0.0, 9000.0, 1.0);
     manualBreath.setSkewFactorFromMidPoint (1500.0);  // Fine control in the low register, room for the third and fourth.
@@ -480,6 +486,7 @@ void InstrumentPage::loadPreset (int index)
 void InstrumentPage::geometryChanged()
 {
     audio.whistleModel.setGeometry (geometry);
+    audio.setScaleInstrument (geometry, lowestNoteHz());
     whistleView.setGeometry (geometry);
     tuningDirty = true;
     tuningCountdown = 6;  // Recompute the table once the sliders have been still for a moment.
@@ -514,8 +521,10 @@ void InstrumentPage::timerCallback()
     const float jet = audio.whistleModel.jetVelocity.load();
     const float level = audio.whistleModel.level.load();
     liveLabel.setText ("Breath " + juce::String (juce::roundToInt (pressure)) + " Pa   jet " + juce::String (jet, 1) + " m/s   level "
-                           + juce::String (juce::roundToInt (juce::Decibels::gainToDecibels (level, -90.0f))) + " dBFS",
+                           + juce::String (juce::roundToInt (juce::Decibels::gainToDecibels (level, -90.0f))) + " dBFS   "
+                           + audio.getScaleStatus(),
                        juce::dontSendNotification);
+    scaleButton.setButtonText (audio.isScaleActive() ? "Stop scale" : "Play scale");
     whistleView.repaint();
 }
 
@@ -679,7 +688,8 @@ void InstrumentPage::resized()
 
     // Right: drawing, playing, table
     auto controls = area.removeFromTop (28);
-    enableButton.setBounds (controls.removeFromLeft (160));
+    enableButton.setBounds (controls.removeFromLeft (110));
+    scaleButton.setBounds (controls.removeFromLeft (100).reduced (2));
     manualButton.setBounds (controls.removeFromLeft (150));
     manualBreathLabel.setBounds (controls.removeFromLeft (55));
     manualBreath.setBounds (controls);

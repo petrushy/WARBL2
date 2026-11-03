@@ -25,10 +25,10 @@ The WARBL needs the firmware with `Sensor_stream.ino`, connected with a USB cabl
 ## Without a WARBL
 
 - **Simulate WARBL** (switch in the app) plays a scripted D-whistle scale with breath swells. It goes through the same path as the real stream, so the plots, click and (later) the instrument model all respond.
-- **Play test phrase** (or the space bar) plays a short synthetic whistle phrase through the reverb.
+- **Play scale** (Monitor or Instrument tab, or the space bar) plays the current instrument through its own fingerings from the lowest note up two octaves. There's no synthesizer: the physical model is fingered and blown like a player would. The breath pressure for each note is the one at which the model plays it closest to its pitch, found by playing the model first (a few seconds; cached until the instrument changes). Notes are tongued, about 0.5 s each. `WhistleCheck scale [preset] [file.wav]` plays the same scale offline, measures every note and can save it.
 - `build/WarblSimulator_artefacts/Release/WarblSimulator` is the same simulated player as a virtual MIDI device, for testing the MIDI path or other programs.
 
-Command-line options for testing (on `"WARBL Stream.app/Contents/MacOS/WARBL Stream"`): `--simulate`, `--play` (test phrase at start), `--output "<audio device>"`, and `--snapshot out.png`, which saves a picture of the window after 6 s and quits.
+Command-line options for testing (on `"WARBL Stream.app/Contents/MacOS/WARBL Stream"`): `--simulate`, `--play` (scale at start), `--output "<audio device>"`, and `--snapshot out.png`, which saves a picture of the window after 6 s and quits.
 
 Note that a MacBook with the lid closed and no external display runs no audio at all: the app then shows "blocks 0".
 
@@ -93,7 +93,7 @@ Convolution reverb with no added latency (JUCE's non-uniform partitioned convolu
 - **Diffuse tail:** its level follows from the room volume and listener distance, and it decays with its own reverberation time at each frequency, so highs die away sooner, as in real rooms.
 - **Balance:** the direct sound comes from the dry signal. At Level 0 dB the dry/reverb balance is physically right for the room's listener distance; the default is -6 dB.
 
-Rooms: small wooden room (0.4 s), studio live room (0.6 s), chamber music hall (1.4 s), concert hall (2.0 s), stone church (3.8 s); times are at 1 kHz. `ReverbCheck <dir>` verifies each room's reverberation time per octave band (within 15 % of target) and its direct-to-reverberant ratio (within 2 dB of theory). It also writes the IRs and the test phrase through each room as WAV files.
+Rooms: small wooden room (0.4 s), studio live room (0.6 s), chamber music hall (1.4 s), concert hall (2.0 s), stone church (3.8 s); times are at 1 kHz. `ReverbCheck <dir>` verifies each room's reverberation time per octave band (within 15 % of target) and its direct-to-reverberant ratio (within 2 dB of theory). It also writes the IRs, and a short synthetic phrase through each room (`TestPhrase`, used only by this tool), as WAV files.
 
 **Load IR file...** takes any measured impulse response (WAV/AIFF/FLAC, mono or stereo). Free recordings of real halls and churches are available from the OpenAIR library (openair.hosted.york.ac.uk); check each file's licence.
 

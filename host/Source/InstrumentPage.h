@@ -107,6 +107,7 @@ private:
     WhistleView whistleView { audio };
     TuningTable tuningTable;
     juce::ToggleButton enableButton { "Sound on" }, manualButton { "Play from screen" };
+    juce::TextButton scaleButton { "Play scale" };
     juce::Slider manualBreath;
     juce::Label manualBreathLabel { {}, "Breath" }, liveLabel, tableTitle;
 

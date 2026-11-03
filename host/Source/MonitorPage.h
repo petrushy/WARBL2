@@ -65,7 +65,7 @@ public:
     bool keyPressed (const juce::KeyPress&) override;
 
     void setSimulating (bool on) { simulateButton.setToggleState (on, juce::sendNotificationSync); }
-    void playTestPhrase() { audio.testPhrase.start(); }
+    void playTestPhrase() { audio.playScale(); }
     void setOutputDevice (const juce::String& name)
     {
         auto setup = audio.deviceManager.getAudioDeviceSetup();
@@ -95,7 +95,7 @@ private:
     juce::Label reverbLabel { {}, "Reverb" }, wetLabel { {}, "Level" }, preDelayLabel { {}, "Pre-delay" }, reverbStatus;
     juce::ComboBox roomBox;
     juce::Slider wetSlider, preDelaySlider;
-    juce::TextButton loadIrButton { "Load IR file..." }, playButton { "Play test phrase" };
+    juce::TextButton loadIrButton { "Load IR file..." }, playButton { "Play scale" };
     std::unique_ptr<juce::FileChooser> irChooser;
 
     HoleView holeView;

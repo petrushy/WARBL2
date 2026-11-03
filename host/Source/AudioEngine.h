@@ -8,8 +8,8 @@
 
 #include "RoomReverb.h"
 #include "SensorResponse.h"
-#include "TestPhrase.h"
 #include "StreamReceiver.h"
+#include "Whistle/ScalePlan.h"
 #include "Whistle/WhistleModel.h"
 
 #include <atomic>
@@ -53,7 +53,6 @@ public:
     juce::AudioDeviceManager deviceManager;
     ClickModel clickModel;
     RoomReverb reverb;
-    TestPhrase testPhrase;
     whistle::WhistleModel whistleModel;
 
     std::atomic<bool> clickEnabled { true };
@@ -84,6 +83,13 @@ public:
     std::atomic<float> manualPressure { 0.0f };
     std::atomic<float> manualFootOpenness { 1.0f };
 
+    // Test scale: the current instrument's own fingerings from the lowest note up two octaves, played through
+    // the model with the breath pressure the model needs for each (found offline, in the background).
+    void setScaleInstrument (const whistle::Geometry&, double lowestHz);  // Message thread
+    void playScale();                  // Message thread. Plays (planning first if needed), or stops if playing.
+    juce::String getScaleStatus() const;
+    bool isScaleActive() const { return scalePlaying || scalePlanning; }
+
     // Last controls sent to the model, for display.
     std::array<std::atomic<float>, whistle::kNumHoles> shownOpenness {};
     std::atomic<float> shownFootOpenness { 1.0f };
@@ -100,10 +106,26 @@ private:
     void audioDeviceStopped() override {}
 
     whistle::Controls controlsFromFrame (const warbl::SensorFrame&);
+    bool scaleControls (whistle::Controls&, int numSamples);  // Audio thread
+    void startScale (std::vector<whistle::ScaleStep>);
 
     StreamReceiver& receiver;
     std::array<std::atomic<int>, warbl::kNumHoles> baseline {}, covered {};
     std::atomic<int> ambient12 { 1040 };
+    // Test scale state. Planning runs on scalePlanner; the steps reach the audio thread under scaleAudioLock.
+    mutable juce::CriticalSection scaleLock;  // Message thread and planner
+    whistle::Geometry scaleGeometry;
+    double scaleLowestHz = 587.33;
+    whistle::Voicing scaleVoicing;
+    std::vector<whistle::ScaleStep> scaleCache;
+    bool scaleCacheValid = false;
+    std::atomic<bool> scalePlanning { false }, scalePlaying { false };
+    juce::SpinLock scaleAudioLock;
+    std::vector<whistle::ScaleStep> scaleSteps;  // Audio thread copy
+    std::atomic<int> scaleSample { 0 }, scaleStepIndex { -1 };
+    std::shared_ptr<bool> alive = std::make_shared<bool> (true);
+    juce::ThreadPool scalePlanner { juce::ThreadPoolOptions().withNumberOfThreads (1) };  // Last: stops before the rest
+
     juce::HeapBlock<float> dry;  // Mono instrument signal before the reverb.
     double sampleRate = 48000.0;
     int samplesSinceControls = 0;
