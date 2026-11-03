@@ -127,7 +127,7 @@ private:
     float jetB0 = 0.0f, jetA1 = 0.0f, jetA2 = 0.0f;
     std::array<std::array<float, 4>, 3> jetState {};  // x1, x2, y1, y2 per band-pass stage
     int jetFilterCountdown = 0;
-    float noiseLow = 0.0f, noiseHigh = 0.0f, noiseLowA = 0.0f, noiseHighA = 0.0f, noiseNorm = 1.0f;
+    float noiseLow0 = 0.0f, noiseLow = 0.0f, noiseHigh = 0.0f, noiseLowA = 0.0f, noiseHighA = 0.0f, noiseNorm = 1.0f;
     int noiseFilterCountdown = 0;
     std::minstd_rand rng { 12345 };
     std::normal_distribution<float> gauss { 0.0f, 1.0f };

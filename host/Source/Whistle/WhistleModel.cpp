@@ -14,9 +14,9 @@ constexpr float c = (float) kSpeedOfSound;
 constexpr double kMaxSectionLength = 0.03;
 constexpr double kMaxHeadSectionLength = 0.008;  // Finer sections where a head section changes the diameter.
 constexpr double kListenerDistance = 0.5;  // m in front of the window, for the radiation delays and level.
-constexpr float kNoiseStrouhal = 0.2f;    // Turbulence band centre, as f h / U
-constexpr float kEdgeNoise = 0.5f;        // Edge pressure fluctuation at 20 m/s, as a fraction of rho U^2 (Breath noise 1)
-constexpr float kDirectNoise = 4.0f;      // Share of the edge noise radiated straight from the window (at 1)
+constexpr float kNoiseStrouhal = 0.08f;   // Turbulence band centre, as f h / U (breath, not hiss: ~2-3 kHz)
+constexpr float kEdgeNoise = 0.15f;       // Edge pressure fluctuation at 20 m/s, as a fraction of rho U^2 (Breath noise 1)
+constexpr float kDirectNoise = 1.0f;      // Share of the edge noise radiated straight from the window (at 1)
 
 // Amplitude attenuation per metre from viscous and thermal wall losses at frequency hz (tube radius a).
 double wallAttenuation (double hz, double a, double wallLoss)
@@ -80,7 +80,7 @@ void WhistleModel::resetState()
     for (auto& st : holeState)
         st.fill (0.0f);
     jetLine.fill (0.0f);
-    noiseLow = noiseHigh = 0.0f;
+    noiseLow0 = noiseLow = noiseHigh = 0.0f;
     noiseFilterCountdown = 0;
     for (auto& st : jetState)
         st.fill (0.0f);
@@ -273,18 +273,20 @@ float WhistleModel::tick()
     {
         noiseFilterCountdown = 8;
         const float centre = juce::jlimit (300.0f, 0.3f * (float) rate, kNoiseStrouhal * speed / h);
-        noiseLowA = 1.0f - std::exp (-2.0f * (float) kPi * 2.0f * centre / (float) rate);   // Lowpass an octave above
+        noiseLowA = 1.0f - std::exp (-2.0f * (float) kPi * 1.5f * centre / (float) rate);  // Lowpass above the centre (2 poles)
         noiseHighA = 1.0f - std::exp (-2.0f * (float) kPi * 0.5f * centre / (float) rate);  // Highpass an octave below
         noiseNorm = 1.0f / std::sqrt (noiseLowA / (2.0f - noiseLowA));  // Keeps the band's level independent of its centre
     }
-    noiseLow += noiseLowA * (gauss (rng) - noiseLow);
+    noiseLow0 += noiseLowA * (gauss (rng) - noiseLow0);
+    noiseLow += noiseLowA * (noiseLow0 - noiseLow);
     noiseHigh += noiseHighA * (noiseLow - noiseHigh);
-    const float band = (noiseLow - noiseHigh) * noiseNorm;
+    const float band = (noiseLow - noiseHigh) * noiseNorm * 1.4f;  // Second pole: ~1.4x to keep the level
 
     const float amount = breathNoise.load (std::memory_order_relaxed);
-    // Edge (dipole) noise: radiated power grows as U^6, so pressure as U^3: rho U^2 times U / 20 m/s.
-    const float edgeNoise = amount * kEdgeNoise * rho * jetSpeed * jetSpeed * (jetSpeed / 20.0f) * band;  // Pa
-    const float turbulence = amount * 0.5f * band;  // In jet half-widths
+    // Edge noise: of order rho U^2, growing a little faster (U^2.5): the edge-dipole law (U^3) let the hiss
+    // overtake the tone at the high pressures of the top notes.
+    const float edgeNoise = amount * kEdgeNoise * rho * jetSpeed * jetSpeed * std::sqrt (jetSpeed / 20.0f) * band;  // Pa
+    const float turbulence = amount * 0.15f * band;  // In jet half-widths: a slight unsteadiness, not roughness
 
     // A jet amplifies disturbances most around one frequency, set by its speed and thickness (Strouhal number
     // f h / U), and less above and below. Blowing harder moves that band up, which is what lets the higher
