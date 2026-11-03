@@ -17,15 +17,19 @@ public:
         // "--snapshot <file.png>" saves a picture of the window after a few seconds, then quits.
         const auto args = juce::StringArray::fromTokens (commandLine, true);
         // "--output <device>" picks the audio output; "--play" plays the test phrase at start.
+        // "--instrument" opens the Instrument tab.
         if (auto* main = dynamic_cast<MainComponent*> (mainWindow->getContentComponent()))
         {
+            auto& monitor = main->getMonitor();
             const auto output = args.indexOf ("--output");
             if (output >= 0 && output + 1 < args.size())
-                main->setOutputDevice (args[output + 1].unquoted());
+                monitor.setOutputDevice (args[output + 1].unquoted());
             if (args.contains ("--simulate"))
-                main->setSimulating (true);
+                monitor.setSimulating (true);
             if (args.contains ("--play"))
-                main->playTestPhrase();
+                monitor.playTestPhrase();
+            if (args.contains ("--instrument"))
+                main->showInstrument();
         }
 
         const auto index = args.indexOf ("--snapshot");
@@ -35,7 +39,7 @@ public:
             juce::Timer::callAfterDelay (6000, [this, file]
             {
                 if (auto* main = dynamic_cast<MainComponent*> (mainWindow->getContentComponent()))
-                    std::printf ("audio CPU %.1f %%\n", main->getCpuUsage() * 100.0);
+                    std::printf ("audio CPU %.1f %%\n", main->getMonitor().getCpuUsage() * 100.0);
                 const auto image = mainWindow->getContentComponent()->createComponentSnapshot (mainWindow->getContentComponent()->getLocalBounds(), true, 1.0f);
                 file.deleteFile();
                 juce::FileOutputStream stream (file);

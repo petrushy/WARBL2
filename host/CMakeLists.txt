@@ -22,11 +22,16 @@ juce_add_gui_app(WarblStream
 target_sources(WarblStream PRIVATE
     Source/Main.cpp
     Source/MainComponent.cpp
+    Source/MonitorPage.cpp
+    Source/InstrumentPage.cpp
     Source/StreamReceiver.cpp
     Source/AudioEngine.cpp
     Source/RoomReverb.cpp
     Source/TestPhrase.cpp
-    Source/ImpulseResponse.cpp)
+    Source/ImpulseResponse.cpp
+    Source/Whistle/WhistleGeometry.cpp
+    Source/Whistle/Acoustics.cpp
+    Source/Whistle/WhistleModel.cpp)
 
 target_include_directories(WarblStream PRIVATE Source)
 
@@ -67,5 +72,14 @@ target_sources(ReverbCheck PRIVATE Tools/ReverbCheck.cpp Source/ImpulseResponse.
 target_include_directories(ReverbCheck PRIVATE Source)
 target_compile_definitions(ReverbCheck PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(ReverbCheck
+    PRIVATE juce::juce_audio_formats juce::juce_dsp
+    PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
+# Whistle acoustics and model checks (tuning tables, offline playing tests).
+juce_add_console_app(WhistleCheck PRODUCT_NAME "Whistle Check")
+target_sources(WhistleCheck PRIVATE Tools/WhistleCheck.cpp Source/Whistle/WhistleGeometry.cpp Source/Whistle/Acoustics.cpp Source/Whistle/WhistleModel.cpp)
+target_include_directories(WhistleCheck PRIVATE Source)
+target_compile_definitions(WhistleCheck PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(WhistleCheck
     PRIVATE juce::juce_audio_formats juce::juce_dsp
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)

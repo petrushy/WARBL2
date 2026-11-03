@@ -1,6 +1,6 @@
-// Audio output. Each block it takes the newest sensor frames from the receiver and feeds them to a SoundModel.
-// For now the only model is a click on breath onset, for measuring end-to-end latency. The physical model
-// (Faust) will be another SoundModel.
+// Audio output. Each block it takes the newest sensor frames from the receiver and turns them into the
+// whistle model's controls (hole openness from calibrated sensor readings, breath pressure in Pa). The model's
+// sound and the test phrase go through the room reverb; the latency-test click stays dry.
 
 #pragma once
 
@@ -9,6 +9,7 @@
 #include "RoomReverb.h"
 #include "TestPhrase.h"
 #include "StreamReceiver.h"
+#include "Whistle/WhistleModel.h"
 
 #include <atomic>
 
@@ -52,8 +53,26 @@ public:
     ClickModel clickModel;
     RoomReverb reverb;
     TestPhrase testPhrase;
+    whistle::WhistleModel whistleModel;
 
     std::atomic<bool> clickEnabled { true };
+    std::atomic<bool> whistleEnabled { true };
+
+    // Sensor calibration from WARBL (or the simulator), set on the message thread.
+    void setCalibration (const warbl::DeviceInfo&);
+
+    // WARBL's pressure sensor: 900 counts (10-bit) = 24 inches of water, i.e. about 1.66 Pa per 12-bit count.
+    static constexpr float kPascalPerCount = 24.0f * 249.089f / (900.0f * 4.0f);
+    std::atomic<float> breathScale { 1.0f };  // Multiplies the measured pressure before it reaches the model.
+
+    // Playing from the screen instead of from WARBL.
+    std::atomic<bool> manualPlay { false };
+    std::array<std::atomic<float>, whistle::kNumHoles> manualOpenness {};
+    std::atomic<float> manualPressure { 0.0f };
+
+    // Last controls sent to the model, for display.
+    std::array<std::atomic<float>, whistle::kNumHoles> shownOpenness {};
+    std::atomic<float> shownPressure { 0.0f };
 
     // Most frames taken from the queue in one audio block (shows whether frames bunch up).
     std::atomic<int> maxFramesPerBlock { 0 };
@@ -65,7 +84,14 @@ private:
     void audioDeviceAboutToStart (juce::AudioIODevice*) override;
     void audioDeviceStopped() override {}
 
+    whistle::Controls controlsFromFrame (const warbl::SensorFrame&) const;
+
     StreamReceiver& receiver;
+    std::array<std::atomic<int>, warbl::kNumHoles> baseline {}, covered {};
+    std::atomic<int> ambient12 { 1040 };
     juce::HeapBlock<float> dry;  // Mono instrument signal before the reverb.
+    double sampleRate = 48000.0;
+    int samplesSinceControls = 0;
+    whistle::Controls lastControls;
     int dryCapacity = 0;
 };

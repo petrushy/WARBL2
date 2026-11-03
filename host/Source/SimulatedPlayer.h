@@ -57,7 +57,8 @@ public:
                 f.holeCovered |= (uint16_t) (1 << hole);
         }
 
-        f.pressure = (uint16_t) (kAmbient10 * 4 + breath * 900.0 + noise (7));
+        // Up to ~830 Pa (500 counts at ~1.66 Pa each): the low register of a D whistle.
+        f.pressure = (uint16_t) (kAmbient10 * 4 + breath * 500.0 + noise (7));
         f.accel = { (int16_t) (2000 * std::sin (t)), 300, 8000 };
         f.gyro = { (int16_t) (3000 * std::cos (t * 2.0)), 0, 0 };
         f.flags = 1;
