@@ -486,6 +486,13 @@ void InstrumentPage::loadPreset (int index)
     // Whistle presets go on the sensors chosen for whistles (L1-R3 or L2-R4).
     const int sensors = sensorBox.getSelectedId();
     geometry = whistle::presets()[(size_t) index];
+
+    const auto voicing = whistle::presetVoicing ((size_t) index);
+    auto& model = audio.whistleModel;
+    model.jetStrouhal = voicing.jetStrouhal;
+    model.jetConvection = voicing.jetConvection;
+    model.breathNoise = voicing.breathNoise;
+    model.outputGainDb = voicing.outputGainDb;
     if (geometry.chart == whistle::FingeringChart::whistle && sensors == 2)
         whistle::moveFrontHoles (geometry, 2);
 

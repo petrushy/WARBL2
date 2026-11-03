@@ -14,6 +14,16 @@ const std::vector<Material>& materials()
     return list;
 }
 
+Voicing presetVoicing (size_t index)
+{
+    // The recorder's jet band is set a little higher than the whistles' so its second- and third-octave notes
+    // (high Bb, B, C ...) speak; the whistles' defaults give their register changes at ~1 and ~4 kPa.
+    Voicing v;
+    if (index < presets().size() && presets()[index].chart == FingeringChart::baroqueRecorder)
+        v.jetStrouhal = 0.025f;
+    return v;
+}
+
 bool moveFrontHoles (Geometry& g, int firstHole)
 {
     std::vector<ToneHole> used;
@@ -103,6 +113,7 @@ const std::vector<Geometry>& presets()
                                    { true, 0.17122, 0.00403 }, { true, 0.20204, 0.00650 }, { true, 0.21228, 0.00453 }, { true, 0.24317, 0.00450 } } },
                                0.0035, 1.1, 0.0012, 0.0045, 0.0100);
                 g.chart = FingeringChart::baroqueRecorder;
+                g.windwayHeight = 0.0009;  // A thin windway lets the jet drive the top notes (WhistleCheck notes/chart)
                 g.bellClosesFoot = true;  // Top C# closes the foot (on the knee); without a bell sensor it stays open.
                 return g;
             }(),

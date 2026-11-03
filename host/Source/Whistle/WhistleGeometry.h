@@ -109,8 +109,20 @@ struct Material
 // Material mostly matters through wall thickness (tone hole chimney height) and surface roughness.
 const std::vector<Material>& materials();
 
-// Starting points; hole positions are tuned for an equal-tempered D major scale.
+// How the jet behaves (see WhistleModel) and the output level: part of an instrument's character.
+struct Voicing
+{
+    float jetStrouhal = 0.02f;   // Frequency the jet amplifies most, as f h / U
+    float jetConvection = 0.6f;  // Speed of disturbances along the jet, relative to the jet speed
+    float breathNoise = 0.25f;
+    float outputGainDb = 0.0f;
+};
+
+// Starting points, tuned (see WhistleGeometry.cpp).
 const std::vector<Geometry>& presets();
+
+// The voicing that goes with each preset (same order as presets()).
+Voicing presetVoicing (size_t index);
 
 // Puts the instrument's front holes (in order, keeping each hole's position and size) on WARBL's sensors
 // starting at `firstHole` (1 = L1, 2 = L2, ...), e.g. a six-hole whistle on L2-R4 instead of L1-R3. The thumb

@@ -306,6 +306,8 @@ int main (int argc, char* argv[])
     {
         const int index = argc > 2 ? juce::String (argv[2]).getIntValue() : 0;
         auto g = presets()[(size_t) juce::jlimit (0, (int) presets().size() - 1, index)];
+        strouhal = presetVoicing ((size_t) index).jetStrouhal;
+        convection = presetVoicing ((size_t) index).jetConvection;
         for (int i = 3; i < argc; ++i)  // headlength=<mm> headdiameter=<mm>: add a head section and retune; st=, conv=: jet
         {
             const juce::String arg (argv[i]);
@@ -314,6 +316,7 @@ int main (int argc, char* argv[])
             if (arg.startsWith ("headdiameter=")) g.headDiameter = value * 0.001;
             if (arg.startsWith ("st=")) strouhal = (float) value;
             if (arg.startsWith ("conv=")) convection = (float) value;
+            if (arg.startsWith ("h=")) g.windwayHeight = value * 0.001;
         }
         if (g.headLength > 0.0)
         {
@@ -327,6 +330,42 @@ int main (int argc, char* argv[])
                          g.holes[0].diameter * 1000.0, g.holes[0].position * 1000.0);
         }
         chart (g);
+        return 0;
+    }
+
+    if (mode == "notes")  // notes <preset> <pinch 0-1> [st=] [conv=]: the recorder's top notes with a given thumb opening
+    {
+        const auto presetIndex = (size_t) juce::String (argv[2]).getIntValue();
+        auto g = presets()[presetIndex];
+        strouhal = presetVoicing (presetIndex).jetStrouhal;
+        const double pinch = juce::String (argv[3]).getDoubleValue();
+        for (int i = 4; i < argc; ++i)
+        {
+            const juce::String arg (argv[i]);
+            const float value = arg.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+            if (arg.startsWith ("st=")) strouhal = value;
+            if (arg.startsWith ("conv=")) convection = value;
+        }
+        std::printf ("thumb %.0f %% open, jet Strouhal %.3f, convection %.2f\n", pinch * 100.0, strouhal, convection);
+        for (const auto& c : chartFor (g.chart))
+        {
+            if (c.semitones < 21)
+                continue;
+            auto open = c.openness (g);
+            open.holes[0] = pinch;
+            const double target = lowestNote (g) * std::pow (2.0, c.semitones / 12.0);
+            const auto r = resonances (g, open, target * 0.8, target * 1.25);
+            std::printf ("  %-8s resonance %+4.0f c   played:", c.name, r.empty() ? 0.0 : 1200.0 * std::log2 (r.front() / target));
+            for (double p = 2000.0; p <= 5000.0; p += 500.0)
+            {
+                const double f = playOnce (g, open, p);
+                if (f <= 0.0)
+                    std::printf ("     -  ");
+                else
+                    std::printf (" %+6.0f ", 1200.0 * std::log2 (f / target));
+            }
+            std::printf ("   (2-5 kPa, cents from the note)\n");
+        }
         return 0;
     }
 
