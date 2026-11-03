@@ -45,20 +45,37 @@ Complex holeAdmittance (const Geometry& g, int hole, double openness, double ome
 }
 } // namespace
 
+Openness Openness::fromPattern (const char* pattern)
+{
+    Openness open;
+    for (int i = 0; i < kNumHoles + 1 && pattern[i] != 0; ++i)
+    {
+        const char c = pattern[i];
+        const double value = c == 'x' ? 0.0 : c == 'h' ? 0.5 : c == 'p' ? 0.25 : 1.0;
+        if (i < kNumHoles)
+            open.holes[(size_t) i] = value;
+        else
+            open.foot = value;
+    }
+    return open;
+}
+
 Complex windowImpedance (const Geometry& g, const Openness& open, double hz)
 {
     const double omega = 2.0 * kPi * hz;
 
-    // Start at the open foot (unflanged pipe radiation) and work up to the window.
+    // Start at the foot (unflanged pipe radiation, or closed by the bell sensor) and work up to the window.
     const double aFoot = g.radiusAt (g.boreLength);
     const double z0Foot = kAirDensity * kSpeedOfSound / (kPi * aFoot * aFoot);
     const double kaFoot = omega / kSpeedOfSound * aFoot;
-    Complex z = z0Foot * (0.25 * kaFoot * kaFoot + j * 0.6133 * kaFoot);
+    const double footOpen = g.bellClosesFoot ? juce::jlimit (1.0e-4, 1.0, open.foot) : 1.0;
+    Complex z = z0Foot * (0.25 * kaFoot * kaFoot + j * 0.6133 * kaFoot) / footOpen;
 
-    // Points where something happens, from the foot up: holes, then the window at x = 0.
-    std::array<int, kNumHoles> order {};
+    // Points where something happens, from the foot up: the enabled holes, then the window at x = 0.
+    std::vector<int> order;
     for (int i = 0; i < kNumHoles; ++i)
-        order[(size_t) i] = i;
+        if (g.holes[(size_t) i].enabled)
+            order.push_back (i);
     std::sort (order.begin(), order.end(), [&] (int a, int b) { return g.holes[(size_t) a].position > g.holes[(size_t) b].position; });
 
     double x = g.boreLength;
@@ -79,7 +96,7 @@ Complex windowImpedance (const Geometry& g, const Openness& open, double hz)
     {
         const double position = juce::jlimit (0.0, g.boreLength, g.holes[(size_t) hole].position);
         travelTo (position);
-        z = 1.0 / (1.0 / z + holeAdmittance (g, hole, juce::jlimit (0.0, 1.0, open[(size_t) hole]), omega));
+        z = 1.0 / (1.0 / z + holeAdmittance (g, hole, juce::jlimit (0.0, 1.0, open.holes[(size_t) hole]), omega));
     }
     travelTo (0.0);
 
@@ -112,36 +129,34 @@ std::vector<double> resonances (const Geometry& g, const Openness& open, double 
     return found;
 }
 
-Openness scaleFingering (int closed)
+const std::vector<ChartFingering>& chartFor (FingeringChart chart)
 {
-    Openness open {};
-    for (int i = 0; i < kNumHoles; ++i)
-        open[(size_t) i] = i < closed ? 0.0 : 1.0;
-    return open;
-}
+    constexpr int bore = ChartFingering::kTunesBore, none = ChartFingering::kTunesNothing;
 
-Openness crossFingeredSeventh()
-{
-    return { 1.0, 0.0, 0.0, 1.0, 1.0, 1.0 };
-}
-
-Openness ChartFingering::openness() const
-{
-    Openness open {};
-    for (int i = 0; i < kNumHoles; ++i)
-        open[(size_t) i] = pattern[i] == 'x' ? 0.0 : 1.0;
-    return open;
-}
-
-const std::vector<ChartFingering>& standardChart()
-{
-    static const std::vector<ChartFingering> chart {
-        { "D", "xxxxxx", 0, 1 },        { "E", "xxxxxo", 2, 1 },       { "F#", "xxxxoo", 4, 1 },      { "G", "xxxooo", 5, 1 },
-        { "A", "xxoooo", 7, 1 },        { "B", "xooooo", 9, 1 },       { "C nat", "oxxooo", 10, 1 },  { "C#", "oooooo", 11, 1 },
-        { "high D", "oxxxxx", 12, 2 },  { "high D", "xxxxxx", 12, 2 }, { "high E", "xxxxxo", 14, 2 }, { "high F#", "xxxxoo", 16, 2 },
-        { "high G", "xxxooo", 17, 2 },  { "high A", "xxoooo", 19, 2 }, { "high B", "xooooo", 21, 2 },
+    // Patterns in hole order: LT L1 L2 L3 R1 R2 R3 R4. Hole indices: LT 0, L1 1, L2 2, L3 3, R1 4, R2 5, R3 6, R4 7.
+    static const std::vector<ChartFingering> whistle {
+        { "D", "-xxxxxx-", 0, 1, bore },       { "E", "-xxxxxo-", 2, 1, 6 },          { "F#", "-xxxxoo-", 4, 1, 5 },
+        { "G", "-xxxooo-", 5, 1, 4 },          { "A", "-xxoooo-", 7, 1, 3 },          { "B", "-xooooo-", 9, 1, 2 },
+        { "C nat", "-oxxooo-", 10, 1, none, 1 }, { "C#", "-oooooo-", 11, 1, 1 },
+        { "high D", "-oxxxxx-", 12, 2 },       { "high D", "-xxxxxx-", 12, 2 },       { "high E", "-xxxxxo-", 14, 2 },
+        { "high F#", "-xxxxoo-", 16, 2 },      { "high G", "-xxxooo-", 17, 2 },       { "high A", "-xxoooo-", 19, 2 },
+        { "high B", "-xooooo-", 21, 2 },
     };
-    return chart;
+
+    // Baroque recorder fingering in C, with its forked F, F# and Bb. Each hole's position is set by a note
+    // that uses it (R2 by the forked F, the thumb hole by high D: thumb open, L2 covered). With cross-fingering
+    // tuning, the F# fork sets R1's size. The Bb fork and the second register (thumb pinched, leaving a small
+    // crack open) are left to the geometry: L2's size alone can't put Bb in tune.
+    static const std::vector<ChartFingering> recorder {
+        { "C", "xxxxxxxx", 0, 1, bore },       { "D", "xxxxxxxo", 2, 1, 7 },          { "E", "xxxxxxoo", 4, 1, 6 },
+        { "F", "xxxxxoxx", 5, 1, 5 },          { "F#", "xxxxoxxo", 6, 1, none, 4 },   { "G", "xxxxoooo", 7, 1, 4 },
+        { "A", "xxxooooo", 9, 1, 3 },          { "Bb", "xxoxxooo", 10, 1 },  { "B", "xxoooooo", 11, 1, 2 },
+        { "high C", "xoxooooo", 12, 1, 1 },    { "high D", "ooxooooo", 14, 1, 0 },
+        { "high E", "pxxxxxoo", 16, 2 },       { "high F", "pxxxxoxo", 17, 2 },       { "high G", "pxxxoooo", 19, 2 },
+        { "high A", "pxxooooo", 21, 2 },
+    };
+
+    return chart == FingeringChart::baroqueRecorder ? recorder : whistle;
 }
 
 double predictedCents (const Geometry& g, const ChartFingering& c, double lowestHz)
@@ -154,48 +169,124 @@ double predictedCents (const Geometry& g, const ChartFingering& c, double lowest
     return nearest > 0.0 ? 1200.0 * std::log2 (nearest / target) : 0.0;
 }
 
-bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingering)
+namespace
 {
-    if (tuneCrossFingering)
+double firstResonance (const Geometry& g, const Openness& open, double guessHz)
+{
+    const auto found = resonances (g, open, guessHz * 0.7, guessHz * 1.4);
+    return found.empty() ? 0.0 : found.front();
+}
+
+// Solves f(value) = target for one length by the secant method (pitch falls as the length grows).
+// Resonances come from a 2-cent scan refined by interpolation, so aim for 0.5 cents and accept 2.
+bool solveLength (Geometry& g, double& value, double lo, double hi, const Openness& open, double target)
+{
+    double x0 = value, f0 = firstResonance (g, open, target);
+    double x1 = juce::jlimit (lo, hi, value * (f0 > 0.0 ? f0 / target : 1.0));
+    double bestValue = value, bestError = 1.0e9;
+    for (int iteration = 0; iteration < 30; ++iteration)
     {
-        // Outer loop on L1's diameter: a smaller top hole vents less, so the covered holes below it pull the
-        // cross-fingered note further down. For each diameter the whole scale (including L1's position) is retuned.
-        const double target = lowestHz * std::pow (2.0, 10.0 / 12.0);
-        auto crossError = [&] (double diameter)
+        value = x1;
+        const double f1 = firstResonance (g, open, target);
+        if (f1 <= 0.0 || f0 <= 0.0)
+            break;
+        const double error = std::log2 (f1 / target) * 1200.0;
+        if (std::abs (error) < std::abs (bestError))
         {
-            g.holes[0].diameter = diameter;
-            if (! tuneToScale (g, lowestHz, false))
-                return 1.0e9;
-            const auto r = resonances (g, crossFingeredSeventh(), target * 0.8, target * 1.25);
-            return r.empty() ? 1.0e9 : 1200.0 * std::log2 (r.front() / target);
-        };
+            bestError = error;
+            bestValue = value;
+        }
+        if (std::abs (error) < 0.5)
+            return true;
+        const double slope = (std::log2 (f1) - std::log2 (f0)) / (x1 - x0);
+        const double next = std::abs (slope) > 1.0e-12 ? x1 - std::log2 (f1 / target) / slope : x1 * (f1 / target);
+        x0 = x1;
+        f0 = f1;
+        x1 = juce::jlimit (lo, hi, next);
+    }
+    value = bestValue;
+    return std::abs (bestError) < 2.0;
+}
 
-        const Geometry original = g;
+// Tunes the bore and hole positions (diameters fixed), in chart order: the lowest note first, then holes
+// from the bottom up. Moving a hole slightly changes the notes below it (its closed chimney is part of
+// their bore), so the pass is repeated.
+bool tunePositions (Geometry& g, double lowestHz)
+{
+    const auto& chart = chartFor (g.chart);
+    auto targetFor = [&] (const ChartFingering& c) { return lowestHz * std::pow (2.0, c.semitones / 12.0); };
 
-        // Scan diameters for a sign change of the error, then bisect.
-        double lo = 0.0, hi = 0.0, errorLo = 0.0;
-        double previousDiameter = 0.0, previousError = 1.0e9;
-        const double scale = std::max (0.0015, 0.2 * original.holes[0].diameter);
-        for (double d = scale; d <= original.holes[0].diameter * 1.6; d += 0.1 * original.holes[0].diameter)
+    // Closely spaced holes (e.g. a recorder's) need more passes.
+    for (int pass = 0; pass < 20; ++pass)
+    {
+        double below = g.boreLength;  // Position of the hole tuned just before (lower down).
+        for (const auto& c : chart)
         {
-            const double error = crossError (d);
-            if (error < 1.0e8 && previousError < 1.0e8 && (error > 0.0) != (previousError > 0.0))
+            if (c.tunes == ChartFingering::kTunesBore)
             {
-                lo = previousDiameter;
-                errorLo = previousError;
-                hi = d;
-                break;
+                if (! solveLength (g, g.boreLength, 0.05, 2.0, c.openness(), targetFor (c)))
+                    return false;
+                below = g.boreLength;
             }
-            previousDiameter = d;
-            previousError = error;
+            else if (c.tunes >= 0 && g.holes[(size_t) c.tunes].enabled)
+            {
+                auto& hole = g.holes[(size_t) c.tunes];
+                const double hi = c.tunes == 0 ? g.boreLength - hole.diameter  // The thumb hole is on the back.
+                                               : below - hole.diameter;
+                if (! solveLength (g, hole.position, 0.01, hi, c.openness(), targetFor (c)))
+                    return false;
+                if (c.tunes != 0)
+                    below = hole.position;
+            }
         }
 
-        if (hi == 0.0)
+        double worst = 0.0;
+        for (const auto& c : chart)
+            if (c.tunes != ChartFingering::kTunesNothing && (c.tunes < 0 || g.holes[(size_t) c.tunes].enabled))
+                worst = std::max (worst, std::abs (predictedCents (g, c, lowestHz)));
+        if (worst < 1.5)
+            return true;
+    }
+    return false;
+}
+} // namespace
+
+namespace
+{
+// Sets one hole's diameter (positions retuned for each try) so a cross-fingering is in tune.
+// E.g. a smaller top hole vents less, so the covered holes below it pull the cross-fingered note further down.
+bool tuneDiameter (Geometry& g, double lowestHz, const ChartFingering& cross)
+{
+    auto& diameter = g.holes[(size_t) cross.tunesDiameter].diameter;
+    const double original = diameter;
+    const Geometry originalGeometry = g;
+    auto crossError = [&] (double d)
+    {
+        diameter = d;
+        if (! tunePositions (g, lowestHz))
+            return 1.0e9;
+        return predictedCents (g, cross, lowestHz);
+    };
+
+    // Scan diameters for a sign change of the error, then bisect.
+    double lo = 0.0, hi = 0.0, errorLo = 0.0;
+    double previousDiameter = 0.0, previousError = 1.0e9;
+    for (double d = std::max (0.0015, 0.2 * original); d <= original * 1.6; d += 0.1 * original)
+    {
+        const double error = crossError (d);
+        if (error < 1.0e8 && previousError < 1.0e8 && (error > 0.0) != (previousError > 0.0))
         {
-            g = original;  // The top hole's size alone can't put it in tune: leave the instrument as it was.
-            return tuneToScale (g, lowestHz, false) && false;
+            lo = previousDiameter;
+            errorLo = previousError;
+            hi = d;
+            break;
         }
+        previousDiameter = d;
+        previousError = error;
+    }
 
+    if (hi > 0.0)
+    {
         for (int iteration = 0; iteration < 25 && hi - lo > 0.00002; ++iteration)
         {
             const double mid = 0.5 * (lo + hi);
@@ -214,77 +305,37 @@ bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingering)
         }
         if (std::abs (crossError (0.5 * (lo + hi))) < 5.0)
             return true;
-        g = original;
-        tuneToScale (g, lowestHz, false);
-        return false;
     }
 
-    static const int majorScale[kNumHoles + 1] = { 0, 2, 4, 5, 7, 9, 11 };  // Semitones above the lowest note.
-
-    auto firstResonance = [&] (const Openness& open, double guessHz)
-    {
-        const auto found = resonances (g, open, guessHz * 0.7, guessHz * 1.4);
-        return found.empty() ? 0.0 : found.front();
-    };
-
-    // Solve f(value) = target for one length by the secant method; pitch falls as the length grows.
-    auto solve = [&] (double& value, double lo, double hi, const Openness& open, double target)
-    {
-        // Resonances come from a 2-cent scan refined by interpolation, so aim for 0.5 cents and accept 2.
-        double x0 = value, f0 = firstResonance (open, target);
-        double x1 = juce::jlimit (lo, hi, value * (f0 > 0.0 ? f0 / target : 1.0));
-        double bestValue = value, bestError = 1.0e9;
-        for (int iteration = 0; iteration < 30; ++iteration)
-        {
-            value = x1;
-            const double f1 = firstResonance (open, target);
-            if (f1 <= 0.0 || f0 <= 0.0)
-                break;
-            const double error = std::log2 (f1 / target) * 1200.0;
-            if (std::abs (error) < std::abs (bestError))
-            {
-                bestError = error;
-                bestValue = value;
-            }
-            if (std::abs (error) < 0.5)
-                return true;
-            const double slope = (std::log2 (f1) - std::log2 (f0)) / (x1 - x0);
-            const double next = std::abs (slope) > 1.0e-12 ? x1 - std::log2 (f1 / target) / slope : x1 * (f1 / target);
-            x0 = x1;
-            f0 = f1;
-            x1 = juce::jlimit (lo, hi, next);
-        }
-        value = bestValue;
-        return std::abs (bestError) < 2.0;
-    };
-
-    auto targetFor = [&] (int closed) { return lowestHz * std::pow (2.0, majorScale[kNumHoles - closed] / 12.0); };
-
-    // Moving a hole slightly changes the notes below it (its closed chimney is part of their bore), so repeat.
-    for (int pass = 0; pass < 6; ++pass)
-    {
-        // Lowest note: bore length, all holes covered. Then each hole from the bottom up, with every hole below it open.
-        if (! solve (g.boreLength, 0.05, 1.0, scaleFingering (kNumHoles), lowestHz))
-            return false;
-
-        for (int hole = kNumHoles - 1; hole >= 0; --hole)
-        {
-            const double below = hole + 1 < kNumHoles ? g.holes[(size_t) hole + 1].position : g.boreLength;
-            const double lo = 0.01, hi = below - g.holes[(size_t) hole].diameter;
-            if (! solve (g.holes[(size_t) hole].position, lo, hi, scaleFingering (hole), targetFor (hole)))
-                return false;
-        }
-
-        double worst = 0.0;
-        for (int closed = 0; closed <= kNumHoles; ++closed)
-        {
-            const double f = firstResonance (scaleFingering (closed), targetFor (closed));
-            worst = std::max (worst, std::abs (1200.0 * std::log2 (f / targetFor (closed))));
-        }
-        if (worst < 1.5)
-            return true;
-    }
+    // The hole's size alone can't put the cross-fingering in tune: keep it and tune the rest.
+    g = originalGeometry;
+    tunePositions (g, lowestHz);
     return false;
+}
+} // namespace
+
+bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingerings)
+{
+    std::vector<const ChartFingering*> crosses;
+    if (tuneCrossFingerings)
+        for (const auto& c : chartFor (g.chart))
+            if (c.tunesDiameter >= 0 && g.holes[(size_t) c.tunesDiameter].enabled)
+                crosses.push_back (&c);
+
+    if (crosses.empty())
+        return tunePositions (g, lowestHz);
+
+    // Several cross-fingerings, each with its own hole size: take turns until they all hold.
+    bool ok = true;
+    for (int round = 0; round < (crosses.size() > 1 ? 3 : 1); ++round)
+    {
+        ok = true;
+        for (const auto* cross : crosses)
+            ok = tuneDiameter (g, lowestHz, *cross) && ok;
+    }
+    for (const auto* cross : crosses)
+        ok = ok && std::abs (predictedCents (g, *cross, lowestHz)) < 5.0;
+    return ok;
 }
 
 } // namespace whistle

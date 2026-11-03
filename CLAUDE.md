@@ -48,5 +48,7 @@ Host app:
   - The Config Tool shows a control only once WARBL reports the setting.
 - **Physical model principle:** sound comes from simulating the instrument. Never map fingerings to notes. Hole sensors give continuous openness, and pitch, half-holing, slides and overblowing must come out of the simulation. `Acoustics` (transfer-matrix method) is only a design aid, for the tuning table and hole placement.
 - **Audio-thread code:** no locks (try-lock only), no allocation. Data goes from the MIDI thread to the audio thread through `SpscQueue`, and settings through atomics. Geometry is handed over to the audio thread with a try-locked pending copy.
+- **Preset dimensions are tuned offline.** After changing the acoustics or a preset, run `WhistleCheck code` and paste the printed values into `WhistleGeometry.cpp`; `PresetTuningTest` checks them.
+- **Holes:** there are eight, one per WARBL finger sensor (LT, L1–L3, R1–R4). Each has an enabled flag, and code must skip plugged holes.
 - **Verifying model changes:** run `WhistleCheck` (`play`, `chart`, `slide`) before and after. It measures what the model actually plays.
 - Match the surrounding style: comments explain why, units are in comments, and variable names are descriptive.

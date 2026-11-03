@@ -92,6 +92,15 @@ whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& fram
         c.openness[(size_t) hole] = 1.0f - holes.closedness (coverage);
     }
 
+    // The bell sensor; the model only uses it if the instrument lets it close the foot.
+    {
+        const auto sensor = (size_t) whistle::kBellSensor;
+        const float span = (float) std::max (1, covered[sensor].load() - baseline[sensor].load());
+        const float coverage = ((float) frame.holes[sensor] - (float) baseline[sensor].load()) / span;
+        measuredBellCoverage = coverage;
+        c.footOpenness = 1.0f - holes.closedness (coverage);
+    }
+
     const float measured = std::max (0.0f, (float) ((int) frame.pressure - ambient12.load()) * kPascalPerCount);
     measuredPressure = measured;
     c.mouthPressure = breathResponse().map (measured);
@@ -139,6 +148,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         for (int i = 0; i < whistle::kNumHoles; ++i)
             controls.openness[(size_t) i] = manualOpenness[(size_t) i].load();
         controls.mouthPressure = manualPressure.load();
+        controls.footOpenness = manualFootOpenness.load();
         haveControls = true;
     }
 
@@ -161,6 +171,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         whistleModel.setControls (controls);
         for (int i = 0; i < whistle::kNumHoles; ++i)
             shownOpenness[(size_t) i] = controls.openness[(size_t) i];
+        shownFootOpenness = controls.footOpenness;
         shownPressure = controls.mouthPressure;
     }
 

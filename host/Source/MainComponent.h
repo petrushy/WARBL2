@@ -17,6 +17,7 @@ public:
     MonitorPage& getMonitor() { return *monitor; }
     void showInstrument() { tabs.setCurrentTabIndex (1); }
     void showSensors() { tabs.setCurrentTabIndex (2); }
+    void loadPreset (int index) { instrument->loadPreset (index); }
 
 private:
     // Restores and saves the instrument, sensor response, reverb and audio device between runs.

@@ -24,7 +24,8 @@ namespace whistle
 
 struct Controls
 {
-    std::array<float, kNumHoles> openness {};  // 0 = covered, 1 = open
+    std::array<float, kNumHoles> openness {};  // 0 = covered, 1 = open (disabled holes are ignored)
+    float footOpenness = 1.0f;                  // Bell sensor; used only if the geometry lets it close the foot
     float mouthPressure = 0.0f;                 // Pa above ambient
 };
 
@@ -85,12 +86,13 @@ private:
         std::array<float, kMaxSegments> lossB0 {}, lossA1 {};
         std::array<int, kMaxSegments + 1> holeAt {};   // Hole index at junction j (between sections j-1 and j), or -1.
         std::array<float, kMaxSegments + 1> radiationDelay {};  // Samples from junction j to the listener (relative).
-        std::array<float, kNumHoles> holeArea {}, holeLength {};
+        std::array<float, kNumHoles> holeArea {}, holeLength {}, holeChimney {};
 
         float windowArea = 0.0f;
         float windowMass = 0.0f;     // Inertance of the air in the window, as M * 2 * rate / Z0 (trapezoidal rule).
         float boreImpedance = 0.0f;  // Z0 of the top section, rho c / S.
         float footB = 0.0f, footA = 0.0f;  // Open foot reflection lowpass.
+        bool bellClosesFoot = false;
 
         float windwayHeight = 0.001f, windowLength = 0.005f, windowWidth = 0.008f, edgeOffset = 0.0f;
         float jetGrowth = 1.0f;     // Amplification of the jet's deflection on its way to the edge.
@@ -112,7 +114,7 @@ private:
     // Bore state
     std::array<DelayLine, kMaxSegments> right {}, left {};
     std::array<OnePole, kMaxSegments> lossRight {}, lossLeft {};
-    std::array<float, kMaxSegments + 1> holeX1 {}, holeY1 {};  // Hole junction filter state.
+    std::array<std::array<float, 4>, kMaxSegments + 1> holeState {};  // Hole junction filters: x1, x2, y1, y2
     float topPressure = 0.0f, lastSource = 0.0f;  // At the top of the bore, previous sample.
     float footX1 = 0.0f, footY1 = 0.0f;
 
@@ -140,7 +142,7 @@ private:
     // Controls, ramped per internal sample
     Controls current, target;
     std::array<float, kNumHoles> opennessStep {};
-    float pressureStep = 0.0f;
+    float footStep = 0.0f, pressureStep = 0.0f;
     int rampRemaining = 0;
 };
 

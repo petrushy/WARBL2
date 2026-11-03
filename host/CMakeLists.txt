@@ -94,3 +94,11 @@ target_compile_definitions(WhistleCheck PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL
 target_link_libraries(WhistleCheck
     PRIVATE juce::juce_audio_formats juce::juce_dsp
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+
+# The presets' stored tuning still matches the acoustics.
+juce_add_console_app(PresetTuningTest)
+target_sources(PresetTuningTest PRIVATE Tests/PresetTuningTest.cpp Source/Whistle/WhistleGeometry.cpp Source/Whistle/Acoustics.cpp)
+target_include_directories(PresetTuningTest PRIVATE Source)
+target_compile_definitions(PresetTuningTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(PresetTuningTest PRIVATE juce::juce_core PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+add_test(NAME PresetTuningTest COMMAND PresetTuningTest)

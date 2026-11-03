@@ -1,4 +1,4 @@
-// Frequency-domain acoustics of a whistle geometry (transfer-matrix method): the impedance the jet sees at
+// Frequency-domain acoustics of a fipple flute geometry (transfer-matrix method): the impedance the jet sees at
 // the window, and from it the resonances that a given set of hole openings gives. Used for the tuning table
 // and for placing holes; the sound itself comes from WhistleModel, a time-domain simulation of the same
 // geometry. Nothing here decides which note is played.
@@ -12,8 +12,18 @@
 namespace whistle
 {
 
-// openness: 0 = closed, 1 = fully open, for each hole.
-using Openness = std::array<double, kNumHoles>;
+// How open each hole and the foot are: 0 = closed, 1 = fully open. Disabled (plugged) holes are ignored.
+struct Openness
+{
+    std::array<double, kNumHoles> holes {};
+    double foot = 1.0;
+
+    static Openness allClosed() { return {}; }
+
+    // From a pattern in hole order (LT L1 L2 L3 R1 R2 R3 R4, then optionally the bell): x = covered,
+    // o = open, h = half covered, p = pinched (a small crack open, 25 %), - = not used (open).
+    static Openness fromPattern (const char* pattern);
+};
 
 // Impedance seen at the window: the bore with its holes plus the window opening itself (Pa s / m^3).
 std::complex<double> windowImpedance (const Geometry&, const Openness&, double hz);
@@ -23,31 +33,32 @@ std::complex<double> windowImpedance (const Geometry&, const Openness&, double h
 // the second the overblown register.
 std::vector<double> resonances (const Geometry&, const Openness&, double fMin = 150.0, double fMax = 5000.0);
 
-// Openness for the plain scale fingering with the top `closed` holes covered (6 = all covered).
-Openness scaleFingering (int closed);
-
-// Moves the bore length and hole positions so the scale fingerings give an equal-tempered major scale whose
-// lowest note (all holes covered) is `lowestHz`. Keeps hole diameters, except that with `tuneCrossFingering`
-// the top hole's (L1) diameter is also chosen so the cross-fingered flat seventh (oxxooo, C natural on a D
-// whistle) is in tune. Returns false if it couldn't converge.
-bool tuneToScale (Geometry&, double lowestHz, bool tuneCrossFingering = false);
-
-// The cross-fingering for the flat seventh: top hole open, the next two covered, the rest open.
-Openness crossFingeredSeventh();
-
-// The fingerings of a standard whistle chart, with the note each should give.
+// A fingering chart entry: the note a fingering should give, and which part of the instrument the tuner
+// adjusts to get it.
 struct ChartFingering
 {
-    const char* name;      // For a D whistle; the same fingerings give the same scale degrees in other keys.
-    const char* pattern;   // Top hole first, x = covered, o = open.
-    int semitones;         // Above the lowest note.
-    int reg;               // 1 = low register, 2 = second (overblown).
-    Openness openness() const;
+    static constexpr int kTunesBore = -2;
+    static constexpr int kTunesNothing = -1;
+
+    const char* name;     // In the chart's own key (D for whistles, C for recorders).
+    const char* pattern;  // See Openness::fromPattern().
+    int semitones;        // Above the lowest note.
+    int reg;              // 1 = low register, 2 = second (overblown).
+    int tunes = kTunesNothing;          // Hole index whose position is set by this note, or the bore length.
+    int tunesDiameter = kTunesNothing;  // Optional: hole whose diameter is set by this note (cross-fingerings).
+
+    Openness openness() const { return Openness::fromPattern (pattern); }
 };
 
-const std::vector<ChartFingering>& standardChart();
+const std::vector<ChartFingering>& chartFor (FingeringChart);
 
 // Cents from the target note to the nearest resonance the geometry gives for this fingering.
 double predictedCents (const Geometry&, const ChartFingering&, double lowestHz);
+
+// Moves the bore length and hole positions so the instrument's chart notes that tune something are in tune
+// (equal temperament, lowest note `lowestHz`). Keeps hole diameters, except that with `tuneCrossFingerings`
+// a chart note marked tunesDiameter also sets that hole's size (e.g. the whistle's cross-fingered C natural
+// sets L1's diameter). Returns false if it couldn't converge.
+bool tuneToScale (Geometry&, double lowestHz, bool tuneCrossFingerings = false);
 
 } // namespace whistle

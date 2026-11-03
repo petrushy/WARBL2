@@ -9,7 +9,7 @@ const juce::Colour text { 0xffd8d8d8 };
 const juce::Colour accent { 0xff4fa3e0 };
 const juce::Colour live { 0xffe0a24f };
 
-const char* kHoleNames[whistle::kNumHoles] = { "L1", "L2", "L3", "R1", "R2", "R3" };
+using whistle::kHoleNames;
 } // namespace
 
 //==============================================================================
@@ -123,7 +123,8 @@ SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
     {
         std::vector<CurveView::Point> p;
         for (int i = 0; i < whistle::kNumHoles; ++i)
-            p.push_back ({ audio.measuredCoverage[(size_t) i].load(), kHoleNames[i] });
+            p.push_back ({ audio.measuredCoverage[(size_t) i].load(), kHoleNames[(size_t) i] });
+        p.push_back ({ audio.measuredBellCoverage.load(), "Bell" });
         return p;
     };
     holeCurve.setRanges (1.3f, 1.0f);

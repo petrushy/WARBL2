@@ -1,5 +1,5 @@
-// The physical description of a whistle (fipple flute). Both the real-time model (WhistleModel) and the
-// tuning calculator (Acoustics) are built from this, so changing the instrument means changing these numbers.
+// The physical description of a fipple flute (whistle, recorder). Both the real-time model (WhistleModel) and
+// the tuning calculator (Acoustics) are built from this, so changing the instrument means changing these numbers.
 // All lengths are in metres.
 
 #pragma once
@@ -12,18 +12,30 @@
 namespace whistle
 {
 
-constexpr int kNumHoles = 6;  // Ordered from the top: L1, L2, L3, R1, R2, R3.
+// Tone holes, one per WARBL finger sensor, in this order: left thumb (on the back), L1-L3, R1-R4.
+// An instrument uses some of them (e.g. a whistle L1-R3); the others are plugged (disabled).
+constexpr int kNumHoles = 8;
+constexpr std::array<const char*, kNumHoles> kHoleNames { "LT", "L1", "L2", "L3", "R1", "R2", "R3", "R4" };
 constexpr double kSpeedOfSound = 345.0;  // Air inside a played whistle is a little warmer than the room.
 constexpr double kAirDensity = 1.2;
 constexpr double kAirViscosity = 1.85e-5;
 
-// WARBL tone hole sensor index for each whistle hole (see warbl::holeName()).
-constexpr std::array<int, kNumHoles> kSensorForHole { 7, 6, 5, 4, 3, 2 };
+// WARBL sensor index for each hole (see warbl::holeName()), and for the bell sensor at the foot.
+constexpr std::array<int, kNumHoles> kSensorForHole { 8, 7, 6, 5, 4, 3, 2, 1 };
+constexpr int kBellSensor = 0;
 
 struct ToneHole
 {
+    bool enabled = false;   // A disabled hole is plugged: as if it weren't drilled.
     double position = 0.0;  // Centre of the hole, measured from the window edge (labium) towards the foot.
     double diameter = 0.0;
+};
+
+// Which fingering chart the tuning table, tuner and checks use (the sound never uses it).
+enum class FingeringChart
+{
+    whistle,          // Six holes, L1-R3
+    baroqueRecorder    // Thumb and seven holes, baroque fingering
 };
 
 struct Geometry
@@ -43,6 +55,8 @@ struct Geometry
 
     std::array<ToneHole, kNumHoles> holes {};
     double wallThickness = 0.0005;  // Sets the height of the tone hole chimneys.
+    bool bellClosesFoot = false;    // The bell sensor covers the open foot (recorder technique).
+    FingeringChart chart = FingeringChart::whistle;
 
     // Fipple (mouthpiece). The windway ends in a flat jet that crosses the window and hits the edge (labium).
     double windwayHeight = 0.001;    // Jet thickness at the flue exit (h).

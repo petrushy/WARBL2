@@ -76,14 +76,17 @@ public:
     // Last sensor inputs before the response curves, for display.
     std::atomic<float> measuredPressure { 0.0f };
     std::array<std::atomic<float>, whistle::kNumHoles> measuredCoverage {};
+    std::atomic<float> measuredBellCoverage { 0.0f };
 
     // Playing from the screen instead of from WARBL.
     std::atomic<bool> manualPlay { false };
     std::array<std::atomic<float>, whistle::kNumHoles> manualOpenness {};
     std::atomic<float> manualPressure { 0.0f };
+    std::atomic<float> manualFootOpenness { 1.0f };
 
     // Last controls sent to the model, for display.
     std::array<std::atomic<float>, whistle::kNumHoles> shownOpenness {};
+    std::atomic<float> shownFootOpenness { 1.0f };
     std::atomic<float> shownPressure { 0.0f };
 
     // Most frames taken from the queue in one audio block (shows whether frames bunch up).

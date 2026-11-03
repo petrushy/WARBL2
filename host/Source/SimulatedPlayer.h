@@ -49,9 +49,9 @@ public:
 
         for (int hole = 0; hole < kNumHoles; ++hole)
         {
-            // Holes 2..7 are R3..L1.
-            const bool closed = hole >= 2 && hole <= 7 && (7 - hole) < 6 - note;
-            const double level = closed ? std::min (1.0, phase * 20.0) : 0.0;  // 60 ms finger movement
+            // Holes 2..7 are R3..L1; the thumb (8) stays covered, as a recorder player's would.
+            const bool closed = (hole >= 2 && hole <= 7 && (7 - hole) < 6 - note) || hole == 8;
+            const double level = hole == 8 ? 1.0 : closed ? std::min (1.0, phase * 20.0) : 0.0;  // 60 ms finger movement
             f.holes[(size_t) hole] = (uint16_t) (kBaseline + level * (kCovered - kBaseline) + noise (5));
             if (level > 0.9)
                 f.holeCovered |= (uint16_t) (1 << hole);

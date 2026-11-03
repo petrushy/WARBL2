@@ -3,7 +3,7 @@
 //   WhistleCheck tune             tune every preset to D (D5, or D4 for low D) and print the hole positions
 //   WhistleCheck table            predicted resonances for the scale fingerings of every preset
 //   WhistleCheck play [preset]    run the time-domain model at fixed fingerings and pressures, measure what it plays
-//   WhistleCheck slide [hole] [Pa]  open one hole gradually (half-holing) and measure the pitch
+//   WhistleCheck slide [hole] [Pa]  open one hole (1 = L1 ... 6 = R3) gradually (half-holing) and measure the pitch
 //   WhistleCheck chart [preset]   every fingering of a standard whistle chart: predicted and played tuning
 //   WhistleCheck head [preset]    how a narrower head section changes the second register's tuning
 
@@ -31,25 +31,47 @@ double centsFromNearest (double hz)
     return (midi - std::round (midi)) * 100.0;
 }
 
-double lowestNote (const Geometry& g) { return g.boreLength > 0.4 ? 293.66 : 587.33; }
+// The presets' lowest notes: recorders C5, whistles D5 (low whistles D4).
+double lowestNote (const Geometry& g)
+{
+    if (g.chart == FingeringChart::baroqueRecorder)
+        return 523.25;
+    return g.boreLength > 0.4 ? 293.66 : 587.33;
+}
+
+// The chart's low-register fingerings.
+std::vector<ChartFingering> lowRegister (const Geometry& g)
+{
+    std::vector<ChartFingering> out;
+    for (const auto& c : chartFor (g.chart))
+        if (c.reg == 1)
+            out.push_back (c);
+    return out;
+}
 
 void printTable (const Geometry& g)
 {
     std::printf ("\n%s\n  fingering   register 1          register 2        2/1 ratio (cents from octave)\n", g.name.toRawUTF8());
-    for (int closed = kNumHoles; closed >= 0; --closed)
+    for (const auto& c : lowRegister (g))
     {
-        const auto r = resonances (g, scaleFingering (closed), lowestNote (g) * 0.6, lowestNote (g) * 6.0);
-        char pattern[kNumHoles + 1] {};
-        for (int i = 0; i < kNumHoles; ++i)
-            pattern[i] = i < closed ? 'x' : 'o';
+        const auto r = resonances (g, c.openness(), lowestNote (g) * 0.6, lowestNote (g) * 6.0);
         if (r.size() < 2)
         {
-            std::printf ("  %s      (fewer than 2 resonances)\n", pattern);
+            std::printf ("  %s    (fewer than 2 resonances)\n", c.pattern);
             continue;
         }
-        std::printf ("  %s      %7.1f Hz %-4s %+5.0f   %7.1f Hz %-4s   %+5.0f\n", pattern, r[0], noteName (r[0]).c_str(), centsFromNearest (r[0]),
+        std::printf ("  %s    %7.1f Hz %-4s %+5.0f   %7.1f Hz %-4s   %+5.0f\n", c.pattern, r[0], noteName (r[0]).c_str(), centsFromNearest (r[0]),
                      r[1], noteName (r[1]).c_str(), 1200.0 * std::log2 (r[1] / r[0]) - 1200.0);
     }
+}
+
+Controls controlsFor (const Openness& open)
+{
+    Controls controls;
+    for (int i = 0; i < kNumHoles; ++i)
+        controls.openness[(size_t) i] = (float) open.holes[(size_t) i];
+    controls.footOpenness = (float) open.foot;
+    return controls;
 }
 } // namespace
 
@@ -109,13 +131,10 @@ static void play (const Geometry& g)
         std::printf ("%7.0f Pa      ", p);
     std::printf ("\n");
 
-    for (int closed = kNumHoles; closed >= 0; --closed)
+    for (const auto& c : lowRegister (g))
     {
-        const auto predicted = resonances (g, scaleFingering (closed), lowestNote (g) * 0.6, lowestNote (g) * 6.0);
-        char pattern[kNumHoles + 1] {};
-        for (int i = 0; i < kNumHoles; ++i)
-            pattern[i] = i < closed ? 'x' : 'o';
-        std::printf ("  %s      %6.0f/%6.0f  ", pattern, predicted.size() > 0 ? predicted[0] : 0.0, predicted.size() > 1 ? predicted[1] : 0.0);
+        const auto predicted = resonances (g, c.openness(), lowestNote (g) * 0.6, lowestNote (g) * 6.0);
+        std::printf ("  %s    %6.0f/%6.0f  ", c.pattern, predicted.size() > 0 ? predicted[0] : 0.0, predicted.size() > 1 ? predicted[1] : 0.0);
 
         for (double pressure : pressures)
         {
@@ -126,10 +145,7 @@ static void play (const Geometry& g)
             model.jetQ = jetQ;
             model.jetConvection = convection;
             model.jetStages = stages;
-            Controls controls;
-            const auto open = scaleFingering (closed);
-            for (int i = 0; i < kNumHoles; ++i)
-                controls.openness[(size_t) i] = (float) open[(size_t) i];
+            auto controls = controlsFor (c.openness());
             // Blow up to the pressure over 40 ms, like a player, then hold.
             std::vector<float> out ((size_t) (rate * 0.6), 0.0f);
             const int block = (int) (rate * 0.002);
@@ -160,11 +176,11 @@ static void play (const Geometry& g)
     }
 }
 
-// Slide one hole from covered to open (the fingering above it covered, below it open) at a fixed pressure.
+// Slide one hole from covered to open (the front holes above it covered, below it open) at a fixed pressure.
 static void slide (const Geometry& g, int hole, double pressure)
 {
     constexpr double rate = 48000.0;
-    std::printf ("\n%s: hole %d from covered to open at %.0f Pa\n  openness   pitch\n", g.name.toRawUTF8(), hole + 1, pressure);
+    std::printf ("\n%s: hole %s from covered to open at %.0f Pa\n  openness   pitch\n", g.name.toRawUTF8(), kHoleNames[(size_t) hole], pressure);
     for (int step = 0; step <= 10; ++step)
     {
         WhistleModel model;
@@ -172,7 +188,7 @@ static void slide (const Geometry& g, int hole, double pressure)
         model.prepare (rate);
         Controls controls;
         for (int i = 0; i < kNumHoles; ++i)
-            controls.openness[(size_t) i] = i < hole ? 0.0f : 1.0f;
+            controls.openness[(size_t) i] = i < hole ? 0.0f : 1.0f;  // Includes the thumb (index 0) covered.
         controls.openness[(size_t) hole] = step / 10.0f;
 
         std::vector<float> out ((size_t) (rate * 0.6), 0.0f);
@@ -201,9 +217,7 @@ static double playOnce (const Geometry& g, const Openness& open, double pressure
     model.jetConvection = convection;
     model.jetStages = stages;
 
-    Controls controls;
-    for (int i = 0; i < kNumHoles; ++i)
-        controls.openness[(size_t) i] = (float) open[(size_t) i];
+    auto controls = controlsFor (open);
 
     std::vector<float> out ((size_t) (rate * 0.6), 0.0f);
     const int block = (int) (rate * 0.002);
@@ -225,7 +239,7 @@ static void chart (const Geometry& g)
     const double lowest = lowestNote (g);
     std::printf ("\n%s\n  note      fingering  predicted (geometry)   model plays it at    pitch at lowest / highest\n", g.name.toRawUTF8());
 
-    for (const auto& c : standardChart())
+    for (const auto& c : chartFor (g.chart))
     {
         const auto open = c.openness();
         const double target = lowest * std::pow (2.0, c.semitones / 12.0);
@@ -254,7 +268,7 @@ static void head (const Geometry& base)
     const double lowest = lowestNote (base);
     std::printf ("\n%s: head section effect (whistle retuned for each), second register vs. octave in cents\n", base.name.toRawUTF8());
     std::printf ("  head            ");
-    for (const auto& c : standardChart())
+    for (const auto& c : chartFor (base.chart))
         if (c.reg == 2)
             std::printf ("%-9s", c.name + 5);
     std::printf ("  bore length\n");
@@ -275,7 +289,7 @@ static void head (const Geometry& base)
                 std::printf ("  none            ");
             else
                 std::printf ("  %3.0f mm, %4.1f mm", length * 1000.0, diameter * 1000.0);
-            for (const auto& c : standardChart())
+            for (const auto& c : chartFor (g.chart))
                 if (c.reg == 2)
                     std::printf ("%+5.0f    ", predictedCents (g, c, lowest));
             std::printf ("  %.1f mm%s\n", g.boreLength * 1000.0, ok ? "" : "  (tuning didn't converge)");
@@ -291,12 +305,14 @@ int main (int argc, char* argv[])
     {
         const int index = argc > 2 ? juce::String (argv[2]).getIntValue() : 0;
         auto g = presets()[(size_t) juce::jlimit (0, (int) presets().size() - 1, index)];
-        for (int i = 3; i < argc; ++i)  // headlength=<mm> headdiameter=<mm>: add a head section and retune
+        for (int i = 3; i < argc; ++i)  // headlength=<mm> headdiameter=<mm>: add a head section and retune; st=, conv=: jet
         {
             const juce::String arg (argv[i]);
-            const double value = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue() * 0.001;
-            if (arg.startsWith ("headlength=")) g.headLength = value;
-            if (arg.startsWith ("headdiameter=")) g.headDiameter = value;
+            const double value = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+            if (arg.startsWith ("headlength=")) g.headLength = value * 0.001;
+            if (arg.startsWith ("headdiameter=")) g.headDiameter = value * 0.001;
+            if (arg.startsWith ("st=")) strouhal = (float) value;
+            if (arg.startsWith ("conv=")) convection = (float) value;
         }
         if (g.headLength > 0.0)
         {
@@ -313,6 +329,24 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "sweep")  // sweep <preset> <hole> <pattern>: resonances while moving one hole
+    {
+        auto g = presets()[(size_t) juce::String (argv[2]).getIntValue()];
+        tuneToScale (g, lowestNote (g));
+        const int hole = juce::String (argv[3]).getIntValue();
+        const auto open = Openness::fromPattern (argv[4]);
+        for (double x = 0.10; x <= g.boreLength - 0.01; x += 0.005)
+        {
+            g.holes[(size_t) hole].position = x;
+            const auto r = resonances (g, open, 300.0, 3000.0);
+            std::printf ("  %5.1f mm:", x * 1000.0);
+            for (size_t i = 0; i < std::min<size_t> (3, r.size()); ++i)
+                std::printf ("  %7.1f %-4s", r[i], noteName (r[i]).c_str());
+            std::printf ("\n");
+        }
+        return 0;
+    }
+
     if (mode == "head")  // head [preset]
     {
         const int index = argc > 2 ? juce::String (argv[2]).getIntValue() : 0;
@@ -322,7 +356,7 @@ int main (int argc, char* argv[])
 
     if (mode == "slide")  // slide <hole 1-6> <pressure>
     {
-        slide (presets().front(), (argc > 2 ? juce::String (argv[2]).getIntValue() : 3) - 1, argc > 3 ? juce::String (argv[3]).getDoubleValue() : 700.0);
+        slide (presets().front(), juce::jlimit (1, kNumHoles - 1, argc > 2 ? juce::String (argv[2]).getIntValue() : 3), argc > 3 ? juce::String (argv[3]).getDoubleValue() : 700.0);
         return 0;
     }
 
@@ -345,12 +379,25 @@ int main (int argc, char* argv[])
 
     for (auto g : presets())
     {
-        if (mode == "tune" || mode == "tunec")  // tunec: also tune the cross-fingered C natural with L1's size
+        if (mode == "code")  // The presets' holes as code, for WhistleGeometry.cpp (after tuning them with tunec).
+        {
+            tuneToScale (g, lowestNote (g), true);
+            std::printf ("  %s: length %.5f\n    { {", g.name.toRawUTF8(), g.boreLength);
+            for (const auto& h : g.holes)
+                std::printf (" { %s, %.5f, %.5f },", h.enabled ? "true" : "false", h.position, h.diameter);
+            std::printf (" } }\n");
+            continue;
+        }
+
+        if (mode == "tune" || mode == "tunec")  // tunec: also tune cross-fingerings with hole sizes
         {
             const bool ok = tuneToScale (g, lowestNote (g), mode == "tunec");
             std::printf ("%s: %s\n  bore %.4f  holes (position/diameter)", g.name.toRawUTF8(), ok ? "tuned" : "DID NOT CONVERGE", g.boreLength);
             for (const auto& h : g.holes)
                 std::printf ("  %.4f/%.4f", h.position, h.diameter);
+            std::printf ("\n  ");
+            for (const auto& c : chartFor (g.chart))
+                std::printf ("%s %+.0f  ", c.name, predictedCents (g, c, lowestNote (g)));
             std::printf ("\n");
         }
         printTable (g);

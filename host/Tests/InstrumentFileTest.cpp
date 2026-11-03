@@ -44,7 +44,13 @@ int main()
         CHECK (near (a.boreLength, b.boreLength) && near (a.boreDiameterTop, b.boreDiameterTop) && near (a.boreDiameterFoot, b.boreDiameterFoot));
         CHECK (near (a.wallThickness, b.wallThickness) && near (a.wallLoss, b.wallLoss));
         for (int i = 0; i < kNumHoles; ++i)
-            CHECK (near (a.holes[(size_t) i].position, b.holes[(size_t) i].position) && near (a.holes[(size_t) i].diameter, b.holes[(size_t) i].diameter));
+        {
+            CHECK (a.holes[(size_t) i].enabled == b.holes[(size_t) i].enabled);
+            if (a.holes[(size_t) i].enabled)
+                CHECK (near (a.holes[(size_t) i].position, b.holes[(size_t) i].position) && near (a.holes[(size_t) i].diameter, b.holes[(size_t) i].diameter));
+        }
+        CHECK (a.chart == b.chart && a.bellClosesFoot == b.bellClosesFoot);
+        CHECK (near (a.headLength, b.headLength) && near (a.headDiameter, b.headDiameter));
         CHECK (near (a.windwayHeight, b.windwayHeight) && near (a.windowLength, b.windowLength) && near (a.windowWidth, b.windowWidth)
                && near (a.edgeOffset, b.edgeOffset));
         CHECK (near (out->voicing.jetStrouhal, 0.031f) && near (out->voicing.jetConvection, 0.55f) && near (out->voicing.breathNoise, 0.4f)
@@ -65,6 +71,22 @@ int main()
         }
     }
 
+    // A file from before the thumb and R4 holes: six named holes, the others plugged.
+    {
+        juce::String error;
+        const auto old = fromJson (R"({ "format": "warbl-whistle", "version": 1, "holes": [
+            { "name": "L1", "position_mm": 120, "diameter_mm": 6 }, { "name": "L2", "position_mm": 140, "diameter_mm": 7 },
+            { "name": "L3", "position_mm": 160, "diameter_mm": 6.5 }, { "name": "R1", "position_mm": 190, "diameter_mm": 7 },
+            { "name": "R2", "position_mm": 200, "diameter_mm": 7 }, { "name": "R3", "position_mm": 225, "diameter_mm": 6 } ] })", error);
+        CHECK (old.has_value());
+        if (old)
+        {
+            CHECK (! old->geometry.holes[0].enabled && ! old->geometry.holes[7].enabled);
+            CHECK (old->geometry.holes[1].enabled && near (old->geometry.holes[1].position, 0.120));
+            CHECK (old->geometry.chart == FingeringChart::whistle);
+        }
+    }
+
     // Broken or meaningless files are rejected with a reason.
     auto rejected = [] (const char* json)
     {
@@ -76,7 +98,7 @@ int main()
     CHECK (rejected (R"({ "format": "something else" })"));
     CHECK (rejected (R"({ "format": "warbl-whistle", "version": 99 })"));
     CHECK (rejected (R"({ "format": "warbl-whistle", "version": 1, "bore": { "length_mm": 10 } })"));
-    CHECK (rejected (R"({ "format": "warbl-whistle", "version": 1, "holes": [ { "position_mm": 900 } ] })"));
+    CHECK (rejected (R"({ "format": "warbl-whistle", "version": 1, "holes": [ { "name": "L1", "position_mm": 900, "diameter_mm": 6 } ] })"));
     CHECK (rejected (R"({ "format": "warbl-whistle", "version": 1, "fipple": { "windwayHeight_mm": 0 } })"));
 
     std::printf (failures == 0 ? "All instrument file tests passed\n" : "%d failures\n", failures);

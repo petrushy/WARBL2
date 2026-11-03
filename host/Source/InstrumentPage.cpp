@@ -9,7 +9,7 @@ const juce::Colour accent { 0xff4fa3e0 };
 const juce::Colour coveredColour { 0xffe0a24f };
 const juce::Colour metal { 0xff9aa3ad };
 
-const char* kHoleNames[whistle::kNumHoles] = { "L1", "L2", "L3", "R1", "R2", "R3" };
+using whistle::kHoleNames;
 
 juce::String noteName (double hz)
 {
@@ -35,10 +35,17 @@ float WhistleView::xFor (double metres) const
 
 juce::Rectangle<float> WhistleView::holeBounds (int hole) const
 {
+    // Front holes above the tube; the thumb hole (on the back) below it.
     const auto& h = geometry.holes[(size_t) hole];
     const float scale = (xFor (1.0) - xFor (0.0));
     const float d = std::max (8.0f, (float) h.diameter * scale);
-    return juce::Rectangle<float> (d, d).withCentre ({ xFor (h.position), getHeight() * 0.42f });
+    return juce::Rectangle<float> (d, d).withCentre ({ xFor (h.position), getHeight() * (hole == 0 ? 0.72f : 0.38f) });
+}
+
+juce::Rectangle<float> WhistleView::footBounds() const
+{
+    const float x = xFor (geometry.boreLength);
+    return { x - 4.0f, getHeight() * 0.55f - 22.0f, 12.0f, 44.0f };
 }
 
 void WhistleView::paint (juce::Graphics& g)
@@ -79,9 +86,11 @@ void WhistleView::paint (juce::Graphics& g)
     g.setFont (11.0f);
     g.drawText ("window", juce::Rectangle<float> (x0 - 60.0f, centre - topHalf - 22.0f, 60.0f, 16.0f), juce::Justification::centred);
 
-    // Holes, with live openness
+    // Holes in use, with live openness
     for (int i = 0; i < whistle::kNumHoles; ++i)
     {
+        if (! geometry.holes[(size_t) i].enabled)
+            continue;
         const auto r = holeBounds (i);
         const float open = audio.shownOpenness[(size_t) i].load();
         g.setColour (panel.darker (0.6f));
@@ -91,7 +100,20 @@ void WhistleView::paint (juce::Graphics& g)
         g.setColour (metal);
         g.drawEllipse (r, 1.2f);
         g.setColour (text);
-        g.drawText (kHoleNames[i], r.withY (r.getBottom() + 26.0f).withHeight (14.0f).expanded (10.0f, 0.0f), juce::Justification::centred);
+        const auto label = i == 0 ? r.withY (r.getBottom() + 2.0f) : r.withY (r.getY() - 16.0f);
+        g.drawText (i == 0 ? "LT (back)" : kHoleNames[(size_t) i], label.withHeight (14.0f).expanded (24.0f, 0.0f), juce::Justification::centred);
+    }
+
+    // Foot, if the bell sensor can close it
+    if (geometry.bellClosesFoot)
+    {
+        const auto r = footBounds();
+        g.setColour (coveredColour.withAlpha (1.0f - audio.shownFootOpenness.load()));
+        g.fillRect (r);
+        g.setColour (metal);
+        g.drawRect (r, 1.2f);
+        g.setColour (text);
+        g.drawText ("bell", r.withY (r.getBottom() + 2.0f).withHeight (14.0f).expanded (14.0f, 0.0f), juce::Justification::centred);
     }
 
     g.setColour (text.withAlpha (0.7f));
@@ -103,18 +125,19 @@ void WhistleView::mouseDown (const juce::MouseEvent& e)
 {
     if (! audio.manualPlay)
         return;
-    for (int i = 0; i < whistle::kNumHoles; ++i)
+    auto toggle = [&] (std::atomic<float>& open)
     {
-        if (holeBounds (i).expanded (6.0f).contains (e.position))
-        {
-            auto& open = audio.manualOpenness[(size_t) i];
-            if (e.mods.isPopupMenu())
-                open = 0.5f;
-            else
-                open = open.load() > 0.5f ? 0.0f : 1.0f;
-            repaint();
-        }
-    }
+        if (e.mods.isPopupMenu())
+            open = 0.5f;
+        else
+            open = open.load() > 0.5f ? 0.0f : 1.0f;
+        repaint();
+    };
+    for (int i = 0; i < whistle::kNumHoles; ++i)
+        if (geometry.holes[(size_t) i].enabled && holeBounds (i).expanded (6.0f).contains (e.position))
+            toggle (audio.manualOpenness[(size_t) i]);
+    if (geometry.bellClosesFoot && footBounds().expanded (6.0f).contains (e.position))
+        toggle (audio.manualFootOpenness);
 }
 
 //==============================================================================
@@ -134,9 +157,19 @@ void TuningTable::paint (juce::Graphics& g)
     for (const auto& e : entries)
     {
         auto line = area.removeFromTop (19);
+        // Filled, open and half circles; plugged or unused holes left out.
         juce::String pattern;
         for (auto ch : e.pattern)
-            pattern += juce::String (juce::CharPointer_UTF8 (ch == 'x' ? "\xe2\x97\x8f" : "\xe2\x97\x8b"));  // Filled / open circle
+        {
+            if (ch == 'x')
+                pattern += juce::String (juce::CharPointer_UTF8 ("\xe2\x97\x8f"));
+            else if (ch == 'o')
+                pattern += juce::String (juce::CharPointer_UTF8 ("\xe2\x97\x8b"));
+            else if (ch == 'h' || ch == 'p')
+                pattern += juce::String (juce::CharPointer_UTF8 ("\xe2\x97\x90"));
+            else if (ch == '|')
+                pattern += " ";
+        }
 
         g.setColour (text);
         g.drawText (e.note, line.removeFromLeft (columns[0]), juce::Justification::centredLeft);
@@ -174,8 +207,8 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     for (int i = 0; i < 12; ++i)
         keyBox.addItem (keys[i], i + 1);
     keyBox.setSelectedId (3, juce::dontSendNotification);
-    octaveBox.addItem ("high (tin whistle)", 1);
-    octaveBox.addItem ("low (low whistle)", 2);
+    octaveBox.addItem ("high (lowest note C5-B5)", 1);
+    octaveBox.addItem ("low (lowest note C4-B4)", 2);
     octaveBox.setSelectedId (1, juce::dontSendNotification);
     keyBox.onChange = octaveBox.onChange = [this]
     {
@@ -187,6 +220,22 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     crossButton.setToggleState (true, juce::dontSendNotification);
     crossButton.setTooltip ("A smaller top hole makes the cross-fingered flat 7th (C natural on a D whistle) flatter; "
                             "this picks L1's size so that note is in tune, with C# still set by L1's position.");
+
+    chartBox.addItem ("Whistle fingering", 1);
+    chartBox.addItem ("Recorder fingering (baroque)", 2);
+    chartBox.setTooltip ("Which fingering chart the tuning table and the tuner use. The sound never uses a chart.");
+    chartBox.onChange = [this]
+    {
+        geometry.chart = chartBox.getSelectedId() == 2 ? whistle::FingeringChart::baroqueRecorder : whistle::FingeringChart::whistle;
+        geometryChanged();
+    };
+    bellButton.setColour (juce::ToggleButton::textColourId, text);
+    bellButton.setTooltip ("Covering WARBL's bell sensor closes the instrument's open foot (a recorder technique for some high notes).");
+    bellButton.onClick = [this]
+    {
+        geometry.bellClosesFoot = bellButton.getToggleState();
+        geometryChanged();
+    };
 
     tuneButton.onClick = [this]
     {
@@ -211,7 +260,7 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     loadButton.setTooltip ("Load a whistle saved earlier");
 
     for (auto* c : std::initializer_list<juce::Component*> { &presetBox, &materialBox, &keyBox, &octaveBox, &tuneButton, &tuneStatus, &crossButton,
-                                                             &saveButton, &loadButton })
+                                                             &saveButton, &loadButton, &chartBox, &bellButton })
         addAndMakeVisible (c);
     tuneStatus.setColour (juce::Label::textColourId, text);
 
@@ -231,12 +280,37 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     addLength ("Wall thickness", geometry.wallThickness, 0.2, 8.0);
     addRow ("Wall roughness (losses)", 1.0, 2.0, 0.01, "x", [this] { return geometry.wallLoss; }, [this] (double v) { geometry.wallLoss = v; });
 
-    addHeading ("Tone holes: position from the window, diameter");
+    addHeading ("Tone holes (unticked = plugged): position from the window, diameter");
     for (int i = 0; i < whistle::kNumHoles; ++i)
     {
-        addLength (kHoleNames[i], geometry.holes[(size_t) i].position, 20.0, 690.0, 0.1, RowKind::holePosition);
+        holeRow[(size_t) i] = rows.size();
+        addLength (kHoleNames[(size_t) i], geometry.holes[(size_t) i].position, 10.0, 690.0, 0.1, RowKind::holePosition);
         addLength ({}, geometry.holes[(size_t) i].diameter, 2.0, 16.0, 0.1, RowKind::holeDiameter);
+
+        auto toggle = std::make_unique<juce::ToggleButton>();
+        toggle->setWantsKeyboardFocus (false);
+        toggle->setTooltip (juce::String ("Use the ") + kHoleNames[(size_t) i] + " hole (" + (i == 0 ? "left thumb, on the back" : "front")
+                            + "); unticked, it is plugged and its sensor is ignored");
+        auto* t = toggle.get();
+        toggle->onClick = [this, i, t] { setHoleEnabled (i, t->getToggleState()); };
+        addAndMakeVisible (*toggle);
+        holeToggles[(size_t) i] = std::move (toggle);
     }
+    refreshers.push_back ([this]
+    {
+        for (int i = 0; i < whistle::kNumHoles; ++i)
+        {
+            const bool on = geometry.holes[(size_t) i].enabled;
+            holeToggles[(size_t) i]->setToggleState (on, juce::dontSendNotification);
+            for (size_t r : { holeRow[(size_t) i], holeRow[(size_t) i] + 1 })
+            {
+                rows[r].slider->setEnabled (on);
+                rows[r].label->setEnabled (on);
+            }
+        }
+        chartBox.setSelectedId (geometry.chart == whistle::FingeringChart::baroqueRecorder ? 2 : 1, juce::dontSendNotification);
+        bellButton.setToggleState (geometry.bellClosesFoot, juce::dontSendNotification);
+    });
 
     addHeading ("Fipple");
     addLength ("Windway height (jet thickness)", geometry.windwayHeight, 0.4, 3.0, 0.01);
@@ -336,6 +410,39 @@ void InstrumentPage::addHeading (juce::String name)
     headings.push_back (std::move (label));
 }
 
+void InstrumentPage::setHoleEnabled (int index, bool enabled)
+{
+    auto& hole = geometry.holes[(size_t) index];
+    hole.enabled = enabled;
+    if (enabled && (hole.diameter <= 0.0 || hole.position <= 0.0 || hole.position >= geometry.boreLength))
+    {
+        // A hole that was never used: give it a size and put it between its neighbours.
+        hole.diameter = 0.006;
+        double above = 0.0, below = geometry.boreLength;
+        for (int i = 1; i < index; ++i)
+            if (geometry.holes[(size_t) i].enabled)
+                above = std::max (above, geometry.holes[(size_t) i].position);
+        for (int i = index + 1; i < whistle::kNumHoles; ++i)
+            if (geometry.holes[(size_t) i].enabled)
+                below = std::min (below, geometry.holes[(size_t) i].position);
+        hole.position = index == 0 ? std::max (0.02, geometry.holes[1].position - 0.015) : 0.5 * (above + below);
+    }
+    refreshSliders();
+    geometryChanged();
+}
+
+void InstrumentPage::showKeyOfInstrument()
+{
+    // The key the instrument is in: its lowest note (all holes covered).
+    const auto r = whistle::resonances (geometry, whistle::Openness::allClosed(), 100.0, 2000.0);
+    if (! r.empty())
+    {
+        const int midi = (int) std::lround (69.0 + 12.0 * std::log2 (r.front() / 440.0));
+        octaveBox.setSelectedId (midi >= 72 ? 1 : 2, juce::dontSendNotification);
+        keyBox.setSelectedId ((midi % 12 + 12) % 12 + 1, juce::dontSendNotification);
+    }
+}
+
 void InstrumentPage::refreshSliders()
 {
     for (auto& refresh : refreshers)
@@ -352,9 +459,7 @@ void InstrumentPage::loadPreset (int index)
         if (std::abs (whistle::materials()[i].wallThickness - geometry.wallThickness) < 1e-6)
             materialBox.setSelectedId ((int) i + 1, juce::dontSendNotification);
 
-    // The presets are all in D; low whistles an octave down.
-    keyBox.setSelectedId (3, juce::dontSendNotification);
-    octaveBox.setSelectedId (geometry.boreLength > 0.4 ? 2 : 1, juce::dontSendNotification);
+    showKeyOfInstrument();
     tuneStatus.setText ({}, juce::dontSendNotification);
     refreshSliders();
     geometryChanged();
@@ -375,8 +480,20 @@ void InstrumentPage::timerCallback()
         tuningDirty = false;
         const double lowest = lowestNoteHz();
         std::vector<TuningTable::Entry> entries;
-        for (const auto& c : whistle::standardChart())
-            entries.push_back ({ noteName (lowest * std::pow (2.0, c.semitones / 12.0)), c.pattern, whistle::predictedCents (geometry, c, lowest) });
+        for (const auto& c : whistle::chartFor (geometry.chart))
+        {
+            // The pattern for the holes in use, grouped as thumb | left hand | right hand.
+            juce::String pattern;
+            for (int i = 0; i < whistle::kNumHoles && c.pattern[i] != 0; ++i)
+            {
+                if (! geometry.holes[(size_t) i].enabled)
+                    continue;
+                if ((i == 1 && geometry.holes[0].enabled) || i == 4)
+                    pattern << '|';
+                pattern << (c.pattern[i] == '-' ? 'o' : c.pattern[i]);
+            }
+            entries.push_back ({ noteName (lowest * std::pow (2.0, c.semitones / 12.0)), pattern, whistle::predictedCents (geometry, c, lowest) });
+        }
         tuningTable.setEntries (std::move (entries));
     }
 
@@ -414,14 +531,7 @@ void InstrumentPage::setInstrument (const whistle::Instrument& instrument)
             && std::abs (whistle::materials()[i].wallLoss - geometry.wallLoss) < 1e-6)
             materialBox.setSelectedId ((int) i + 1, juce::dontSendNotification);
 
-    // Show the tuning for the key the instrument is in: its lowest note (all holes covered).
-    const auto r = whistle::resonances (geometry, whistle::scaleFingering (whistle::kNumHoles), 100.0, 2000.0);
-    if (! r.empty())
-    {
-        const int midi = (int) std::lround (69.0 + 12.0 * std::log2 (r.front() / 440.0));
-        octaveBox.setSelectedId (midi >= 72 ? 1 : 2, juce::dontSendNotification);
-        keyBox.setSelectedId ((midi % 12 + 12) % 12 + 1, juce::dontSendNotification);
-    }
+    showKeyOfInstrument();
 
     tuneStatus.setText ({}, juce::dontSendNotification);
     refreshSliders();
@@ -507,6 +617,9 @@ void InstrumentPage::resized()
     octaveBox.setBounds (tuneRow.removeFromLeft (160).reduced (2));
     tuneStatus.setBounds (tuneRow);
     crossButton.setBounds (left.removeFromTop (24));
+    auto chartRow = left.removeFromTop (28);
+    chartBox.setBounds (chartRow.removeFromLeft (260).reduced (2));
+    bellButton.setBounds (chartRow.withTrimmedLeft (8));
     left.removeFromTop (4);
 
     // Rows: holes get two sliders side by side to save space.
@@ -532,8 +645,11 @@ void InstrumentPage::resized()
         if (row.kind == RowKind::holePosition)
         {
             auto& diameter = rows[rowIndex + 1];
-            row.label->setBounds (line.removeFromLeft (40));
-            row.slider->setBounds (line.removeFromLeft (270));
+            for (int i = 0; i < whistle::kNumHoles; ++i)
+                if (holeRow[(size_t) i] == rowIndex)
+                    holeToggles[(size_t) i]->setBounds (line.removeFromLeft (26));
+            row.label->setBounds (line.removeFromLeft (30));
+            row.slider->setBounds (line.removeFromLeft (258));
             diameter.label->setBounds ({});
             diameter.slider->setBounds (line);
         }

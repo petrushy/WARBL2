@@ -45,7 +45,12 @@ Settings, all live:
 
 - **Bore:** length, diameter at the top and at the foot (cylindrical or tapered), wall thickness (sets the chimney height of the tone holes) and wall roughness. Choosing a material sets the last two.
 - **Head section:** a part of the bore from the window down with its own diameter, widening (or narrowing) to the bore over its length, like the narrower head of Goldie whistles. Narrowing the bore near the window lowers the low register more than the second, which widens the octaves. In the model, a head 30 mm long and 10.5 mm at the window (12 mm bore) brings the played second register from 7–28 cents flat to close to in tune. Narrower or longer heads overshoot. Compare designs with `WhistleCheck head [preset]` (tuning) and `WhistleCheck chart [preset] headlength=<mm> headdiameter=<mm>` (played). The "D whistle, narrow head" preset uses 30 mm / 10.5 mm.
-- **Tone holes:** position and diameter of each hole.
+
+The **soprano recorder in C** preset uses baroque fingering, all eight holes, a reverse-conical bore (13 mm to 9.5 mm), 3.5 mm walls and a wider windway. Its dimensions are typical values, not a measured instrument. Its F# fork is in tune via R1's size; the Bb fork (+29 cents) and the pinched-thumb upper octave (+4 to +26) are left to the geometry. In the simulation every chart note plays, including the forks and the upper octave. Low C still starts sharp (+58 cents at its threshold), as the lowest note of every preset does to a lesser degree.
+
+The presets store their tuned dimensions: the tuner is too slow to run at startup. `WhistleCheck code` retunes them and prints the numbers for `WhistleGeometry.cpp`, and the `PresetTuningTest` test fails if they drift out of tune.
+- **Tone holes:** up to eight, one per WARBL finger sensor: LT (left thumb, on the back), L1–L3 and R1–R4. Each has a position, a diameter and a switch. An unticked hole is plugged, as if it weren't drilled, and its sensor is ignored; a whistle uses L1–R3. **Bell sensor closes the foot** lets the bell sensor cover the open end (a recorder technique).
+- **Fingering chart:** whistle, or baroque recorder (with the forked F, F# and Bb, and the second register by pinching the thumb hole). The chart is used by the tuning table, the tuner and the checks, never by the sound.
 - **Fipple:** windway height (jet thickness), window length (flue exit to edge), window width, and edge offset.
 - **Voicing:** the jet's band (Strouhal number), how fast disturbances travel along the jet, and breath noise.
 - **Output level.**

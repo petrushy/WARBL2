@@ -74,8 +74,8 @@ void WhistleModel::resetState()
     for (auto& d : left) d = {};
     for (auto& f : lossRight) f.y1 = 0.0f;
     for (auto& f : lossLeft) f.y1 = 0.0f;
-    holeX1.fill (0.0f);
-    holeY1.fill (0.0f);
+    for (auto& st : holeState)
+        st.fill (0.0f);
     jetLine.fill (0.0f);
     for (auto& st : jetState)
         st.fill (0.0f);
@@ -106,7 +106,8 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
     if (hasHead)
         points.push_back ({ g.headLength, -1 });
     for (int i = 0; i < kNumHoles; ++i)
-        points.push_back ({ juce::jlimit (0.005, g.boreLength - 0.005, g.holes[(size_t) i].position), i });
+        if (g.holes[(size_t) i].enabled)
+            points.push_back ({ juce::jlimit (0.005, g.boreLength - 0.005, g.holes[(size_t) i].position), i });
     std::sort (points.begin(), points.end());
     points.push_back ({ g.boreLength, -1 });
 
@@ -178,6 +179,7 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
         const double b = 0.5 * g.holes[(size_t) i].diameter;
         out.holeArea[(size_t) i] = (float) (kPi * b * b);
         out.holeLength[(size_t) i] = (float) g.holeEffectiveLength (i);
+        out.holeChimney[(size_t) i] = (float) std::max (g.wallThickness, 0.0003);  // As in Acoustics
     }
 
     // Window end: the air in the window (area Aw, effective length tw) is a mass the jet's pressure has to
@@ -191,6 +193,7 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
     const double kf = std::tan (kSpeedOfSound / footRadius / (2.0 * rate));
     out.footB = (float) (kf / (1.0 + kf));
     out.footA = (float) ((1.0 - kf) / (1.0 + kf));
+    out.bellClosesFoot = g.bellClosesFoot;
 
     out.windwayHeight = (float) g.windwayHeight;
     out.windowLength = (float) g.windowLength;
@@ -206,6 +209,7 @@ void WhistleModel::setControls (const Controls& controls)
     const int rampSamples = std::max (1, (int) (0.002 * rate));  // One sensor frame period.
     for (int i = 0; i < kNumHoles; ++i)
         opennessStep[(size_t) i] = (target.openness[(size_t) i] - current.openness[(size_t) i]) / rampSamples;
+    footStep = (target.footOpenness - current.footOpenness) / rampSamples;
     pressureStep = (target.mouthPressure - current.mouthPressure) / rampSamples;
     rampRemaining = rampSamples;
 }
@@ -216,6 +220,7 @@ float WhistleModel::tick()
     {
         for (int i = 0; i < kNumHoles; ++i)
             current.openness[(size_t) i] += opennessStep[(size_t) i];
+        current.footOpenness += footStep;
         current.mouthPressure += pressureStep;
         if (--rampRemaining == 0)
             current = target;
@@ -317,8 +322,12 @@ float WhistleModel::tick()
     };
     radiate (0, -flowIntoBore);
 
-    // 4. Junctions inside the bore. Pressure there is the area-weighted sum of the arriving waves; an open hole
-    //    lets low frequencies escape (a highpass whose corner rises with the open area).
+    // 4. Junctions inside the bore. Pressure there is the area-weighted sum of the arriving waves, filtered by
+    //    the hole's shunt: its open part is a short tube to the outside that lets low frequencies escape (an
+    //    inertance), its covered part a small closed chimney whose air volume flattens the notes below it (a
+    //    compliance). In units of bore area: p = sum * s / (tau s^2 + s + w), with w = A_open c / (t_e (S1 + S2))
+    //    and tau = A_covered t / (c (S1 + S2)); bilinear transform per sample.
+    const float bilinear = 2.0f * (float) rate;
     for (int jn = 1; jn < n; ++jn)
     {
         const float a = arriveRight[(size_t) jn - 1], b = arriveLeft[(size_t) jn];
@@ -330,27 +339,41 @@ float WhistleModel::tick()
         if (hole >= 0)
         {
             const float open = juce::jlimit (0.0f, 1.0f, current.openness[(size_t) hole]);
-            const float corner = std::max (6.0f, cfg.holeArea[(size_t) hole] * open * c / (cfg.holeLength[(size_t) hole] * (s1 + s2)));
-            const float k = std::tan (corner / (2.0f * (float) rate));
-            const float a1 = (1.0f - k) / (1.0f + k);
-            p = (sum - holeX1[(size_t) jn]) / (1.0f + k) + a1 * holeY1[(size_t) jn];
-            holeX1[(size_t) jn] = sum;
-            holeY1[(size_t) jn] = p;
+            const float area = cfg.holeArea[(size_t) hole];
+            const float w = area * open * c / (cfg.holeLength[(size_t) hole] * (s1 + s2));
+            const float tau = area * (1.0f - open) * cfg.holeChimney[(size_t) hole] / (c * (s1 + s2));
 
-            radiate (jn, (s1 * (2.0f * a - p) + s2 * (2.0f * b - p)) / (rho * c));  // Flow out of the hole
+            const float k = bilinear, tk2 = tau * k * k;
+            const float a0 = tk2 + k + w;
+            const float a1 = (2.0f * w - 2.0f * tk2) / a0;
+            const float a2 = (tk2 - k + w) / a0;
+            const float b0 = k / a0;  // b1 = 0, b2 = -b0
+
+            auto& st = holeState[(size_t) jn];  // x1, x2, y1, y2
+            p = b0 * (sum - st[1]) - a1 * st[2] - a2 * st[3];
+            st[1] = st[0];
+            st[0] = sum;
+            st[3] = st[2];
+            st[2] = p;
+
+            // Flow leaving the junction; only the open part of the hole radiates (the chimney is closed).
+            radiate (jn, open * (s1 * (2.0f * a - p) + s2 * (2.0f * b - p)) / (rho * c));
         }
 
         sendRight[(size_t) jn] = p - b;
         sendLeft[(size_t) jn - 1] = p - a;
     }
 
-    // 5. Open foot.
+    // 5. Foot: open (radiating, reflection -1 at low frequencies) or, if the bell sensor may close it, a blend
+    //    towards a closed end (reflection +1, nothing radiated).
     const float arrivingFoot = arriveRight[(size_t) n - 1];
     const float lowpassed = cfg.footB * (arrivingFoot + footX1) + cfg.footA * footY1;
     footX1 = arrivingFoot;
     footY1 = lowpassed;
-    sendLeft[(size_t) n - 1] = -lowpassed;
-    radiate (n, cfg.area[(size_t) n - 1] / (rho * c) * (arrivingFoot + lowpassed));
+    const float footOpen = cfg.bellClosesFoot ? juce::jlimit (0.0f, 1.0f, current.footOpenness) : 1.0f;
+    const float reflectedFoot = -footOpen * lowpassed + (1.0f - footOpen) * arrivingFoot;
+    sendLeft[(size_t) n - 1] = reflectedFoot;
+    radiate (n, cfg.area[(size_t) n - 1] / (rho * c) * (arrivingFoot - reflectedFoot));
 
     // 6. Send the new waves into the sections.
     for (int k = 0; k < n; ++k)
@@ -385,8 +408,8 @@ void WhistleModel::render (float* out, int numSamples)
             {
                 for (auto& d : right) d = {};
                 for (auto& d : left) d = {};
-                holeX1.fill (0.0f);
-                holeY1.fill (0.0f);
+                for (auto& st : holeState)
+                    st.fill (0.0f);
             }
         }
     }

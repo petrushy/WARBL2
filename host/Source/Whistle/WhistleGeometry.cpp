@@ -1,7 +1,5 @@
 #include "WhistleGeometry.h"
 
-#include "Acoustics.h"
-
 namespace whistle
 {
 
@@ -26,6 +24,7 @@ const std::vector<Geometry>& presets()
         g.boreLength = length;
         g.boreDiameterTop = top;
         g.boreDiameterFoot = foot;
+        g.headDiameter = top;
         g.holes = holes;
         g.wallThickness = wall;
         g.wallLoss = loss;
@@ -36,38 +35,54 @@ const std::vector<Geometry>& presets()
         return g;
     };
 
-    // Hole positions and bore lengths below are starting points; they are tuned when the list is first made
-    // (which also sets L1's diameter so the cross-fingered C natural is in tune).
+    // Bore lengths, hole positions and the cross-fingering hole sizes (whistles: L1 for C natural; recorder:
+    // R1 for the F# fork) come from the tuner: `WhistleCheck code` prints them. PresetTuningTest checks they are
+    // still in tune with the current acoustics. Holes: LT, L1, L2, L3, R1, R2, R3, R4 as { used, position, diameter }.
     static const std::vector<Geometry> list = [&]
     {
-        std::vector<Geometry> whistles {
-        make ("D whistle, cylindrical metal", 0.2550, 0.0120, 0.0120,
-              { { { 0.1010, 0.0065 }, { 0.1235, 0.0070 }, { 0.1445, 0.0065 }, { 0.1730, 0.0072 }, { 0.1960, 0.0068 }, { 0.2170, 0.0058 } } },
-              0.0005, 1.0, 0.0010, 0.0050, 0.0080),
-        make ("D whistle, conical metal", 0.2550, 0.0130, 0.0105,
-              { { { 0.1010, 0.0065 }, { 0.1235, 0.0070 }, { 0.1445, 0.0065 }, { 0.1730, 0.0072 }, { 0.1960, 0.0068 }, { 0.2170, 0.0058 } } },
-              0.0005, 1.0, 0.0010, 0.0050, 0.0080),
-        [&]
-        {
-            // A narrower bore around the fipple, widening to the 12 mm bore over 30 mm: widens the octaves,
-            // which in the model brings the played second register close to in tune (WhistleCheck head).
-            auto g = make ("D whistle, narrow head", 0.2550, 0.0120, 0.0120,
-                           { { { 0.1010, 0.0065 }, { 0.1235, 0.0070 }, { 0.1445, 0.0065 }, { 0.1730, 0.0072 }, { 0.1960, 0.0068 }, { 0.2170, 0.0058 } } },
-                           0.0005, 1.0, 0.0010, 0.0050, 0.0080);
-            g.headLength = 0.030;
-            g.headDiameter = 0.0105;
-            return g;
-        }(),
-        make ("D whistle, wood", 0.2550, 0.0125, 0.0125,
-              { { { 0.1010, 0.0080 }, { 0.1235, 0.0085 }, { 0.1445, 0.0080 }, { 0.1730, 0.0070 }, { 0.1960, 0.0092 }, { 0.2170, 0.0072 } } },
-              0.0040, 1.3, 0.0010, 0.0050, 0.0085),
-        make ("Low D whistle", 0.5300, 0.0220, 0.0220,
-              { { { 0.2050, 0.0100 }, { 0.2500, 0.0110 }, { 0.2920, 0.0105 }, { 0.3500, 0.0115 }, { 0.3960, 0.0110 }, { 0.4380, 0.0095 } } },
-              0.0010, 1.0, 0.0016, 0.0090, 0.0150),
+        std::vector<Geometry> instruments {
+            make ("D whistle, cylindrical metal", 0.26679, 0.0120, 0.0120,
+                  { { { false, 0.0, 0.0 }, { true, 0.11921, 0.00402 }, { true, 0.14440, 0.00700 }, { true, 0.16425, 0.00650 },
+                      { true, 0.19032, 0.00720 }, { true, 0.20065, 0.00680 }, { true, 0.22627, 0.00580 }, { false, 0.0, 0.0 } } },
+                  0.0005, 1.0, 0.0010, 0.0050, 0.0080),
+            make ("D whistle, conical metal", 0.26352, 0.0130, 0.0105,
+                  { { { false, 0.0, 0.0 }, { true, 0.11603, 0.00396 }, { true, 0.14163, 0.00700 }, { true, 0.16171, 0.00650 },
+                      { true, 0.18774, 0.00720 }, { true, 0.19854, 0.00680 }, { true, 0.22473, 0.00580 }, { false, 0.0, 0.0 } } },
+                  0.0005, 1.0, 0.0010, 0.0050, 0.0080),
+            [&]
+            {
+                // A narrower bore around the fipple, widening to the 12 mm bore over 30 mm: widens the octaves,
+                // which in the model brings the played second register close to in tune (WhistleCheck head).
+                auto g = make ("D whistle, narrow head", 0.26342, 0.0120, 0.0120,
+                               { { { false, 0.0, 0.0 }, { true, 0.11778, 0.00405 }, { true, 0.14237, 0.00700 }, { true, 0.16183, 0.00650 },
+                                   { true, 0.18758, 0.00720 }, { true, 0.19775, 0.00680 }, { true, 0.22312, 0.00580 }, { false, 0.0, 0.0 } } },
+                               0.0005, 1.0, 0.0010, 0.0050, 0.0080);
+                g.headLength = 0.030;
+                g.headDiameter = 0.0105;
+                return g;
+            }(),
+            make ("D whistle, wood", 0.25926, 0.0125, 0.0125,
+                  { { { false, 0.0, 0.0 }, { true, 0.11835, 0.00672 }, { true, 0.14030, 0.00850 }, { true, 0.15909, 0.00800 },
+                      { true, 0.18208, 0.00700 }, { true, 0.19543, 0.00920 }, { true, 0.21689, 0.00720 }, { false, 0.0, 0.0 } } },
+                  0.0040, 1.3, 0.0010, 0.0050, 0.0085),
+            make ("Low D whistle", 0.54129, 0.0220, 0.0220,
+                  { { { false, 0.0, 0.0 }, { true, 0.24368, 0.00693 }, { true, 0.29238, 0.01100 }, { true, 0.33283, 0.01050 },
+                      { true, 0.38549, 0.01150 }, { true, 0.40603, 0.01100 }, { true, 0.45773, 0.00950 }, { false, 0.0, 0.0 } } },
+                  0.0010, 1.0, 0.0016, 0.0090, 0.0150),
+            [&]
+            {
+                // Soprano recorder in C with baroque fingering: reverse-conical bore (wide at the top), thumb hole on
+                // the back, all seven front holes, thick walls and a wide windway. Typical dimensions, not a measured
+                // instrument; the hole sizes other than R1 are first guesses.
+                auto g = make ("Soprano recorder in C (baroque fingering)", 0.29514, 0.0130, 0.0095,
+                               { { { true, 0.10922, 0.00600 }, { true, 0.12366, 0.00600 }, { true, 0.13573, 0.00600 }, { true, 0.15416, 0.00550 },
+                                   { true, 0.17115, 0.00402 }, { true, 0.20193, 0.00650 }, { true, 0.21463, 0.00500 }, { true, 0.24295, 0.00450 } } },
+                               0.0035, 1.1, 0.0012, 0.0045, 0.0100);
+                g.chart = FingeringChart::baroqueRecorder;
+                return g;
+            }(),
         };
-        for (auto& g : whistles)
-            tuneToScale (g, g.boreLength > 0.4 ? 293.66 : 587.33, true);  // D4 / D5, with C natural in tune too
-        return whistles;
+        return instruments;
     }();
     return list;
 }

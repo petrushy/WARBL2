@@ -7,7 +7,6 @@ namespace
 {
 constexpr const char* kFormat = "warbl-whistle";
 constexpr int kVersion = 1;
-const char* kHoleNames[kNumHoles] = { "L1", "L2", "L3", "R1", "R2", "R3" };
 
 juce::var object()
 {
@@ -51,16 +50,21 @@ juce::var toVar (const Instrument& instrument)
     set (bore, "headDiameter_mm", g.headDiameter * 1000.0);
     root.getDynamicObject()->setProperty ("bore", bore);
 
+    // Only the holes that are used; the others are plugged.
     juce::Array<juce::var> holes;
     for (int i = 0; i < kNumHoles; ++i)
     {
+        if (! g.holes[(size_t) i].enabled)
+            continue;
         auto hole = object();
-        hole.getDynamicObject()->setProperty ("name", kHoleNames[i]);
+        hole.getDynamicObject()->setProperty ("name", kHoleNames[(size_t) i]);
         set (hole, "position_mm", g.holes[(size_t) i].position * 1000.0);
         set (hole, "diameter_mm", g.holes[(size_t) i].diameter * 1000.0);
         holes.add (hole);
     }
     root.getDynamicObject()->setProperty ("holes", holes);
+    root.getDynamicObject()->setProperty ("bellClosesFoot", g.bellClosesFoot);
+    root.getDynamicObject()->setProperty ("fingeringChart", g.chart == FingeringChart::baroqueRecorder ? "recorder (baroque)" : "whistle");
 
     auto fipple = object();
     set (fipple, "windwayHeight_mm", g.windwayHeight * 1000.0);
@@ -108,14 +112,29 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     read (bore, "headLength_mm", g.headLength, 0.001);
     read (bore, "headDiameter_mm", g.headDiameter, 0.001);
 
+    // Holes are listed by name; the ones not listed are plugged.
     if (const auto* holes = root["holes"].getArray())
     {
-        for (int i = 0; i < std::min (kNumHoles, holes->size()); ++i)
+        for (auto& h : g.holes)
+            h.enabled = false;
+        for (const auto& entry : *holes)
         {
-            read ((*holes)[i], "position_mm", g.holes[(size_t) i].position, 0.001);
-            read ((*holes)[i], "diameter_mm", g.holes[(size_t) i].diameter, 0.001);
+            const auto name = entry["name"].toString();
+            for (int i = 0; i < kNumHoles; ++i)
+            {
+                if (name != kHoleNames[(size_t) i])
+                    continue;
+                auto& hole = g.holes[(size_t) i];
+                hole.enabled = true;
+                read (entry, "position_mm", hole.position, 0.001);
+                read (entry, "diameter_mm", hole.diameter, 0.001);
+            }
         }
     }
+    if (root.hasProperty ("bellClosesFoot"))
+        g.bellClosesFoot = (bool) root["bellClosesFoot"];
+    if (root.hasProperty ("fingeringChart"))
+        g.chart = root["fingeringChart"].toString().startsWith ("recorder") ? FingeringChart::baroqueRecorder : FingeringChart::whistle;
 
     const auto& fipple = root["fipple"];
     read (fipple, "windwayHeight_mm", g.windwayHeight, 0.001);
@@ -141,7 +160,8 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     bad (g.headLength < 0.0 || g.headLength >= g.boreLength, "The head section must be shorter than the bore");
     bad (g.windwayHeight <= 0.0 || g.windowLength <= 0.0 || g.windowWidth <= 0.0, "Fipple sizes must be positive");
     for (const auto& h : g.holes)
-        bad (h.diameter <= 0.0 || h.position <= 0.0 || h.position >= g.boreLength, "Every hole needs a positive size and a position inside the bore");
+        if (h.enabled)
+            bad (h.diameter <= 0.0 || h.position <= 0.0 || h.position >= g.boreLength, "Every hole needs a positive size and a position inside the bore");
     if (error.isNotEmpty())
         return std::nullopt;
 

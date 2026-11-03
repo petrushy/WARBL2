@@ -32,6 +32,9 @@ public:
                 main->showInstrument();
             if (args.contains ("--sensors"))
                 main->showSensors();
+            const auto preset = args.indexOf ("--preset");
+            if (preset >= 0 && preset + 1 < args.size())
+                main->loadPreset (args[preset + 1].getIntValue());
         }
 
         const auto index = args.indexOf ("--snapshot");

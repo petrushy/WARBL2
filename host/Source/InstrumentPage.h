@@ -21,6 +21,7 @@ public:
 
 private:
     juce::Rectangle<float> holeBounds (int hole) const;
+    juce::Rectangle<float> footBounds() const;
     float xFor (double metres) const;
 
     AudioEngine& audio;
@@ -51,6 +52,8 @@ public:
     explicit InstrumentPage (AudioEngine&);
     ~InstrumentPage() override;
 
+    void loadPreset (int index);
+
     // The whole design (geometry and voicing), e.g. for saving the app's state.
     whistle::Instrument getInstrument() const;
     void setInstrument (const whistle::Instrument&);
@@ -76,7 +79,6 @@ private:
 
     void geometryChanged();
     void refreshSliders();
-    void loadPreset (int index);
     void timerCallback() override;
 
     AudioEngine& audio;
@@ -87,8 +89,14 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
     void saveToFile();
     void loadFromFile();
-    juce::ToggleButton crossButton { "Also tune the cross-fingered flat 7th (oxxooo) with L1's size" };
+    juce::ToggleButton crossButton { "Also tune cross-fingerings with hole size (whistle: C natural sets L1)" };
+    juce::ToggleButton bellButton { "Bell sensor closes the foot" };
+    juce::ComboBox chartBox;
+    std::array<std::unique_ptr<juce::ToggleButton>, whistle::kNumHoles> holeToggles;
+    std::array<size_t, whistle::kNumHoles> holeRow {};  // Index in rows of each hole's position slider.
     double lowestNoteHz() const;
+    void showKeyOfInstrument();
+    void setHoleEnabled (int hole, bool enabled);
     juce::Label tuneStatus;
 
     std::vector<Row> rows;
@@ -98,7 +106,7 @@ private:
 
     WhistleView whistleView { audio };
     TuningTable tuningTable;
-    juce::ToggleButton enableButton { "Whistle sound on" }, manualButton { "Play from screen" };
+    juce::ToggleButton enableButton { "Sound on" }, manualButton { "Play from screen" };
     juce::Slider manualBreath;
     juce::Label manualBreathLabel { {}, "Breath" }, liveLabel, tableTitle;
 
