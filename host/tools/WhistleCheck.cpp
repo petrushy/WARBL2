@@ -7,9 +7,11 @@
 //   WhistleCheck chart [preset]   every fingering of a standard whistle chart: predicted and played tuning
 //   WhistleCheck head [preset]    how a narrower head section changes the second register's tuning
 //   WhistleCheck scale [preset] [file.wav]  the app's test scale: plan, play, measure each note (and save it)
+//   WhistleCheck noise [preset] [noise=] [direct=] [wav=]  breath noise vs. tone, airy notes below the threshold
 //   WhistleCheck modes [preset]   which register (resonance) each fingering plays as the pressure rises to 8.5 kPa
 
 #include <juce_audio_formats/juce_audio_formats.h>
+#include <juce_dsp/juce_dsp.h>
 
 #include "Whistle/Acoustics.h"
 #include "Whistle/PitchDetect.h"
@@ -305,6 +307,123 @@ int main (int argc, char* argv[])
                          g.holes[0].diameter * 1000.0, g.holes[0].position * 1000.0);
         }
         chart (g);
+        return 0;
+    }
+
+    if (mode == "noise")  // noise [preset] [noise=0-1] [direct=0-1] [wav=file]: breath noise vs. tone, and a crescendo
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        const auto& g = presets()[index];
+        auto voicing = presetVoicing (index);
+        float direct = 0.3f;
+        juce::String wavPath;
+        for (int i = 3; i < argc; ++i)
+        {
+            const juce::String arg (argv[i]);
+            const auto value = arg.fromFirstOccurrenceOf ("=", false, false);
+            if (arg.startsWith ("noise=")) voicing.breathNoise = value.getFloatValue();
+            if (arg.startsWith ("direct=")) direct = value.getFloatValue();
+            if (arg.startsWith ("wav=")) wavPath = value;
+        }
+
+        constexpr double rate = 48000.0;
+        auto makeModel = [&]
+        {
+            auto model = std::make_unique<WhistleModel>();
+            model->setGeometry (g);
+            model->prepare (rate);
+            model->jetStrouhal = voicing.jetStrouhal;
+            model->jetConvection = voicing.jetConvection;
+            model->breathNoise = voicing.breathNoise;
+            model->directNoise = direct;
+            return model;
+        };
+
+        constexpr int fftOrder = 14, fftSize = 1 << fftOrder;
+        juce::dsp::FFT fft (fftOrder);
+        std::printf ("%s, breath noise %.2f, direct %.2f\n", g.name.toRawUTF8(), voicing.breathNoise, direct);
+
+        for (int semitones : { 0, 5 })
+        {
+            const ChartFingering* fingering = nullptr;
+            for (const auto& c : chartFor (g.chart))
+                if (c.semitones == semitones && c.reg == 1 && fingering == nullptr)
+                    fingering = &c;
+            const double target = lowestNote (g) * std::pow (2.0, semitones / 12.0);
+            std::printf ("  %s (%s, %.0f Hz):\n", fingering->name, fingering->holePattern (g).c_str(), target);
+
+            for (double pressure : { 60.0, 120.0, 200.0, 300.0, 500.0, 800.0, 1200.0, 2000.0 })
+            {
+                auto model = makeModel();
+                auto controls = controlsFor (fingering->openness (g));
+                std::vector<float> out ((size_t) (rate * 0.8), 0.0f);
+                for (int at = 0; at < (int) out.size(); at += 96)
+                {
+                    controls.mouthPressure = (float) (pressure * std::min (1.0, at / (rate * 0.04)));
+                    model->setControls (controls);
+                    model->render (out.data() + at, std::min (96, (int) out.size() - at));
+                }
+
+                // Spectrum of the last ~0.34 s.
+                std::vector<float> data ((size_t) fftSize * 2, 0.0f);
+                double rms = 0.0;
+                for (int i = 0; i < fftSize; ++i)
+                {
+                    const float x = out[out.size() - (size_t) fftSize + (size_t) i];
+                    rms += (double) x * x;
+                    data[(size_t) i] = x * (0.5f - 0.5f * std::cos (2.0f * juce::MathConstants<float>::pi * (float) i / (fftSize - 1)));
+                }
+                fft.performFrequencyOnlyForwardTransform (data.data(), true);
+                const double binHz = rate / fftSize;
+                auto db = [] (double v) { return 20.0 * std::log10 (v + 1e-12); };
+
+                // Strongest spectral peak (the tone, or the strongest resonance of an airy note), and how far the
+                // noise between the peak's harmonics (1-8 kHz, median) lies below it.
+                int peak = (int) (200.0 / binHz);
+                for (int b = peak; b < (int) (5000.0 / binHz); ++b)
+                    if (data[(size_t) b] > data[(size_t) peak])
+                        peak = b;
+                const double f = peak * binHz;
+                std::vector<double> between;
+                for (int b = (int) (1000.0 / binHz); b < (int) (8000.0 / binHz); ++b)
+                {
+                    const double harmonic = b * binHz / f;
+                    if (std::abs (harmonic - std::round (harmonic)) > 0.25)
+                        between.push_back (data[(size_t) b]);
+                }
+                std::nth_element (between.begin(), between.begin() + (long) between.size() / 2, between.end());
+                const double snr = db (data[(size_t) peak]) - db (between[between.size() / 2]);
+                std::printf ("    %5.0f Pa  level %6.1f dBFS  peak %6.0f Hz %-4s  %5.1f dB above the noise between its harmonics%s\n", pressure,
+                             10.0 * std::log10 (rms / fftSize + 1e-20), f, noteName (f).c_str(), snr, snr < 25.0 ? "  (airy, no clear tone)" : "");
+            }
+        }
+
+        if (wavPath.isNotEmpty())
+        {
+            // Crescendo on the second fingering: from silence through the airy whoosh into the tone, then held.
+            const ChartFingering* fingering = nullptr;
+            for (const auto& c : chartFor (g.chart))
+                if (c.semitones == 5 && fingering == nullptr)
+                    fingering = &c;
+            auto model = makeModel();
+            auto controls = controlsFor (fingering->openness (g));
+            std::vector<float> out ((size_t) (rate * 6.0), 0.0f);
+            for (int at = 0; at < (int) out.size(); at += 96)
+            {
+                controls.mouthPressure = (float) (1200.0 * std::min (1.0, at / (rate * 5.0)));
+                model->setControls (controls);
+                model->render (out.data() + at, std::min (96, (int) out.size() - at));
+            }
+            juce::AudioBuffer<float> buffer (1, (int) out.size());
+            buffer.copyFrom (0, 0, out.data(), (int) out.size());
+            const juce::File file = juce::File::getCurrentWorkingDirectory().getChildFile (wavPath);
+            file.deleteFile();
+            std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (file);
+            juce::WavAudioFormat wav;
+            if (auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions().withSampleRate (rate).withNumChannels (1).withBitsPerSample (24)))
+                writer->writeFromAudioSampleBuffer (buffer, 0, buffer.getNumSamples());
+            std::printf ("Saved %s (0 to 1200 Pa over 5 s on %s)\n", file.getFullPathName().toRawUTF8(), fingering->name);
+        }
         return 0;
     }
 

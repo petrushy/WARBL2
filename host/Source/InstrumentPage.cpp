@@ -329,7 +329,12 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     addRow ("Jet wave speed (x jet speed)", 0.3, 0.9, 0.01, "", [&model] { return (double) model.jetConvection.load(); },
             [&model] (double v) { model.jetConvection = (float) v; }, false);
     addRow ("Breath noise", 0.0, 1.0, 0.01, "", [&model] { return (double) model.breathNoise.load(); },
-            [&model] (double v) { model.breathNoise = (float) v; }, false);
+            [&model] (double v) { model.breathNoise = (float) v; }, false)
+        .setTooltip ("Turbulence where the jet hits the edge. It grows with jet speed and gets brighter as you blow harder, and it "
+                     "goes into the bore, so the bore's resonances colour it (an airy note below the playing threshold).");
+    addRow ("Breath noise heard directly", 0.0, 1.0, 0.01, "", [&model] { return (double) model.directNoise.load(); },
+            [&model] (double v) { model.directNoise = (float) v; }, false)
+        .setTooltip ("How much of the edge noise escapes straight out of the window, rather than only through the bore.");
 
     addHeading ("Output (breath and hole response: Sensors tab)");
     addRow ("Output level", -30.0, 12.0, 0.5, "dB", [&model] { return (double) model.outputGainDb.load(); },
@@ -472,6 +477,7 @@ void InstrumentPage::loadPreset (int index)
     model.jetConvection = voicing.jetConvection;
     model.breathNoise = voicing.breathNoise;
     model.outputGainDb = voicing.outputGainDb;
+    model.directNoise = voicing.directNoise;
 
     for (size_t i = 0; i < whistle::materials().size(); ++i)
         if (std::abs (whistle::materials()[i].wallThickness - geometry.wallThickness) < 1e-6)
@@ -533,7 +539,8 @@ whistle::Instrument InstrumentPage::getInstrument() const
     whistle::Instrument instrument;
     instrument.geometry = geometry;
     const auto& model = audio.whistleModel;
-    instrument.voicing = { model.jetStrouhal.load(), model.jetConvection.load(), model.breathNoise.load(), model.outputGainDb.load() };
+    instrument.voicing = { model.jetStrouhal.load(), model.jetConvection.load(), model.breathNoise.load(), model.outputGainDb.load(),
+                           model.directNoise.load() };
     return instrument;
 }
 
@@ -545,6 +552,7 @@ void InstrumentPage::setInstrument (const whistle::Instrument& instrument)
     model.jetConvection = instrument.voicing.jetConvection;
     model.breathNoise = instrument.voicing.breathNoise;
     model.outputGainDb = instrument.voicing.outputGainDb;
+    model.directNoise = instrument.voicing.directNoise;
 
     presetBox.setText (geometry.name, juce::dontSendNotification);
     materialBox.setSelectedId (0, juce::dontSendNotification);

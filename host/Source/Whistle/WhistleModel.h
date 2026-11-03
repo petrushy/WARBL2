@@ -43,7 +43,8 @@ public:
     // Adds the radiated sound (mono) to out.
     void render (float* out, int numSamples);
 
-    std::atomic<float> breathNoise { 0.25f };  // Turbulence in the jet, 0..1
+    std::atomic<float> breathNoise { 0.25f };  // Turbulence at the jet and edge, 0..1 (its level grows with jet speed)
+    std::atomic<float> directNoise { 0.3f };   // How much of the edge noise escapes straight from the window, 0..1
     std::atomic<float> outputGainDb { 0.0f };
     // Jet behaviour (see tick()): the frequency it amplifies most (Strouhal number f h / U), how broad that
     // band is, and how fast disturbances travel along it relative to the jet speed.
@@ -126,7 +127,8 @@ private:
     float jetB0 = 0.0f, jetA1 = 0.0f, jetA2 = 0.0f;
     std::array<std::array<float, 4>, 3> jetState {};  // x1, x2, y1, y2 per band-pass stage
     int jetFilterCountdown = 0;
-    float noiseState1 = 0.0f, noiseState2 = 0.0f;
+    float noiseLow = 0.0f, noiseHigh = 0.0f, noiseLowA = 0.0f, noiseHighA = 0.0f, noiseNorm = 1.0f;
+    int noiseFilterCountdown = 0;
     std::minstd_rand rng { 12345 };
     std::normal_distribution<float> gauss { 0.0f, 1.0f };
 

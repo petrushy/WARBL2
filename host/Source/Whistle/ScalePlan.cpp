@@ -26,7 +26,7 @@ double play (const Geometry& g, const Voicing& v, const Openness& open, double p
     model.prepare (rate);
     model.jetStrouhal = v.jetStrouhal;
     model.jetConvection = v.jetConvection;
-    model.breathNoise = v.breathNoise;
+    model.breathNoise = 0.0f;  // The pitch comes from the tone; breath noise would only confuse the pitch detector.
 
     Controls controls;
     for (int i = 0; i < kNumHoles; ++i)

@@ -11,8 +11,19 @@ namespace whistle
 
 // Fundamental frequency of the last ~0.1 s of x (Hz), or 0 if not clearly periodic; clarity is the peak
 // correlation (1 = perfectly periodic).
-inline double measurePitch (const std::vector<float>& x, double rate, double& clarity)
+inline double measurePitch (const std::vector<float>& input, double rate, double& clarity)
 {
+    // Breath hiss lies mostly above the notes: low-pass it out first (two one-pole stages at 4 kHz).
+    std::vector<float> x (input.size());
+    const float a = 1.0f - (float) std::exp (-2.0 * 3.14159265358979 * 4000.0 / rate);
+    float s1 = 0.0f, s2 = 0.0f;
+    for (size_t i = 0; i < input.size(); ++i)
+    {
+        s1 += a * (input[i] - s1);
+        s2 += a * (s1 - s2);
+        x[i] = s2;
+    }
+
     clarity = 0.0;
     const size_t window = (size_t) (0.1 * rate);
     const int minLag = (int) (rate / 3000.0), maxLag = (int) (rate / 120.0);

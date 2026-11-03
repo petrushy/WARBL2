@@ -114,8 +114,9 @@ struct Voicing
 {
     float jetStrouhal = 0.02f;   // Frequency the jet amplifies most, as f h / U
     float jetConvection = 0.6f;  // Speed of disturbances along the jet, relative to the jet speed
-    float breathNoise = 0.25f;
+    float breathNoise = 0.25f;   // Turbulence at the jet and edge (grows with jet speed)
     float outputGainDb = 0.0f;
+    float directNoise = 0.3f;    // How much of the edge noise escapes straight from the window
 };
 
 // Starting points, tuned (see WhistleGeometry.cpp).

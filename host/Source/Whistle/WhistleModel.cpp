@@ -14,6 +14,9 @@ constexpr float c = (float) kSpeedOfSound;
 constexpr double kMaxSectionLength = 0.03;
 constexpr double kMaxHeadSectionLength = 0.008;  // Finer sections where a head section changes the diameter.
 constexpr double kListenerDistance = 0.5;  // m in front of the window, for the radiation delays and level.
+constexpr float kNoiseStrouhal = 0.2f;    // Turbulence band centre, as f h / U
+constexpr float kEdgeNoise = 0.5f;        // Edge pressure fluctuation at 20 m/s, as a fraction of rho U^2 (Breath noise 1)
+constexpr float kDirectNoise = 4.0f;      // Share of the edge noise radiated straight from the window (at 1)
 
 // Amplitude attenuation per metre from viscous and thermal wall losses at frequency hz (tube radius a).
 double wallAttenuation (double hz, double a, double wallLoss)
@@ -77,6 +80,8 @@ void WhistleModel::resetState()
     for (auto& st : holeState)
         st.fill (0.0f);
     jetLine.fill (0.0f);
+    noiseLow = noiseHigh = 0.0f;
+    noiseFilterCountdown = 0;
     for (auto& st : jetState)
         st.fill (0.0f);
     jetFilterCountdown = 0;
@@ -258,10 +263,28 @@ float WhistleModel::tick()
     const float delayed = (1.0f - frac) * jetLine[(size_t) ((jetWrite - whole) & (kJetLineSize - 1))]
                           + frac * jetLine[(size_t) ((jetWrite - whole - 1) & (kJetLineSize - 1))];
 
-    // Turbulent fluctuations of the jet (band-limited noise), growing with jet speed.
-    noiseState1 += 0.25f * (gauss (rng) - noiseState1);
-    noiseState2 += 0.05f * (noiseState1 - noiseState2);
-    const float turbulence = breathNoise.load (std::memory_order_relaxed) * (noiseState1 - noiseState2) * 2.0f;
+    // Turbulence. One noise signal, in a band centred on a frequency that rises with the jet speed (f ~ U / h:
+    // blowing harder sounds brighter), drives two things:
+    //  - edge noise: a pressure fluctuation of order rho U^2 where the jet hits the edge. It enters the bore at the
+    //    window like the tone does, so the bore's resonances colour it (below the playing threshold it is an airy
+    //    whoosh at the fingered note); part of it also escapes straight out of the window (see radiate below).
+    //  - a small wobble of the jet's deflection, which makes the tone itself slightly unsteady.
+    if ((noiseFilterCountdown--) <= 0)
+    {
+        noiseFilterCountdown = 8;
+        const float centre = juce::jlimit (300.0f, 0.3f * (float) rate, kNoiseStrouhal * speed / h);
+        noiseLowA = 1.0f - std::exp (-2.0f * (float) kPi * 2.0f * centre / (float) rate);   // Lowpass an octave above
+        noiseHighA = 1.0f - std::exp (-2.0f * (float) kPi * 0.5f * centre / (float) rate);  // Highpass an octave below
+        noiseNorm = 1.0f / std::sqrt (noiseLowA / (2.0f - noiseLowA));  // Keeps the band's level independent of its centre
+    }
+    noiseLow += noiseLowA * (gauss (rng) - noiseLow);
+    noiseHigh += noiseHighA * (noiseLow - noiseHigh);
+    const float band = (noiseLow - noiseHigh) * noiseNorm;
+
+    const float amount = breathNoise.load (std::memory_order_relaxed);
+    // Edge (dipole) noise: radiated power grows as U^6, so pressure as U^3: rho U^2 times U / 20 m/s.
+    const float edgeNoise = amount * kEdgeNoise * rho * jetSpeed * jetSpeed * (jetSpeed / 20.0f) * band;  // Pa
+    const float turbulence = amount * 0.5f * band;  // In jet half-widths
 
     // A jet amplifies disturbances most around one frequency, set by its speed and thickness (Strouhal number
     // f h / U), and less above and below. Blowing harder moves that band up, which is what lets the higher
@@ -298,7 +321,7 @@ float WhistleModel::tick()
     // Pressure the jet produces across the window (jet drive), minus losses from vortices shed at the edge.
     const float jetDrive = rho * cfg.dipoleLength / cfg.windowArea * jetFlowRate;
     const float vortexLoss = -0.5f * rho * (windowVelocity / 0.6f) * std::abs (windowVelocity / 0.6f);
-    const float source = jetDrive + vortexLoss;
+    const float source = jetDrive + vortexLoss + edgeNoise;
 
     // 3. Window end. The jet's pressure pushes the air in the window (mass M) into the bore:
     //    p_top = source - M dU/dt, with p_top = p+ + p- and U = (p+ - p-) / Z0, solved for the outgoing p+
@@ -320,7 +343,8 @@ float WhistleModel::tick()
         radiation[(size_t) ((radiationRead + i) & (kRadiationSize - 1))] += flow * (1.0f - f);
         radiation[(size_t) ((radiationRead + i + 1) & (kRadiationSize - 1))] += flow * f;
     };
-    radiate (0, -flowIntoBore);
+    // Out of the window: the air the bore pushes out, plus the edge noise that escapes directly.
+    radiate (0, -flowIntoBore + directNoise.load (std::memory_order_relaxed) * kDirectNoise * edgeNoise * cfg.windowArea / (rho * c));
 
     // 4. Junctions inside the bore. Pressure there is the area-weighted sum of the arriving waves, filtered by
     //    the hole's shunt: its open part is a short tube to the outside that lets low frequencies escape (an
