@@ -44,7 +44,7 @@ public:
     void render (float* out, int numSamples);
 
     std::atomic<float> noiseStrouhal { 0.08f };  // Turbulence band centre, as f h / U (0.08: ~2-3 kHz when playing)
-    std::atomic<float> breathNoise { 0.1f };  // Turbulence at the jet and edge, 0..1 (its level grows with jet speed)
+    std::atomic<float> breathNoise { 0.05f };  // Turbulence at the jet and edge, 0..1 (its level grows with jet speed)
     std::atomic<float> directNoise { 0.0f };   // How much of the edge noise escapes straight from the window, 0..1
     std::atomic<float> noisePulsing { 0.8f };  // How much the edge noise comes in bursts as the jet crosses the edge, 0..1
     std::atomic<float> outputGainDb { 0.0f };
