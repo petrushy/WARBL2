@@ -24,10 +24,12 @@ inline float applyCurve (float x, float curve)
 
 struct Breath
 {
+    // By default the model gets the pressure actually blown (1:1) up to the sensor's ceiling: its 12-bit reading
+    // tops out at 4095 counts, ~3050 above the usual ambient reading of ~1040, at ~1.66 Pa per count.
     float inputMin = 10.0f;     // Pa measured. Below this: no breath (also rejects sensor noise).
-    float inputMax = 2500.0f;   // Pa measured that gives the full output.
+    float inputMax = 5000.0f;   // Pa measured that gives the full output.
     float curve = 64.0f;
-    float outputMax = 2500.0f;  // Pa sent to the model at full input.
+    float outputMax = 5000.0f;  // Pa sent to the model at full input.
 
     float map (float measuredPa) const
     {
