@@ -26,6 +26,29 @@ int main()
             }
         }
     }
+    // A whistle moved from WARBL's L1-R3 sensors to L2-R4 is the same instrument: identical predicted tuning.
+    for (const auto& preset : presets())
+    {
+        if (preset.chart != FingeringChart::whistle)
+            continue;
+        auto moved = preset;
+        if (! moveFrontHoles (moved, 2) || firstFrontHole (moved) != 2 || moved.holes[1].enabled || ! moved.holes[7].enabled)
+        {
+            std::printf ("FAILED moving %s to L2-R4\n", preset.name.toRawUTF8());
+            ++failures;
+            continue;
+        }
+        for (const auto& c : chartFor (preset.chart))
+        {
+            const double before = predictedCents (preset, c, 587.33), after = predictedCents (moved, c, 587.33);
+            if (std::abs (before - after) > 0.01)
+            {
+                std::printf ("FAILED %s on L2-R4, %s: %+.2f vs %+.2f cents\n", preset.name.toRawUTF8(), c.name, after, before);
+                ++failures;
+            }
+        }
+    }
+
     std::printf (failures == 0 ? "All presets in tune\n" : "%d notes out of tune\n", failures);
     return failures == 0 ? 0 : 1;
 }

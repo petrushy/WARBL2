@@ -14,6 +14,30 @@ const std::vector<Material>& materials()
     return list;
 }
 
+bool moveFrontHoles (Geometry& g, int firstHole)
+{
+    std::vector<ToneHole> used;
+    for (int i = 1; i < kNumHoles; ++i)
+        if (g.holes[(size_t) i].enabled)
+            used.push_back (g.holes[(size_t) i]);
+    if (firstHole < 1 || firstHole + (int) used.size() > kNumHoles)
+        return false;
+
+    for (int i = 1; i < kNumHoles; ++i)
+        g.holes[(size_t) i] = {};
+    for (size_t k = 0; k < used.size(); ++k)
+        g.holes[(size_t) firstHole + k] = used[k];
+    return true;
+}
+
+int firstFrontHole (const Geometry& g)
+{
+    for (int i = 1; i < kNumHoles; ++i)
+        if (g.holes[(size_t) i].enabled)
+            return i;
+    return 0;
+}
+
 const std::vector<Geometry>& presets()
 {
     auto make = [] (juce::String name, double length, double top, double foot, std::array<ToneHole, kNumHoles> holes,

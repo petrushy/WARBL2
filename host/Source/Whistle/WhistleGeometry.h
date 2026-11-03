@@ -112,4 +112,12 @@ const std::vector<Material>& materials();
 // Starting points; hole positions are tuned for an equal-tempered D major scale.
 const std::vector<Geometry>& presets();
 
+// Puts the instrument's front holes (in order, keeping each hole's position and size) on WARBL's sensors
+// starting at `firstHole` (1 = L1, 2 = L2, ...), e.g. a six-hole whistle on L2-R4 instead of L1-R3. The thumb
+// hole is left as it is. Returns false (and changes nothing) if they don't fit.
+bool moveFrontHoles (Geometry&, int firstHole);
+
+// The first front hole in use (1 = L1 ...), or 0 if none.
+int firstFrontHole (const Geometry&);
+
 } // namespace whistle

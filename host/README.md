@@ -50,6 +50,7 @@ The **soprano recorder in C** preset uses baroque fingering, all eight holes, a 
 
 The presets store their tuned dimensions: the tuner is too slow to run at startup. `WhistleCheck code` retunes them and prints the numbers for `WhistleGeometry.cpp`, and the `PresetTuningTest` test fails if they drift out of tune.
 - **Tone holes:** up to eight, one per WARBL finger sensor: LT (left thumb, on the back), L1–L3 and R1–R4. Each has a position, a diameter and a switch. An unticked hole is plugged, as if it weren't drilled, and its sensor is ignored; a whistle uses L1–R3. **Bell sensor closes the foot** lets the bell sensor cover the open end (a recorder technique).
+- **Sensors for a whistle:** "Finger holes on sensors L1–R3 / L2–R4" chooses which WARBL sensors play a six-hole whistle. The whistle itself doesn't change: its holes keep their positions and sizes, only the sensors move. Whistle presets load on the sensors chosen. The whistle chart is relative (its six fingers are the holes in use, from the top), so the tuning table and tuner work either way. The built-in simulator always plays on L1–R3.
 - **Fingering chart:** whistle, or baroque recorder (with the forked F, F# and Bb, and the second register by pinching the thumb hole). The chart is used by the tuning table, the tuner and the checks, never by the sound.
 - **Fipple:** windway height (jet thickness), window length (flue exit to edge), window width, and edge offset.
 - **Voicing:** the jet's band (Strouhal number), how fast disturbances travel along the jet, and breath noise.

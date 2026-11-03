@@ -129,19 +129,65 @@ std::vector<double> resonances (const Geometry& g, const Openness& open, double 
     return found;
 }
 
+std::vector<int> chartHoles (const Geometry& g)
+{
+    std::vector<int> holes;
+    if (g.chart == FingeringChart::baroqueRecorder)
+    {
+        for (int i = 0; i < kNumHoles; ++i)
+            holes.push_back (i);
+        return holes;
+    }
+    for (int i = 1; i < kNumHoles; ++i)  // Front holes, top first
+        if (g.holes[(size_t) i].enabled)
+            holes.push_back (i);
+    return holes;
+}
+
+int ChartFingering::holeFor (const Geometry& g, int finger)
+{
+    const auto holes = chartHoles (g);
+    return finger >= 0 && finger < (int) holes.size() ? holes[(size_t) finger] : -1;
+}
+
+Openness ChartFingering::openness (const Geometry& g) const
+{
+    Openness open;
+    for (auto& h : open.holes)
+        h = 1.0;
+    const auto holes = chartHoles (g);
+    for (size_t finger = 0; finger < holes.size() && pattern[finger] != 0; ++finger)
+    {
+        const char c = pattern[finger];
+        open.holes[(size_t) holes[finger]] = c == 'x' ? 0.0 : c == 'h' ? 0.5 : c == 'p' ? 0.25 : 1.0;
+    }
+    return open;
+}
+
+std::string ChartFingering::holePattern (const Geometry& g) const
+{
+    std::string out (kNumHoles, '-');
+    const auto holes = chartHoles (g);
+    for (size_t finger = 0; finger < holes.size() && pattern[finger] != 0; ++finger)
+        out[(size_t) holes[finger]] = pattern[finger];
+    return out;
+}
+
 const std::vector<ChartFingering>& chartFor (FingeringChart chart)
 {
     constexpr int bore = ChartFingering::kTunesBore, none = ChartFingering::kTunesNothing;
 
-    // Patterns in hole order: LT L1 L2 L3 R1 R2 R3 R4. Hole indices: LT 0, L1 1, L2 2, L3 3, R1 4, R2 5, R3 6, R4 7.
+    // Whistle: six fingers, top first (finger 0 is the top hole, L1 or L2 depending on the sensors used).
     static const std::vector<ChartFingering> whistle {
-        { "D", "-xxxxxx-", 0, 1, bore },       { "E", "-xxxxxo-", 2, 1, 6 },          { "F#", "-xxxxoo-", 4, 1, 5 },
-        { "G", "-xxxooo-", 5, 1, 4 },          { "A", "-xxoooo-", 7, 1, 3 },          { "B", "-xooooo-", 9, 1, 2 },
-        { "C nat", "-oxxooo-", 10, 1, none, 1 }, { "C#", "-oooooo-", 11, 1, 1 },
-        { "high D", "-oxxxxx-", 12, 2 },       { "high D", "-xxxxxx-", 12, 2 },       { "high E", "-xxxxxo-", 14, 2 },
-        { "high F#", "-xxxxoo-", 16, 2 },      { "high G", "-xxxooo-", 17, 2 },       { "high A", "-xxoooo-", 19, 2 },
-        { "high B", "-xooooo-", 21, 2 },
+        { "D", "xxxxxx", 0, 1, bore },         { "E", "xxxxxo", 2, 1, 5 },            { "F#", "xxxxoo", 4, 1, 4 },
+        { "G", "xxxooo", 5, 1, 3 },            { "A", "xxoooo", 7, 1, 2 },            { "B", "xooooo", 9, 1, 1 },
+        { "C nat", "oxxooo", 10, 1, none, 0 }, { "C#", "oooooo", 11, 1, 0 },
+        { "high D", "oxxxxx", 12, 2 },         { "high D", "xxxxxx", 12, 2 },         { "high E", "xxxxxo", 14, 2 },
+        { "high F#", "xxxxoo", 16, 2 },        { "high G", "xxxooo", 17, 2 },         { "high A", "xxoooo", 19, 2 },
+        { "high B", "xooooo", 21, 2 },
     };
+
+    // Recorder: the eight holes by name, LT L1 L2 L3 R1 R2 R3 R4 (fingers = hole indices).
 
     // Baroque recorder fingering in C, with its forked F, F# and Bb. Each hole's position is set by a note
     // that uses it (R2 by the forked F, the thumb hole by high D: thumb open, L2 covered). With cross-fingering
@@ -163,7 +209,7 @@ double predictedCents (const Geometry& g, const ChartFingering& c, double lowest
 {
     const double target = lowestHz * std::pow (2.0, c.semitones / 12.0);
     double nearest = 0.0;
-    for (double f : resonances (g, c.openness(), target * 0.7, target * 1.4))
+    for (double f : resonances (g, c.openness (g), target * 0.7, target * 1.4))
         if (nearest == 0.0 || std::abs (std::log2 (f / target)) < std::abs (std::log2 (nearest / target)))
             nearest = f;
     return nearest > 0.0 ? 1200.0 * std::log2 (nearest / target) : 0.0;
@@ -222,27 +268,28 @@ bool tunePositions (Geometry& g, double lowestHz)
         double below = g.boreLength;  // Position of the hole tuned just before (lower down).
         for (const auto& c : chart)
         {
+            const int index = ChartFingering::holeFor (g, c.tunes);
             if (c.tunes == ChartFingering::kTunesBore)
             {
-                if (! solveLength (g, g.boreLength, 0.05, 2.0, c.openness(), targetFor (c)))
+                if (! solveLength (g, g.boreLength, 0.05, 2.0, c.openness (g), targetFor (c)))
                     return false;
                 below = g.boreLength;
             }
-            else if (c.tunes >= 0 && g.holes[(size_t) c.tunes].enabled)
+            else if (index >= 0 && g.holes[(size_t) index].enabled)
             {
-                auto& hole = g.holes[(size_t) c.tunes];
-                const double hi = c.tunes == 0 ? g.boreLength - hole.diameter  // The thumb hole is on the back.
-                                               : below - hole.diameter;
-                if (! solveLength (g, hole.position, 0.01, hi, c.openness(), targetFor (c)))
+                auto& hole = g.holes[(size_t) index];
+                const double hi = index == 0 ? g.boreLength - hole.diameter  // The thumb hole is on the back.
+                                             : below - hole.diameter;
+                if (! solveLength (g, hole.position, 0.01, hi, c.openness (g), targetFor (c)))
                     return false;
-                if (c.tunes != 0)
+                if (index != 0)
                     below = hole.position;
             }
         }
 
         double worst = 0.0;
         for (const auto& c : chart)
-            if (c.tunes != ChartFingering::kTunesNothing && (c.tunes < 0 || g.holes[(size_t) c.tunes].enabled))
+            if (c.tunes == ChartFingering::kTunesBore || ChartFingering::holeFor (g, c.tunes) >= 0)
                 worst = std::max (worst, std::abs (predictedCents (g, c, lowestHz)));
         if (worst < 1.5)
             return true;
@@ -257,7 +304,7 @@ namespace
 // E.g. a smaller top hole vents less, so the covered holes below it pull the cross-fingered note further down.
 bool tuneDiameter (Geometry& g, double lowestHz, const ChartFingering& cross)
 {
-    auto& diameter = g.holes[(size_t) cross.tunesDiameter].diameter;
+    auto& diameter = g.holes[(size_t) ChartFingering::holeFor (g, cross.tunesDiameter)].diameter;
     const double original = diameter;
     const Geometry originalGeometry = g;
     auto crossError = [&] (double d)
@@ -319,7 +366,7 @@ bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingerings)
     std::vector<const ChartFingering*> crosses;
     if (tuneCrossFingerings)
         for (const auto& c : chartFor (g.chart))
-            if (c.tunesDiameter >= 0 && g.holes[(size_t) c.tunesDiameter].enabled)
+            if (ChartFingering::holeFor (g, c.tunesDiameter) >= 0)
                 crosses.push_back (&c);
 
     if (crosses.empty())

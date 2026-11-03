@@ -55,13 +55,13 @@ void printTable (const Geometry& g)
     std::printf ("\n%s\n  fingering   register 1          register 2        2/1 ratio (cents from octave)\n", g.name.toRawUTF8());
     for (const auto& c : lowRegister (g))
     {
-        const auto r = resonances (g, c.openness(), lowestNote (g) * 0.6, lowestNote (g) * 6.0);
+        const auto r = resonances (g, c.openness (g), lowestNote (g) * 0.6, lowestNote (g) * 6.0);
         if (r.size() < 2)
         {
-            std::printf ("  %s    (fewer than 2 resonances)\n", c.pattern);
+            std::printf ("  %s    (fewer than 2 resonances)\n", c.holePattern (g).c_str());
             continue;
         }
-        std::printf ("  %s    %7.1f Hz %-4s %+5.0f   %7.1f Hz %-4s   %+5.0f\n", c.pattern, r[0], noteName (r[0]).c_str(), centsFromNearest (r[0]),
+        std::printf ("  %s    %7.1f Hz %-4s %+5.0f   %7.1f Hz %-4s   %+5.0f\n", c.holePattern (g).c_str(), r[0], noteName (r[0]).c_str(), centsFromNearest (r[0]),
                      r[1], noteName (r[1]).c_str(), 1200.0 * std::log2 (r[1] / r[0]) - 1200.0);
     }
 }
@@ -134,8 +134,8 @@ static void play (const Geometry& g)
 
     for (const auto& c : lowRegister (g))
     {
-        const auto predicted = resonances (g, c.openness(), lowestNote (g) * 0.6, lowestNote (g) * 6.0);
-        std::printf ("  %s    %6.0f/%6.0f  ", c.pattern, predicted.size() > 0 ? predicted[0] : 0.0, predicted.size() > 1 ? predicted[1] : 0.0);
+        const auto predicted = resonances (g, c.openness (g), lowestNote (g) * 0.6, lowestNote (g) * 6.0);
+        std::printf ("  %s    %6.0f/%6.0f  ", c.holePattern (g).c_str(), predicted.size() > 0 ? predicted[0] : 0.0, predicted.size() > 1 ? predicted[1] : 0.0);
 
         for (double pressure : pressures)
         {
@@ -146,7 +146,7 @@ static void play (const Geometry& g)
             model.jetQ = jetQ;
             model.jetConvection = convection;
             model.jetStages = stages;
-            auto controls = controlsFor (c.openness());
+            auto controls = controlsFor (c.openness (g));
             // Blow up to the pressure over 40 ms, like a player, then hold.
             std::vector<float> out ((size_t) (rate * 0.6), 0.0f);
             const int block = (int) (rate * 0.002);
@@ -242,7 +242,7 @@ static void chart (const Geometry& g)
 
     for (const auto& c : chartFor (g.chart))
     {
-        const auto open = c.openness();
+        const auto open = c.openness (g);
         const double target = lowest * std::pow (2.0, c.semitones / 12.0);
         const double cents = predictedCents (g, c, lowest);
 
@@ -254,7 +254,7 @@ static void chart (const Geometry& g)
                 hits.push_back ({ pressure, 1200.0 * std::log2 (f / target) });
         }
 
-        std::printf ("  %-8s  %s     %+5.0f c               ", c.name, c.pattern, cents);
+        std::printf ("  %-8s  %s     %+5.0f c               ", c.name, c.holePattern (g).c_str(), cents);
         if (hits.empty())
             std::printf ("never\n");
         else
@@ -342,11 +342,11 @@ int main (int argc, char* argv[])
         {
             if (c.reg != 1)
                 continue;
-            const auto r = resonances (g, c.openness(), 150.0, 8000.0);
-            std::printf ("  %s  ", c.pattern);
+            const auto r = resonances (g, c.openness (g), 150.0, 8000.0);
+            std::printf ("  %s  ", c.holePattern (g).c_str());
             for (double p : pressures)
             {
-                const double f = playOnce (g, c.openness(), p);
+                const double f = playOnce (g, c.openness (g), p);
                 int resonance = 0;  // 0 = not within 100 cents of any resonance
                 for (size_t i = 0; i < r.size(); ++i)
                     if (f > 0.0 && std::abs (1200.0 * std::log2 (f / r[i])) < 100.0)

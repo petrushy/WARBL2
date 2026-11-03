@@ -8,6 +8,7 @@
 #include "WhistleGeometry.h"
 
 #include <complex>
+#include <string>
 
 namespace whistle
 {
@@ -33,21 +34,32 @@ std::complex<double> windowImpedance (const Geometry&, const Openness&, double h
 // the second the overblown register.
 std::vector<double> resonances (const Geometry&, const Openness&, double fMin = 150.0, double fMax = 5000.0);
 
+// The holes a chart's fingers refer to, in order. The recorder chart uses all eight holes by name (LT first);
+// the whistle chart's six fingers are the instrument's enabled front holes from the top, so the same whistle
+// fingerings work whether the whistle is on WARBL's L1-R3 or L2-R4 sensors.
+std::vector<int> chartHoles (const Geometry&);
+
 // A fingering chart entry: the note a fingering should give, and which part of the instrument the tuner
-// adjusts to get it.
+// adjusts to get it. Patterns and tuned holes are in chart fingers (see chartHoles()).
 struct ChartFingering
 {
     static constexpr int kTunesBore = -2;
     static constexpr int kTunesNothing = -1;
 
     const char* name;     // In the chart's own key (D for whistles, C for recorders).
-    const char* pattern;  // See Openness::fromPattern().
+    const char* pattern;  // One character per chart finger: x covered, o open, h half, p pinched (25 %).
     int semitones;        // Above the lowest note.
     int reg;              // 1 = low register, 2 = second (overblown).
-    int tunes = kTunesNothing;          // Hole index whose position is set by this note, or the bore length.
-    int tunesDiameter = kTunesNothing;  // Optional: hole whose diameter is set by this note (cross-fingerings).
+    int tunes = kTunesNothing;          // Finger whose hole's position is set by this note, or the bore length.
+    int tunesDiameter = kTunesNothing;  // Optional: finger whose hole's diameter is set by this note (cross-fingerings).
 
-    Openness openness() const { return Openness::fromPattern (pattern); }
+    Openness openness (const Geometry&) const;
+
+    // The hole a finger maps to on this instrument, or -1.
+    static int holeFor (const Geometry&, int finger);
+
+    // The pattern in hole order (LT L1 L2 L3 R1 R2 R3 R4), '-' for holes the chart doesn't use.
+    std::string holePattern (const Geometry&) const;
 };
 
 const std::vector<ChartFingering>& chartFor (FingeringChart);
