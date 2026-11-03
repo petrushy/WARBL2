@@ -76,6 +76,19 @@ Controls controlsFor (const Openness& open)
 }
 } // namespace
 
+// A preset by number or by part of its name (e.g. "recorder", "narrow head").
+static int presetArg (const char* arg)
+{
+    const juce::String text (arg);
+    if (text.containsOnly ("0123456789"))
+        return juce::jlimit (0, (int) presets().size() - 1, text.getIntValue());
+    for (size_t i = 0; i < presets().size(); ++i)
+        if (presets()[i].name.containsIgnoreCase (text))
+            return (int) i;
+    std::printf ("No preset matches \"%s\"\n", arg);
+    std::exit (1);
+}
+
 // Fundamental frequency of the last part of a signal (normalised autocorrelation), 0 if not periodic.
 static double measurePitch (const std::vector<float>& x, double rate, double& clarity)
 {
@@ -304,7 +317,7 @@ int main (int argc, char* argv[])
 
     if (mode == "chart" || mode == "chartc")  // chart [preset]; chartc retunes with the cross-fingered C natural first
     {
-        const int index = argc > 2 ? juce::String (argv[2]).getIntValue() : 0;
+        const int index = argc > 2 ? presetArg (argv[2]) : 0;
         auto g = presets()[(size_t) juce::jlimit (0, (int) presets().size() - 1, index)];
         strouhal = presetVoicing ((size_t) index).jetStrouhal;
         convection = presetVoicing ((size_t) index).jetConvection;
@@ -335,7 +348,7 @@ int main (int argc, char* argv[])
 
     if (mode == "notes")  // notes <preset> <pinch 0-1> [st=] [conv=]: the recorder's top notes with a given thumb opening
     {
-        const auto presetIndex = (size_t) juce::String (argv[2]).getIntValue();
+        const auto presetIndex = (size_t) presetArg (argv[2]);
         auto g = presets()[presetIndex];
         strouhal = presetVoicing (presetIndex).jetStrouhal;
         const double pinch = juce::String (argv[3]).getDoubleValue();
@@ -371,7 +384,7 @@ int main (int argc, char* argv[])
 
     if (mode == "modes")  // modes <preset>: which resonance (register) each chart fingering plays as pressure rises
     {
-        const auto g = presets()[(size_t) juce::String (argc > 2 ? argv[2] : "0").getIntValue()];
+        const auto g = presets()[(size_t) (argc > 2 ? presetArg (argv[2]) : 0)];
         const double pressures[] = { 300, 600, 1000, 1500, 2200, 3000, 4000, 5500, 7000, 8500 };
         std::printf ("\n%s: resonance played (1 = low register, 2 = octave, 3 = twelfth, 4 = double octave) and note\n  fingering  ", g.name.toRawUTF8());
         for (double p : pressures)
@@ -402,7 +415,7 @@ int main (int argc, char* argv[])
 
     if (mode == "sweep")  // sweep <preset> <hole> <pattern>: resonances while moving one hole
     {
-        auto g = presets()[(size_t) juce::String (argv[2]).getIntValue()];
+        auto g = presets()[(size_t) presetArg (argv[2])];
         tuneToScale (g, lowestNote (g));
         const int hole = juce::String (argv[3]).getIntValue();
         const auto open = Openness::fromPattern (argv[4]);
@@ -420,7 +433,7 @@ int main (int argc, char* argv[])
 
     if (mode == "head")  // head [preset]
     {
-        const int index = argc > 2 ? juce::String (argv[2]).getIntValue() : 0;
+        const int index = argc > 2 ? presetArg (argv[2]) : 0;
         head (presets()[(size_t) juce::jlimit (0, (int) presets().size() - 1, index)]);
         return 0;
     }
@@ -433,7 +446,7 @@ int main (int argc, char* argv[])
 
     if (mode == "play")
     {
-        const int index = argc > 2 ? juce::String (argv[2]).getIntValue() : 0;
+        const int index = argc > 2 ? presetArg (argv[2]) : 0;
         for (int i = 3; i < argc; ++i)  // st=, q=, conv=
         {
             const juce::String arg (argv[i]);
@@ -452,7 +465,7 @@ int main (int argc, char* argv[])
     for (auto g : presets())
     {
         ++presetIndex;
-        if (mode == "code" && argc > 2 && juce::String (argv[2]).getIntValue() != presetIndex)
+        if (mode == "code" && argc > 2 && presetArg (argv[2]) != presetIndex)
             continue;  // code <index>: one preset only
 
         if (mode == "code")  // The presets' holes as code, for WhistleGeometry.cpp (after tuning them with tunec).

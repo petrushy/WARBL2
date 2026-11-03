@@ -118,7 +118,25 @@ const std::vector<Geometry>& presets()
                 return g;
             }(),
         };
-        return instruments;
+
+        // Each whistle comes twice: on WARBL's L1-R3 sensors and on L2-R4 (the same instrument, played with
+        // the lower six fingers).
+        std::vector<Geometry> withSensors;
+        for (const auto& g : instruments)
+        {
+            if (g.chart != FingeringChart::whistle)
+            {
+                withSensors.push_back (g);
+                continue;
+            }
+            auto upper = g, lower = g;
+            upper.name << ", holes L1-R3";
+            lower.name << ", holes L2-R4";
+            moveFrontHoles (lower, 2);
+            withSensors.push_back (upper);
+            withSensors.push_back (lower);
+        }
+        return withSensors;
     }();
     return list;
 }

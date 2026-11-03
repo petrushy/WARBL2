@@ -229,24 +229,6 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
         geometry.chart = chartBox.getSelectedId() == 2 ? whistle::FingeringChart::baroqueRecorder : whistle::FingeringChart::whistle;
         geometryChanged();
     };
-    sensorBox.addItem ("Finger holes on sensors L1-R3", 1);
-    sensorBox.addItem ("Finger holes on sensors L2-R4", 2);
-    sensorBox.setTooltip ("Which WARBL sensors play a six-hole whistle. The whistle itself doesn't change; "
-                          "whistle presets load on the sensors chosen here.");
-    sensorBox.onChange = [this]
-    {
-        if (whistle::moveFrontHoles (geometry, sensorBox.getSelectedId()))
-        {
-            refreshSliders();
-            geometryChanged();
-        }
-        else
-        {
-            tuneStatus.setText ("Too many holes in use to move them", juce::dontSendNotification);
-            refreshSliders();
-        }
-    };
-
     bellButton.setColour (juce::ToggleButton::textColourId, text);
     bellButton.setTooltip ("Covering WARBL's bell sensor closes the instrument's open foot (a recorder technique for some high notes). "
                            "Off: the bell sensor is ignored.");
@@ -280,7 +262,7 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     loadButton.setTooltip ("Load a whistle saved earlier");
 
     for (auto* c : std::initializer_list<juce::Component*> { &presetBox, &materialBox, &keyBox, &octaveBox, &tuneButton, &tuneStatus, &crossButton,
-                                                             &saveButton, &loadButton, &chartBox, &bellButton, &sensorBox })
+                                                             &saveButton, &loadButton, &chartBox, &bellButton })
         addAndMakeVisible (c);
     tuneStatus.setColour (juce::Label::textColourId, text);
 
@@ -330,13 +312,6 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
         }
         chartBox.setSelectedId (geometry.chart == whistle::FingeringChart::baroqueRecorder ? 2 : 1, juce::dontSendNotification);
 
-        // The sensor choice applies to instruments with six front holes or fewer starting at L1 or L2.
-        int used = 0;
-        for (int i = 1; i < whistle::kNumHoles; ++i)
-            used += geometry.holes[(size_t) i].enabled ? 1 : 0;
-        const int first = whistle::firstFrontHole (geometry);
-        sensorBox.setEnabled (used <= 6);
-        sensorBox.setSelectedId (first == 1 || first == 2 ? first : 0, juce::dontSendNotification);
         bellButton.setToggleState (geometry.bellClosesFoot, juce::dontSendNotification);
     });
 
@@ -483,8 +458,6 @@ void InstrumentPage::loadPreset (int index)
 {
     if (index < 0 || index >= (int) whistle::presets().size())
         return;
-    // Whistle presets go on the sensors chosen for whistles (L1-R3 or L2-R4).
-    const int sensors = sensorBox.getSelectedId();
     geometry = whistle::presets()[(size_t) index];
 
     const auto voicing = whistle::presetVoicing ((size_t) index);
@@ -493,8 +466,6 @@ void InstrumentPage::loadPreset (int index)
     model.jetConvection = voicing.jetConvection;
     model.breathNoise = voicing.breathNoise;
     model.outputGainDb = voicing.outputGainDb;
-    if (geometry.chart == whistle::FingeringChart::whistle && sensors == 2)
-        whistle::moveFrontHoles (geometry, 2);
 
     for (size_t i = 0; i < whistle::materials().size(); ++i)
         if (std::abs (whistle::materials()[i].wallThickness - geometry.wallThickness) < 1e-6)
@@ -661,7 +632,6 @@ void InstrumentPage::resized()
     crossButton.setBounds (left.removeFromTop (24));
     auto chartRow = left.removeFromTop (28);
     chartBox.setBounds (chartRow.removeFromLeft (260).reduced (2));
-    sensorBox.setBounds (chartRow.removeFromLeft (270).reduced (2));
     left.removeFromTop (4);
 
     // Rows: holes get two sliders side by side to save space.

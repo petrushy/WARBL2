@@ -30,7 +30,7 @@ Host app:
 
     cd host && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j8
     ctest --test-dir build                                         # protocol and instrument-file tests
-    build/WhistleCheck_artefacts/Release/WhistleCheck chart 0       # whistle: predicted + played tuning per fingering
+    build/WhistleCheck_artefacts/Release/WhistleCheck chart 0       # whistle (or a name: chart recorder): predicted + played tuning
     build/ReverbCheck_artefacts/Release/ReverbCheck <dir>          # reverb times / balance vs. targets, WAVs
 
 - The first configure downloads JUCE 9.0.5. LTO is deliberately off, because linking took many minutes.
