@@ -197,7 +197,13 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
         }
     };
 
-    for (auto* c : std::initializer_list<juce::Component*> { &presetBox, &materialBox, &keyBox, &octaveBox, &tuneButton, &tuneStatus, &crossButton })
+    saveButton.onClick = [this] { saveToFile(); };
+    loadButton.onClick = [this] { loadFromFile(); };
+    saveButton.setTooltip ("Save this whistle (geometry and voicing) to a file");
+    loadButton.setTooltip ("Load a whistle saved earlier");
+
+    for (auto* c : std::initializer_list<juce::Component*> { &presetBox, &materialBox, &keyBox, &octaveBox, &tuneButton, &tuneStatus, &crossButton,
+                                                             &saveButton, &loadButton })
         addAndMakeVisible (c);
     tuneStatus.setColour (juce::Label::textColourId, text);
 
@@ -373,6 +379,93 @@ void InstrumentPage::timerCallback()
     whistleView.repaint();
 }
 
+whistle::Instrument InstrumentPage::getInstrument() const
+{
+    whistle::Instrument instrument;
+    instrument.geometry = geometry;
+    const auto& model = audio.whistleModel;
+    instrument.voicing = { model.jetStrouhal.load(), model.jetConvection.load(), model.breathNoise.load(), model.outputGainDb.load() };
+    return instrument;
+}
+
+void InstrumentPage::setInstrument (const whistle::Instrument& instrument)
+{
+    geometry = instrument.geometry;
+    auto& model = audio.whistleModel;
+    model.jetStrouhal = instrument.voicing.jetStrouhal;
+    model.jetConvection = instrument.voicing.jetConvection;
+    model.breathNoise = instrument.voicing.breathNoise;
+    model.outputGainDb = instrument.voicing.outputGainDb;
+
+    presetBox.setText (geometry.name, juce::dontSendNotification);
+    materialBox.setSelectedId (0, juce::dontSendNotification);
+    for (size_t i = 0; i < whistle::materials().size(); ++i)
+        if (std::abs (whistle::materials()[i].wallThickness - geometry.wallThickness) < 1e-6
+            && std::abs (whistle::materials()[i].wallLoss - geometry.wallLoss) < 1e-6)
+            materialBox.setSelectedId ((int) i + 1, juce::dontSendNotification);
+
+    // Show the tuning for the key the instrument is in: its lowest note (all holes covered).
+    const auto r = whistle::resonances (geometry, whistle::scaleFingering (whistle::kNumHoles), 100.0, 2000.0);
+    if (! r.empty())
+    {
+        const int midi = (int) std::lround (69.0 + 12.0 * std::log2 (r.front() / 440.0));
+        octaveBox.setSelectedId (midi >= 72 ? 1 : 2, juce::dontSendNotification);
+        keyBox.setSelectedId ((midi % 12 + 12) % 12 + 1, juce::dontSendNotification);
+    }
+
+    tuneStatus.setText ({}, juce::dontSendNotification);
+    refreshSliders();
+    geometryChanged();
+}
+
+void InstrumentPage::saveToFile()
+{
+    const auto folder = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+    fileChooser = std::make_unique<juce::FileChooser> ("Save whistle", folder.getChildFile (juce::File::createLegalFileName (geometry.name) + ".whistle"),
+                                                      "*.whistle");
+    fileChooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting,
+                              [this] (const juce::FileChooser& chooser)
+    {
+        auto file = chooser.getResult();
+        if (file == juce::File())
+            return;
+        file = file.withFileExtension ("whistle");
+
+        geometry.name = file.getFileNameWithoutExtension();
+        if (file.replaceWithText (whistle::toJson (getInstrument())))
+        {
+            presetBox.setText (geometry.name, juce::dontSendNotification);
+            tuneStatus.setText ("Saved " + file.getFileName(), juce::dontSendNotification);
+        }
+        else
+        {
+            tuneStatus.setText ("Couldn't write " + file.getFileName(), juce::dontSendNotification);
+        }
+    });
+}
+
+void InstrumentPage::loadFromFile()
+{
+    fileChooser = std::make_unique<juce::FileChooser> ("Load whistle", juce::File::getSpecialLocation (juce::File::userDocumentsDirectory), "*.whistle");
+    fileChooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& chooser)
+    {
+        const auto file = chooser.getResult();
+        if (file == juce::File())
+            return;
+
+        juce::String error;
+        if (auto instrument = whistle::fromJson (file.loadFileAsString(), error))
+        {
+            setInstrument (*instrument);
+            tuneStatus.setText ("Loaded " + file.getFileName(), juce::dontSendNotification);
+        }
+        else
+        {
+            tuneStatus.setText (file.getFileName() + ": " + error, juce::dontSendNotification);
+        }
+    });
+}
+
 double InstrumentPage::lowestNoteHz() const
 {
     // Lowest note in octave 5 (high whistles: C5..B5) or 4 (low whistles).
@@ -394,8 +487,10 @@ void InstrumentPage::resized()
     area.removeFromLeft (10);
 
     auto choose = left.removeFromTop (28);
-    presetBox.setBounds (choose.removeFromLeft (270).reduced (2));
-    materialBox.setBounds (choose.reduced (2));
+    presetBox.setBounds (choose.removeFromLeft (230).reduced (2));
+    materialBox.setBounds (choose.removeFromLeft (190).reduced (2));
+    saveButton.setBounds (choose.removeFromLeft (70).reduced (2));
+    loadButton.setBounds (choose.reduced (2));
     auto tuneRow = left.removeFromTop (28);
     tuneButton.setBounds (tuneRow.removeFromLeft (100).reduced (2));
     keyBox.setBounds (tuneRow.removeFromLeft (70).reduced (2));

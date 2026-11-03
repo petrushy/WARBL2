@@ -29,12 +29,13 @@ Firmware (board definition `adafruit:nrf52:warbl2`; the UTF-8 locale is needed b
 Host app:
 
     cd host && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j8
-    ctest --test-dir build                                         # protocol tests
+    ctest --test-dir build                                         # protocol and instrument-file tests
     build/WhistleCheck_artefacts/Release/WhistleCheck chart 0       # whistle: predicted + played tuning per fingering
     build/ReverbCheck_artefacts/Release/ReverbCheck <dir>          # reverb times / balance vs. targets, WAVs
 
 - The first configure downloads JUCE 9.0.5. LTO is deliberately off, because linking took many minutes.
 - To check the app without anyone at the screen, use `"build/WarblStream_artefacts/Release/WARBL Stream.app/Contents/MacOS/WARBL Stream" --simulate --instrument --snapshot out.png`. Other options: `--sensors`, `--play`, `--output <device>`. Read the PNG.
+- App state lives in `~/Library/Application Support/WARBL Stream/WARBL Stream.settings`. If a test changes it, put it back afterwards; it's the user's real settings.
 - A MacBook with its lid closed runs no audio at all: the app shows "blocks 0", and even `afplay` hangs. That isn't an app bug.
 
 ## Conventions

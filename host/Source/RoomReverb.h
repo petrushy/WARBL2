@@ -30,6 +30,8 @@ public:
     std::atomic<float> preDelayMs { 0.0f };
 
     juce::String getCurrentName() const;
+    int getPresetIndex() const { return presetIndex; }  // -1 when an IR file is loaded
+    juce::File getCurrentFile() const { return currentFile; }
     int getLatencySamples() { return convolution.getLatency(); }
 
 private:
@@ -41,6 +43,7 @@ private:
     juce::SmoothedValue<float> wetGain;
     juce::AudioBuffer<float> work;
     int presetIndex = -1;
+    juce::File currentFile;
 
     mutable juce::CriticalSection nameLock;
     juce::String currentName;

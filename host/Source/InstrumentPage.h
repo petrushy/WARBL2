@@ -7,6 +7,7 @@
 
 #include "AudioEngine.h"
 #include "Whistle/Acoustics.h"
+#include "Whistle/InstrumentFile.h"
 
 // Side view of the whistle to scale. Holes show how open they are; in manual play, clicking a hole covers or
 // uncovers it, and right-clicking half-covers it.
@@ -50,6 +51,10 @@ public:
     explicit InstrumentPage (AudioEngine&);
     ~InstrumentPage() override;
 
+    // The whole design (geometry and voicing), e.g. for saving the app's state.
+    whistle::Instrument getInstrument() const;
+    void setInstrument (const whistle::Instrument&);
+
     void paint (juce::Graphics&) override;
     void resized() override;
 
@@ -78,7 +83,10 @@ private:
     whistle::Geometry geometry;
 
     juce::ComboBox presetBox, materialBox, keyBox, octaveBox;
-    juce::TextButton tuneButton { "Tune holes" };
+    juce::TextButton tuneButton { "Tune holes" }, saveButton { "Save..." }, loadButton { "Load..." };
+    std::unique_ptr<juce::FileChooser> fileChooser;
+    void saveToFile();
+    void loadFromFile();
     juce::ToggleButton crossButton { "Also tune the cross-fingered flat 7th (oxxooo) with L1's size" };
     double lowestNoteHz() const;
     juce::Label tuneStatus;

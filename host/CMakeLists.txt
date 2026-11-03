@@ -32,7 +32,8 @@ target_sources(WarblStream PRIVATE
     Source/ImpulseResponse.cpp
     Source/Whistle/WhistleGeometry.cpp
     Source/Whistle/Acoustics.cpp
-    Source/Whistle/WhistleModel.cpp)
+    Source/Whistle/WhistleModel.cpp
+    Source/Whistle/InstrumentFile.cpp)
 
 target_include_directories(WarblStream PRIVATE Source)
 
@@ -57,6 +58,15 @@ enable_testing()
 add_executable(StreamProtocolTest Tests/StreamProtocolTest.cpp)
 target_include_directories(StreamProtocolTest PRIVATE Source)
 add_test(NAME StreamProtocolTest COMMAND StreamProtocolTest)
+
+# Instrument file round trip and error handling.
+juce_add_console_app(InstrumentFileTest)
+target_sources(InstrumentFileTest PRIVATE Tests/InstrumentFileTest.cpp Source/Whistle/InstrumentFile.cpp
+    Source/Whistle/WhistleGeometry.cpp Source/Whistle/Acoustics.cpp)
+target_include_directories(InstrumentFileTest PRIVATE Source)
+target_compile_definitions(InstrumentFileTest PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(InstrumentFileTest PRIVATE juce::juce_core PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_warning_flags)
+add_test(NAME InstrumentFileTest COMMAND InstrumentFileTest)
 
 # Virtual WARBL for trying the app or a synth without the instrument.
 juce_add_console_app(WarblSimulator PRODUCT_NAME "WARBL Simulator")

@@ -19,8 +19,14 @@ public:
     void showSensors() { tabs.setCurrentTabIndex (2); }
 
 private:
+    // Restores and saves the instrument, sensor response, reverb and audio device between runs.
+    void restoreState();
+    void saveState();
+
+    juce::ApplicationProperties properties;
     StreamReceiver receiver;
     AudioEngine audio { receiver };
+    InstrumentPage* instrument = nullptr;  // Owned by tabs.
 
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     MonitorPage* monitor = nullptr;  // Owned by tabs.

@@ -49,6 +49,12 @@ Settings, all live:
 - **Voicing:** the jet's band (Strouhal number), how fast disturbances travel along the jet, and breath noise.
 - **Output level.**
 
+## Saving
+
+- **The app remembers its state between runs.** It saves the current instrument, the sensor response, the reverb (room or IR file, level, pre-delay), the audio device and buffer size, and the open tab to `~/Library/Application Support/WARBL Stream/WARBL Stream.settings`.
+- **Instrument files:** **Save...** and **Load...** on the Instrument tab write and read whistle designs as `.whistle` files. These are JSON, with lengths in millimetres, so you can read and edit them by hand. Fields left out get the default whistle's values. A loaded design shows its tuning in the key it is in.
+- **Sensor curves aren't in instrument files.** They describe the player and their WARBL rather than the instrument.
+
 ## Sensor response (Sensors tab)
 
 How the readings become the model's controls, with live dots on each curve. Curves use the WARBL Config Tool's 0–127 scale: 64 is linear, lower is logarithmic (more response at the start), higher is exponential.

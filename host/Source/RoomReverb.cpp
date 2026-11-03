@@ -50,6 +50,7 @@ void RoomReverb::process (const float* input, float* left, float* right, int num
 void RoomReverb::loadPreset (int index)
 {
     presetIndex = index;
+    currentFile = juce::File();
     startGenerating (index);
 }
 
@@ -89,6 +90,7 @@ juce::String RoomReverb::loadFile (const juce::File& file)
 
     // Measured IRs start with the direct sound and have arbitrary level: trim the silence before it and normalise.
     presetIndex = -1;
+    currentFile = file;
     convolution.loadImpulseResponse (std::move (ir), reader->sampleRate, juce::dsp::Convolution::Stereo::yes,
                                      juce::dsp::Convolution::Trim::yes, juce::dsp::Convolution::Normalise::yes);
     const juce::ScopedLock lock (nameLock);

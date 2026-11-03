@@ -218,7 +218,7 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
     const auto& rooms = reverb::presets();
     for (size_t i = 0; i < rooms.size(); ++i)
         roomBox.addItem (rooms[i].name, (int) i + 1);
-    roomBox.setSelectedId (3, juce::dontSendNotification);  // Matches AudioEngine's default.
+    roomBox.setSelectedId (audio.reverb.getPresetIndex() + 1, juce::dontSendNotification);  // 0 (none) for an IR file
     roomBox.onChange = [this]
     {
         if (roomBox.getSelectedId() > 0)
