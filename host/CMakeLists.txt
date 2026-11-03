@@ -59,7 +59,7 @@ add_test(NAME StreamProtocolTest COMMAND StreamProtocolTest)
 
 # Virtual WARBL for trying the app or a synth without the instrument.
 juce_add_console_app(WarblSimulator PRODUCT_NAME "WARBL Simulator")
-target_sources(WarblSimulator PRIVATE Tools/WarblSimulator.cpp)
+target_sources(WarblSimulator PRIVATE tools/WarblSimulator.cpp)
 target_include_directories(WarblSimulator PRIVATE Source)
 target_compile_definitions(WarblSimulator PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(WarblSimulator
@@ -68,7 +68,7 @@ target_link_libraries(WarblSimulator
 
 # Measures the generated room reverbs (reverberation time, direct/reverberant ratio) and renders WAVs.
 juce_add_console_app(ReverbCheck PRODUCT_NAME "Reverb Check")
-target_sources(ReverbCheck PRIVATE Tools/ReverbCheck.cpp Source/ImpulseResponse.cpp Source/TestPhrase.cpp)
+target_sources(ReverbCheck PRIVATE tools/ReverbCheck.cpp Source/ImpulseResponse.cpp Source/TestPhrase.cpp)
 target_include_directories(ReverbCheck PRIVATE Source)
 target_compile_definitions(ReverbCheck PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(ReverbCheck
@@ -77,7 +77,7 @@ target_link_libraries(ReverbCheck
 
 # Whistle acoustics and model checks (tuning tables, offline playing tests).
 juce_add_console_app(WhistleCheck PRODUCT_NAME "Whistle Check")
-target_sources(WhistleCheck PRIVATE Tools/WhistleCheck.cpp Source/Whistle/WhistleGeometry.cpp Source/Whistle/Acoustics.cpp Source/Whistle/WhistleModel.cpp)
+target_sources(WhistleCheck PRIVATE tools/WhistleCheck.cpp Source/Whistle/WhistleGeometry.cpp Source/Whistle/Acoustics.cpp Source/Whistle/WhistleModel.cpp)
 target_include_directories(WhistleCheck PRIVATE Source)
 target_compile_definitions(WhistleCheck PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(WhistleCheck

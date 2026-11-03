@@ -3,9 +3,9 @@
 Computer-side tools for the WARBL2 sensor stream, where WARBL sends its sensor readings over USB MIDI SysEx instead of notes (see `warbl2_firmware/Sensor_stream.ino`). The plan is for a physical model on the computer to make the sound.
 
 - **WARBL Stream** (`Source/`): a Mac test app. It finds WARBL, turns the stream on, and shows the tone holes, pressure, accelerometer and gyro. It also measures frame rate, lost frames and arrival jitter. "Click on breath" plays a 1 ms click when the pressure crosses the threshold, for measuring the delay from breath to sound (see below). It has a room reverb (see below).
-- **WARBL Simulator** (`Tools/`): a virtual WARBL that plays a scale, as a separate MIDI device. The app also has this built in.
-- **ReverbCheck** (`Tools/`): measures the generated rooms and renders WAV files for listening.
-- **WhistleCheck** (`Tools/`): tunes and tabulates the whistle presets, and plays the model offline to measure what it sounds (see below).
+- **WARBL Simulator** (`tools/`): a virtual WARBL that plays a scale, as a separate MIDI device. The app also has this built in.
+- **ReverbCheck** (`tools/`): measures the generated rooms and renders WAV files for listening.
+- **WhistleCheck** (`tools/`): tunes and tabulates the whistle presets, and plays the model offline to measure what it sounds (see below).
 - **StreamProtocol.h**: the protocol decoder. It has no JUCE dependency, so a synth plugin can use it too.
 
 ## Build
