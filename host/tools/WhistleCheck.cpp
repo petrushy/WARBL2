@@ -247,7 +247,7 @@ static void chart (const Geometry& g)
         const double cents = predictedCents (g, c, lowest);
 
         std::vector<std::pair<double, double>> hits;  // Pressure, cents from target
-        for (double pressure = 200.0; pressure <= 3000.0; pressure += 100.0)
+        for (double pressure = 200.0; pressure <= 5000.0; pressure += 100.0)
         {
             const double f = playOnce (g, open, pressure);
             if (f > 0.0 && std::abs (1200.0 * std::log2 (f / target)) < 150.0)
@@ -409,8 +409,13 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    int presetIndex = -1;
     for (auto g : presets())
     {
+        ++presetIndex;
+        if (mode == "code" && argc > 2 && juce::String (argv[2]).getIntValue() != presetIndex)
+            continue;  // code <index>: one preset only
+
         if (mode == "code")  // The presets' holes as code, for WhistleGeometry.cpp (after tuning them with tunec).
         {
             tuneToScale (g, lowestNote (g), true);

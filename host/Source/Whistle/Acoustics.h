@@ -49,7 +49,7 @@ struct ChartFingering
     const char* name;     // In the chart's own key (D for whistles, C for recorders).
     const char* pattern;  // One character per chart finger: x covered, o open, h half, p pinched (25 %).
     int semitones;        // Above the lowest note.
-    int reg;              // 1 = low register, 2 = second (overblown).
+    int reg;              // 1 = low register, 2 = second octave, 3 = third octave.
     int tunes = kTunesNothing;          // Finger whose hole's position is set by this note, or the bore length.
     int tunesDiameter = kTunesNothing;  // Optional: finger whose hole's diameter is set by this note (cross-fingerings).
 

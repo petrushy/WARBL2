@@ -60,7 +60,7 @@ const std::vector<Geometry>& presets()
     };
 
     // Bore lengths, hole positions and the cross-fingering hole sizes (whistles: L1 for C natural; recorder:
-    // R1 for the F# fork) come from the tuner: `WhistleCheck code` prints them. PresetTuningTest checks they are
+    // R1 for the F# fork, R3 for E'' and L3 for A'') come from the tuner: `WhistleCheck code` prints them. PresetTuningTest checks they are
     // still in tune with the current acoustics. Holes: LT, L1, L2, L3, R1, R2, R3, R4 as { used, position, diameter }.
     static const std::vector<Geometry> list = [&]
     {
@@ -97,12 +97,13 @@ const std::vector<Geometry>& presets()
             {
                 // Soprano recorder in C with baroque fingering: reverse-conical bore (wide at the top), thumb hole on
                 // the back, all seven front holes, thick walls and a wide windway. Typical dimensions, not a measured
-                // instrument; the hole sizes other than R1 are first guesses.
-                auto g = make ("Soprano recorder in C (baroque fingering)", 0.29514, 0.0130, 0.0095,
-                               { { { true, 0.10922, 0.00600 }, { true, 0.12366, 0.00600 }, { true, 0.13573, 0.00600 }, { true, 0.15416, 0.00550 },
-                                   { true, 0.17115, 0.00402 }, { true, 0.20193, 0.00650 }, { true, 0.21463, 0.00500 }, { true, 0.24295, 0.00450 } } },
+                // instrument. R1, R3 and L3's sizes come from the tuner (F# fork, E'' and A''); the others are first guesses.
+                auto g = make ("Soprano recorder in C (baroque fingering)", 0.29545, 0.0130, 0.0095,
+                               { { { true, 0.10920, 0.00600 }, { true, 0.12361, 0.00600 }, { true, 0.13570, 0.00600 }, { true, 0.14961, 0.00455 },
+                                   { true, 0.17122, 0.00403 }, { true, 0.20204, 0.00650 }, { true, 0.21228, 0.00453 }, { true, 0.24317, 0.00450 } } },
                                0.0035, 1.1, 0.0012, 0.0045, 0.0100);
                 g.chart = FingeringChart::baroqueRecorder;
+                g.bellClosesFoot = true;  // Top C# closes the foot (on the knee); without a bell sensor it stays open.
                 return g;
             }(),
         };

@@ -156,11 +156,12 @@ Openness ChartFingering::openness (const Geometry& g) const
     for (auto& h : open.holes)
         h = 1.0;
     const auto holes = chartHoles (g);
-    for (size_t finger = 0; finger < holes.size() && pattern[finger] != 0; ++finger)
-    {
-        const char c = pattern[finger];
-        open.holes[(size_t) holes[finger]] = c == 'x' ? 0.0 : c == 'h' ? 0.5 : c == 'p' ? 0.25 : 1.0;
-    }
+    auto value = [] (char c) { return c == 'x' ? 0.0 : c == 'h' ? 0.5 : c == 'p' ? 0.25 : 1.0; };
+    size_t finger = 0;
+    for (; finger < holes.size() && pattern[finger] != 0; ++finger)
+        open.holes[(size_t) holes[finger]] = value (pattern[finger]);
+    if (finger == holes.size() && pattern[finger] != 0)  // A character after the fingers: the foot (bell)
+        open.foot = value (pattern[finger]);
     return open;
 }
 
@@ -187,19 +188,22 @@ const std::vector<ChartFingering>& chartFor (FingeringChart chart)
         { "high B", "xooooo", 21, 2 },
     };
 
-    // Recorder: the eight holes by name, LT L1 L2 L3 R1 R2 R3 R4 (fingers = hole indices).
-
-    // Baroque recorder fingering in C, with its forked F, F# and Bb. Each hole's position is set by a note
-    // that uses it (R2 by the forked F, the thumb hole by high D: thumb open, L2 covered). With cross-fingering
-    // tuning, the F# fork sets R1's size. The Bb fork and the second register (thumb pinched, leaving a small
-    // crack open) are left to the geometry: L2's size alone can't put Bb in tune.
+    // Recorder: the eight holes by name, LT L1 L2 L3 R1 R2 R3 R4 (fingers = hole indices); a ninth character is
+    // the foot (bell). Baroque fingering in C, from the Dolmetsch chart for recorders in C, with its forks; the
+    // thumb is pinched ('p', a small crack open) for the second and third octaves.
+    // Each hole's position is set by a note that uses it (R2 by the forked F, the thumb hole by D'': thumb open,
+    // L2 covered). With cross-fingering tuning some hole sizes are set too: R1 by the F# fork and, following the
+    // maker's rule that a hole's position mostly sets its low note and its size its upper note, R3 by E'' and L3
+    // by A''. The other forks and upper notes are left to the geometry.
     static const std::vector<ChartFingering> recorder {
-        { "C", "xxxxxxxx", 0, 1, bore },       { "D", "xxxxxxxo", 2, 1, 7 },          { "E", "xxxxxxoo", 4, 1, 6 },
-        { "F", "xxxxxoxx", 5, 1, 5 },          { "F#", "xxxxoxxo", 6, 1, none, 4 },   { "G", "xxxxoooo", 7, 1, 4 },
-        { "A", "xxxooooo", 9, 1, 3 },          { "Bb", "xxoxxooo", 10, 1 },  { "B", "xxoooooo", 11, 1, 2 },
-        { "high C", "xoxooooo", 12, 1, 1 },    { "high D", "ooxooooo", 14, 1, 0 },
-        { "high E", "pxxxxxoo", 16, 2 },       { "high F", "pxxxxoxo", 17, 2 },       { "high G", "pxxxoooo", 19, 2 },
-        { "high A", "pxxooooo", 21, 2 },
+        { "C", "xxxxxxxx", 0, 1, bore },          { "D", "xxxxxxxo", 2, 1, 7 },          { "E", "xxxxxxoo", 4, 1, 6 },
+        { "F", "xxxxxoxx", 5, 1, 5 },             { "F#", "xxxxoxxo", 6, 1, none, 4 },   { "G", "xxxxoooo", 7, 1, 4 },
+        { "A", "xxxooooo", 9, 1, 3 },             { "Bb", "xxoxxooo", 10, 1 },           { "B", "xxoooooo", 11, 1, 2 },
+        { "high C", "xoxooooo", 12, 1, 1 },       { "high D", "ooxooooo", 14, 1, 0 },
+        { "high E", "pxxxxxoo", 16, 2, none, 6 }, { "high F", "pxxxxoxo", 17, 2 },       { "high F#", "pxxxoxoo", 18, 2 },
+        { "high G", "pxxxoooo", 19, 2 },          { "high G#", "pxxoxooo", 20, 2 },      { "high A", "pxxooooo", 21, 2, none, 3 },
+        { "high Bb", "pxxooxxo", 22, 2 },         { "high B", "pxxoxxoo", 23, 2 },
+        { "top C", "pxooxxoo", 24, 3 },           { "top C#", "pxoxxoxox", 25, 3 },      { "top D", "pxoxxoxo", 26, 3 },
     };
 
     return chart == FingeringChart::baroqueRecorder ? recorder : whistle;
