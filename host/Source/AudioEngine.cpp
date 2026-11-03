@@ -69,17 +69,32 @@ void AudioEngine::setCalibration (const warbl::DeviceInfo& info)
     clickModel.ambient12 = info.ambientPressure * 4;
 }
 
-whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& frame) const
+response::Breath AudioEngine::breathResponse() const
 {
+    return { breathInputMin.load(), breathInputMax.load(), breathCurve.load(), breathOutputMax.load() };
+}
+
+response::Hole AudioEngine::holeResponse() const
+{
+    return { holeOpenBelow.load(), holeClosedAt.load(), holeCurve.load() };
+}
+
+whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& frame)
+{
+    const auto holes = holeResponse();
     whistle::Controls c;
     for (int hole = 0; hole < whistle::kNumHoles; ++hole)
     {
         const auto sensor = (size_t) whistle::kSensorForHole[(size_t) hole];
         const float span = (float) std::max (1, covered[sensor].load() - baseline[sensor].load());
         const float coverage = ((float) frame.holes[sensor] - (float) baseline[sensor].load()) / span;
-        c.openness[(size_t) hole] = 1.0f - juce::jlimit (0.0f, 1.0f, coverage);
+        measuredCoverage[(size_t) hole] = coverage;
+        c.openness[(size_t) hole] = 1.0f - holes.closedness (coverage);
     }
-    c.mouthPressure = std::max (0.0f, (float) ((int) frame.pressure - ambient12.load()) * kPascalPerCount * breathScale.load());
+
+    const float measured = std::max (0.0f, (float) ((int) frame.pressure - ambient12.load()) * kPascalPerCount);
+    measuredPressure = measured;
+    c.mouthPressure = breathResponse().map (measured);
     return c;
 }
 

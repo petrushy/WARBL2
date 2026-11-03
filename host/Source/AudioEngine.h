@@ -7,6 +7,7 @@
 #include <juce_audio_devices/juce_audio_devices.h>
 
 #include "RoomReverb.h"
+#include "SensorResponse.h"
 #include "TestPhrase.h"
 #include "StreamReceiver.h"
 #include "Whistle/WhistleModel.h"
@@ -63,7 +64,18 @@ public:
 
     // WARBL's pressure sensor: 900 counts (10-bit) = 24 inches of water, i.e. about 1.66 Pa per 12-bit count.
     static constexpr float kPascalPerCount = 24.0f * 249.089f / (900.0f * 4.0f);
-    std::atomic<float> breathScale { 1.0f };  // Multiplies the measured pressure before it reaches the model.
+
+    // Sensor response (see SensorResponse.h), set on the message thread.
+    std::atomic<float> breathInputMin { response::Breath().inputMin }, breathInputMax { response::Breath().inputMax },
+        breathCurve { response::Breath().curve }, breathOutputMax { response::Breath().outputMax };
+    std::atomic<float> holeOpenBelow { response::Hole().openBelow }, holeClosedAt { response::Hole().closedAt },
+        holeCurve { response::Hole().curve };
+    response::Breath breathResponse() const;
+    response::Hole holeResponse() const;
+
+    // Last sensor inputs before the response curves, for display.
+    std::atomic<float> measuredPressure { 0.0f };
+    std::array<std::atomic<float>, whistle::kNumHoles> measuredCoverage {};
 
     // Playing from the screen instead of from WARBL.
     std::atomic<bool> manualPlay { false };
@@ -84,7 +96,7 @@ private:
     void audioDeviceAboutToStart (juce::AudioIODevice*) override;
     void audioDeviceStopped() override {}
 
-    whistle::Controls controlsFromFrame (const warbl::SensorFrame&) const;
+    whistle::Controls controlsFromFrame (const warbl::SensorFrame&);
 
     StreamReceiver& receiver;
     std::array<std::atomic<int>, warbl::kNumHoles> baseline {}, covered {};

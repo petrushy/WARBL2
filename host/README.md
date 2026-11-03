@@ -47,7 +47,22 @@ Settings, all live:
 - **Tone holes:** position and diameter of each hole.
 - **Fipple:** windway height (jet thickness), window length (flue exit to edge), window width, and edge offset.
 - **Voicing:** the jet's band (Strouhal number), how fast disturbances travel along the jet, and breath noise.
-- **Player:** breath scale (multiplies the measured pressure; WARBL's sensor gives about 1.66 Pa per count) and output level.
+- **Output level.**
+
+## Sensor response (Sensors tab)
+
+How the readings become the model's controls, with live dots on each curve. Curves use the WARBL Config Tool's 0–127 scale: 64 is linear, lower is logarithmic (more response at the start), higher is exponential.
+
+- **Breath:** WARBL's sensor gives about 1.66 Pa per count.
+  - **Input minimum:** a threshold below which there is no breath.
+  - **Input maximum:** the measured pressure that gives full output.
+  - **Curve.**
+  - **Output maximum:** the pressure the model then gets.
+  - Sensitivity = output max ÷ input range.
+- **Tone holes:** coverage is calibrated by WARBL, with 0 = open and 1 = covered at calibration.
+  - **Open below:** a finger hovering above the hole has no effect.
+  - **Closed at:** lower makes the hole close sooner.
+  - **Curve:** above 64 the hole stays open longer as the finger arrives, which leaves more room for half-holing.
 
 The table on the right is a design aid. For every fingering of a standard whistle chart (including the cross-fingered C natural, oxxooo, and high D with L1 vented), it shows how far the resonance the geometry gives is from the note, in that note's register. The resonances are calculated in the frequency domain with the transfer-matrix method. **Tune holes** moves the bore length and hole positions so the scale is in tune in the chosen key. With the cross-fingering option on (the default, also used for the presets), it also sets L1's diameter: a smaller top hole makes C natural flatter, and L1's position still sets C#. Without it, C natural comes out about 55 cents sharp, as on many real whistles. The played pitch rises above the table as you blow harder (see `WhistleCheck chart`).
 

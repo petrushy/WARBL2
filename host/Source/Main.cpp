@@ -30,6 +30,8 @@ public:
                 monitor.playTestPhrase();
             if (args.contains ("--instrument"))
                 main->showInstrument();
+            if (args.contains ("--sensors"))
+                main->showSensors();
         }
 
         const auto index = args.indexOf ("--snapshot");

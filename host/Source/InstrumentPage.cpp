@@ -237,10 +237,7 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     addRow ("Breath noise", 0.0, 1.0, 0.01, "", [&model] { return (double) model.breathNoise.load(); },
             [&model] (double v) { model.breathNoise = (float) v; }, false);
 
-    addHeading ("Player");
-    addRow ("Breath scale", 0.25, 4.0, 0.01, "x", [this] { return (double) audio.breathScale.load(); },
-            [this] (double v) { audio.breathScale = (float) v; }, false)
-        .setSkewFactorFromMidPoint (1.0);
+    addHeading ("Output (breath and hole response: Sensors tab)");
     addRow ("Output level", -30.0, 12.0, 0.5, "dB", [&model] { return (double) model.outputGainDb.load(); },
             [&model] (double v) { model.outputGainDb = (float) v; }, false);
 

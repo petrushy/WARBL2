@@ -4,6 +4,7 @@
 
 #include "InstrumentPage.h"
 #include "MonitorPage.h"
+#include "SensorsPage.h"
 
 class MainComponent : public juce::Component
 {
@@ -15,6 +16,7 @@ public:
 
     MonitorPage& getMonitor() { return *monitor; }
     void showInstrument() { tabs.setCurrentTabIndex (1); }
+    void showSensors() { tabs.setCurrentTabIndex (2); }
 
 private:
     StreamReceiver receiver;
