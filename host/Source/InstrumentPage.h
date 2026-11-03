@@ -90,7 +90,7 @@ private:
     void saveToFile();
     void loadFromFile();
     juce::ToggleButton crossButton { "Also tune cross-fingerings with hole size (whistle: C natural sets L1)" };
-    juce::ToggleButton bellButton { "Bell sensor closes the foot" };
+    juce::ToggleButton bellButton { "Bell   (the bell sensor closes the open foot)" };
     juce::ComboBox chartBox;
     std::array<std::unique_ptr<juce::ToggleButton>, whistle::kNumHoles> holeToggles;
     std::array<size_t, whistle::kNumHoles> holeRow {};  // Index in rows of each hole's position slider.

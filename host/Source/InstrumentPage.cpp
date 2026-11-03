@@ -230,7 +230,9 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
         geometryChanged();
     };
     bellButton.setColour (juce::ToggleButton::textColourId, text);
-    bellButton.setTooltip ("Covering WARBL's bell sensor closes the instrument's open foot (a recorder technique for some high notes).");
+    bellButton.setTooltip ("Covering WARBL's bell sensor closes the instrument's open foot (a recorder technique for some high notes). "
+                           "Off: the bell sensor is ignored.");
+    bellButton.setWantsKeyboardFocus (false);
     bellButton.onClick = [this]
     {
         geometry.bellClosesFoot = bellButton.getToggleState();
@@ -621,7 +623,6 @@ void InstrumentPage::resized()
     crossButton.setBounds (left.removeFromTop (24));
     auto chartRow = left.removeFromTop (28);
     chartBox.setBounds (chartRow.removeFromLeft (260).reduced (2));
-    bellButton.setBounds (chartRow.withTrimmedLeft (8));
     left.removeFromTop (4);
 
     // Rows: holes get two sliders side by side to save space.
@@ -654,6 +655,10 @@ void InstrumentPage::resized()
             row.slider->setBounds (line.removeFromLeft (258));
             diameter.label->setBounds ({});
             diameter.slider->setBounds (line);
+
+            // The bell isn't a hole (no position or size) but is switched on and off with them, after R4.
+            if (rowIndex == holeRow[whistle::kNumHoles - 1])
+                bellButton.setBounds (left.removeFromTop (rowHeight));
         }
         else
         {

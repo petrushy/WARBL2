@@ -18,6 +18,7 @@ public:
     void showInstrument() { tabs.setCurrentTabIndex (1); }
     void showSensors() { tabs.setCurrentTabIndex (2); }
     void loadPreset (int index) { instrument->loadPreset (index); }
+    void setSaveStateOnExit (bool shouldSave) { saveOnExit = shouldSave; }
 
 private:
     // Restores and saves the instrument, sensor response, reverb and audio device between runs.
@@ -28,6 +29,7 @@ private:
     StreamReceiver receiver;
     AudioEngine audio { receiver };
     InstrumentPage* instrument = nullptr;  // Owned by tabs.
+    bool saveOnExit = true;
 
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     MonitorPage* monitor = nullptr;  // Owned by tabs.

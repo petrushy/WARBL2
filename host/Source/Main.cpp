@@ -7,7 +7,8 @@ class WarblStreamApplication : public juce::JUCEApplication
 public:
     const juce::String getApplicationName() override { return JUCE_APPLICATION_NAME_STRING; }
     const juce::String getApplicationVersion() override { return JUCE_APPLICATION_VERSION_STRING; }
-    bool moreThanOneInstanceAllowed() override { return false; }
+    // Test runs (--snapshot) may run next to the user's own copy.
+    bool moreThanOneInstanceAllowed() override { return getCommandLineParameters().contains ("--snapshot"); }
 
     void initialise (const juce::String& commandLine) override
     {
@@ -40,6 +41,8 @@ public:
         const auto index = args.indexOf ("--snapshot");
         if (index >= 0 && index + 1 < args.size())
         {
+            if (auto* main = dynamic_cast<MainComponent*> (mainWindow->getContentComponent()))
+                main->setSaveStateOnExit (false);  // Don't overwrite the user's settings from a test run.
             const juce::File file (args[index + 1].unquoted());
             juce::Timer::callAfterDelay (6000, [this, file]
             {

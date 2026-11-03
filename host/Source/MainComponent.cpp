@@ -67,7 +67,8 @@ MainComponent::MainComponent()
 
 MainComponent::~MainComponent()
 {
-    saveState();
+    if (saveOnExit)
+        saveState();
     tabs.clearTabs();  // Pages go before the engine they use.
 }
 
