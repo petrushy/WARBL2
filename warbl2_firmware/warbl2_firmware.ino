@@ -541,7 +541,7 @@ void setup() {
 void loop() {
 
 
-    /////////// Things here happen ~ every 3 ms if connected to BLE and 2 ms otherwise (1 ms while streaming sensors over USB).
+    /////////// Things here happen ~ every 3 ms if connected to BLE and 2 ms otherwise.
 
     byte delayTime = calculateDelayTime();  // Figure out how long to sleep based on how much time has been consumed previously.
     delay(delayTime);                       // Put the NRF52840 in tickless sleep, saving power.

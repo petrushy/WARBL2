@@ -116,7 +116,7 @@ void sendSensorStreamInfo() {
     w.put(sensorCalibration, 16);
     w.put(sox.getAccelRange(), 16);
     w.put(sox.getGyroRange(), 16);
-    w.put((sensorStreamOn && USBstatus == USB_HOST) ? 1 : (connIntvl == 0 ? 2 : 3), 16);  // Loop period in ms (see calculateDelayTime()).
+    w.put(connIntvl == 0 ? 2 : 3, 16);  // Loop period in ms (see calculateDelayTime()).
 
     sendStreamSysEx(STREAM_INFO, payload, w.length);
 }
@@ -134,7 +134,7 @@ void setSensorStream(bool on, bool suppressNotes) {
     sensorStreamSuppressNotes = on && suppressNotes;
 
     if (on) {
-        sox.setAccelDataRate(LSM6DS_RATE_1_66K_HZ);  // Faster than the 1 kHz stream loop, so each frame has a fresh reading.
+        sox.setAccelDataRate(LSM6DS_RATE_1_66K_HZ);  // Faster than the stream loop, so each frame has a fresh reading.
         sox.setGyroDataRate(LSM6DS_RATE_1_66K_HZ);
     } else {
         sox.setAccelDataRate(LSM6DS_RATE_208_HZ);  // Back to the startup rate.

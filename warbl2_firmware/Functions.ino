@@ -58,9 +58,9 @@ byte calculateDelayTime(void) {
         delayTime = 2;
     }
 
-    if (sensorStreamOn && USBstatus == USB_HOST) {  // Sensor stream: 1 kHz, for fresher readings (the ATmega reads all tone holes in ~830 us, so it keeps up).
-        delayTime = 1;
-    }
+    // (The sensor stream stays at 2 ms. At 1 ms the ATmega, which needs ~0.9 ms per reading, was sometimes still busy
+    // when we fetched: ~12 % of tone hole transfers failed and some garbled ones passed the 4-bit checksum, heard as
+    // clicks. A 1 kHz stream needs a busy flag and a stronger checksum from the ATmega first.)
 
     if (delayCorrection < delayTime) {  // If we haven't used up too much time since the last time through the loop, we can sleep for a bit.
         delayTime = delayTime - delayCorrection;
