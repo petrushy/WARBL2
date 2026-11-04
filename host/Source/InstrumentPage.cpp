@@ -252,10 +252,14 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
 
     chartBox.addItem ("Whistle fingering", 1);
     chartBox.addItem ("Recorder fingering (baroque)", 2);
+    chartBox.addItem (juce::String::fromUTF8 ("Härjedalspipa (traditional scale)"), 3);
     chartBox.setTooltip ("Which fingering chart the tuning table and the tuner use. The sound never uses a chart.");
     chartBox.onChange = [this]
     {
-        geometry.chart = chartBox.getSelectedId() == 2 ? whistle::FingeringChart::baroqueRecorder : whistle::FingeringChart::whistle;
+        const int id = chartBox.getSelectedId();
+        geometry.chart = id == 2 ? whistle::FingeringChart::baroqueRecorder
+                       : id == 3 ? whistle::FingeringChart::harjedalspipa
+                                 : whistle::FingeringChart::whistle;
         geometryChanged();
     };
     bellButton.setColour (juce::ToggleButton::textColourId, text);
@@ -361,7 +365,9 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
                 rows[r].label->setEnabled (on);
             }
         }
-        chartBox.setSelectedId (geometry.chart == whistle::FingeringChart::baroqueRecorder ? 2 : 1, juce::dontSendNotification);
+        chartBox.setSelectedId (geometry.chart == whistle::FingeringChart::baroqueRecorder ? 2
+                                : geometry.chart == whistle::FingeringChart::harjedalspipa ? 3
+                                                                                          : 1, juce::dontSendNotification);
 
         bellButton.setToggleState (geometry.bellClosesFoot, juce::dontSendNotification);
     });

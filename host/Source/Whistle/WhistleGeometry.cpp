@@ -40,6 +40,15 @@ bool moveFrontHoles (Geometry& g, int firstHole)
     return true;
 }
 
+double presetLowestNote (const Geometry& g)
+{
+    const double at440 = g.chart == FingeringChart::baroqueRecorder ? 523.25
+                       : g.chart == FingeringChart::harjedalspipa  ? 466.16
+                       : g.boreLength > 0.4                        ? 293.66
+                                                                   : 587.33;
+    return at440 * g.referenceA / 440.0;
+}
+
 int firstFrontHole (const Geometry& g)
 {
     for (int i = 1; i < kNumHoles; ++i)
@@ -110,6 +119,20 @@ const std::vector<Geometry>& presets()
             }(),
             [&]
             {
+                // Härjedalspipa (Härjedalen, Sweden): a wooden duct flute with a cylindrical bore and six finger holes,
+                // in the traditional scale on A# with its neutral thirds and sevenths (see chartFor). Typical
+                // dimensions, scaled from the wooden whistle, not a measured instrument; holes placed by the tuner.
+                // R1 small and R2 large (4 and 10 mm) keep D+35 and D#, only 65 cents apart, about 20 mm apart.
+                auto g = make (juce::String::fromUTF8 ("Härjedalspipa (A#, traditional scale)"), 0.33542, 0.0130, 0.0130,
+                               { { { false, 0.0, 0.0 }, { true, 0.15612, 0.00700 }, { true, 0.18242, 0.00700 }, { true, 0.20466, 0.00700 },
+                                   { true, 0.22923, 0.00400 }, { true, 0.24933, 0.01000 }, { true, 0.27676, 0.00500 }, { false, 0.0, 0.0 } } },
+                               0.0040, 1.3, 0.0010, 0.0055, 0.0090);
+                g.chart = FingeringChart::harjedalspipa;
+                g.windwayLength = 0.022;
+                return g;
+            }(),
+            [&]
+            {
                 // Soprano recorder in C with baroque fingering: reverse-conical bore (wide at the top), thumb hole on
                 // the back, all seven front holes, thick walls and a wide windway. Typical dimensions, not a measured
                 // instrument. R1, R3 and L3's sizes come from the tuner (F# fork, E'' and A''); the others are first guesses.
@@ -130,7 +153,7 @@ const std::vector<Geometry>& presets()
         std::vector<Geometry> withSensors;
         for (const auto& g : instruments)
         {
-            if (g.chart != FingeringChart::whistle)
+            if (g.chart == FingeringChart::baroqueRecorder)  // Uses all eight holes
             {
                 withSensors.push_back (g);
                 continue;

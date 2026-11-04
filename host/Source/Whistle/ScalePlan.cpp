@@ -86,7 +86,7 @@ int scaleControlsAt (const std::vector<ScaleStep>& steps, double t, Controls& co
 std::vector<ScaleStep> planScale (const Geometry& g, const Voicing& v, double lowestHz, int semitones)
 {
     std::vector<ScaleStep> steps;
-    std::set<int> done;
+    std::set<double> done;
 
     // Chart notes in pitch order; the first fingering listed for a note is used.
     auto chart = chartFor (g.chart);

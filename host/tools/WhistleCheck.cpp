@@ -41,12 +41,10 @@ double centsFromNearest (double hz)
     return (midi - std::round (midi)) * 100.0;
 }
 
-// The presets' lowest notes: recorders C5, whistles D5 (low whistles D4).
+// The presets' lowest notes: recorders C5, whistles D5 (low whistles D4), the Härjedalspipa A#4.
 double lowestNote (const Geometry& g)
 {
-    if (g.chart == FingeringChart::baroqueRecorder)
-        return 523.25;
-    return g.boreLength > 0.4 ? 293.66 : 587.33;
+    return presetLowestNote (g);
 }
 
 // The chart's low-register fingerings.
@@ -1066,7 +1064,7 @@ int main (int argc, char* argv[])
         {
             const ChartFingering* fingering = nullptr;
             for (const auto& c : chartFor (g.chart))
-                if (c.semitones == semitones && c.reg == 1 && fingering == nullptr)
+                if (std::abs (c.semitones - semitones) < 1.0e-6 && c.reg == 1 && fingering == nullptr)
                     fingering = &c;
             const double target = lowestNote (g) * std::pow (2.0, semitones / 12.0);
             std::printf ("  %s (%s, %.0f Hz):\n", fingering->name, fingering->holePattern (g).c_str(), target);
@@ -1122,7 +1120,7 @@ int main (int argc, char* argv[])
             // Crescendo on the second fingering: from silence through the airy whoosh into the tone, then held.
             const ChartFingering* fingering = nullptr;
             for (const auto& c : chartFor (g.chart))
-                if (c.semitones == 5 && fingering == nullptr)
+                if (std::abs (c.semitones - 5.0) < 1.0e-6 && fingering == nullptr)
                     fingering = &c;
             auto model = makeModel();
             auto controls = controlsFor (fingering->openness (g));

@@ -13,7 +13,7 @@ int main()
     int failures = 0;
     for (const auto& g : presets())
     {
-        const double lowest = g.chart == FingeringChart::baroqueRecorder ? 523.25 : (g.boreLength > 0.4 ? 293.66 : 587.33);
+        const double lowest = presetLowestNote (g);
         for (const auto& c : chartFor (g.chart))
         {
             if (c.tunes == ChartFingering::kTunesNothing && c.tunesDiameter == ChartFingering::kTunesNothing)
@@ -29,7 +29,7 @@ int main()
     // A whistle moved from WARBL's L1-R3 sensors to L2-R4 is the same instrument: identical predicted tuning.
     for (const auto& preset : presets())
     {
-        if (preset.chart != FingeringChart::whistle)
+        if (preset.chart == FingeringChart::baroqueRecorder)
             continue;
         auto moved = preset;
         if (! moveFrontHoles (moved, 2) || firstFrontHole (moved) != 2 || moved.holes[1].enabled || ! moved.holes[7].enabled)

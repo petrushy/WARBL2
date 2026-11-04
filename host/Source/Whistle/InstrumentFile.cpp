@@ -64,7 +64,9 @@ juce::var toVar (const Instrument& instrument)
     }
     root.getDynamicObject()->setProperty ("holes", holes);
     root.getDynamicObject()->setProperty ("bellClosesFoot", g.bellClosesFoot);
-    root.getDynamicObject()->setProperty ("fingeringChart", g.chart == FingeringChart::baroqueRecorder ? "recorder (baroque)" : "whistle");
+    root.getDynamicObject()->setProperty ("fingeringChart", g.chart == FingeringChart::baroqueRecorder ? "recorder (baroque)"
+                                                            : g.chart == FingeringChart::harjedalspipa  ? "harjedalspipa"
+                                                                                                        : "whistle");
     root.getDynamicObject()->setProperty ("referenceA_Hz", g.referenceA);
 
     auto fipple = object();
@@ -140,7 +142,12 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     if (root.hasProperty ("bellClosesFoot"))
         g.bellClosesFoot = (bool) root["bellClosesFoot"];
     if (root.hasProperty ("fingeringChart"))
-        g.chart = root["fingeringChart"].toString().startsWith ("recorder") ? FingeringChart::baroqueRecorder : FingeringChart::whistle;
+    {
+        const auto chart = root["fingeringChart"].toString();
+        g.chart = chart.startsWith ("recorder")       ? FingeringChart::baroqueRecorder
+                : chart.startsWith ("harjedalspipa") ? FingeringChart::harjedalspipa
+                                                     : FingeringChart::whistle;
+    }
     if (root.hasProperty ("referenceA_Hz"))
         g.referenceA = (double) root["referenceA_Hz"];
 

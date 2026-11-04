@@ -35,7 +35,8 @@ struct ToneHole
 enum class FingeringChart
 {
     whistle,          // Six holes, L1-R3
-    baroqueRecorder    // Thumb and seven holes, baroque fingering
+    baroqueRecorder,   // Thumb and seven holes, baroque fingering
+    harjedalspipa      // Six holes like a whistle, the traditional Härjedalspipa scale (not tempered)
 };
 
 struct Geometry
@@ -130,6 +131,10 @@ struct Voicing
 
 // Starting points, tuned (see WhistleGeometry.cpp).
 const std::vector<Geometry>& presets();
+
+// The lowest note a preset is tuned to (Hz, at its reference A): recorders C5, whistles D5 (low whistles D4),
+// the Härjedalspipa A#4.
+double presetLowestNote (const Geometry&);
 
 // The voicing that goes with each preset (same order as presets()).
 Voicing presetVoicing (size_t index);

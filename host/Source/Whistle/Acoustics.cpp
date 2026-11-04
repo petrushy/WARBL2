@@ -206,7 +206,24 @@ const std::vector<ChartFingering>& chartFor (FingeringChart chart)
         { "top C", "pxooxxoo", 24, 3 },           { "top C#", "pxoxxoxox", 25, 3 },      { "top D", "pxoxxoxo", 26, 3 },
     };
 
-    return chart == FingeringChart::baroqueRecorder ? recorder : whistle;
+    // Härjedalspipa: six holes opened from the bottom, cylindrical bore, in the traditional scale on A#:
+    // A#, C-20, D+35, D#, F, G-20, A (cents from equal temperament), and the same an octave up by overblowing.
+    static const std::vector<ChartFingering> harjedal {
+        { "A#", "xxxxxx", 0.0, 1, bore },        { "C-20", "xxxxxo", 1.8, 1, 5 },        { "D+35", "xxxxoo", 4.35, 1, 4 },
+        { "D#", "xxxooo", 5.0, 1, 3 },           { "F", "xxoooo", 7.0, 1, 2 },           { "G-20", "xooooo", 8.8, 1, 1 },
+        { "A", "oooooo", 11.0, 1, 0 },
+        { "high A#", "xxxxxx", 12.0, 2 },        { "high C-20", "xxxxxo", 13.8, 2 },     { "high D+35", "xxxxoo", 16.35, 2 },
+        { "high D#", "xxxooo", 17.0, 2 },        { "high F", "xxoooo", 19.0, 2 },        { "high G-20", "xooooo", 20.8, 2 },
+        { "high A", "oooooo", 23.0, 2 },
+    };
+
+    switch (chart)
+    {
+        case FingeringChart::baroqueRecorder: return recorder;
+        case FingeringChart::harjedalspipa: return harjedal;
+        case FingeringChart::whistle: break;
+    }
+    return whistle;
 }
 
 double predictedCents (const Geometry& g, const ChartFingering& c, double lowestHz)
