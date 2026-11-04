@@ -24,12 +24,13 @@ inline float applyCurve (float x, float curve)
 
 struct Breath
 {
-    // By default the model gets the pressure actually blown (1:1) up to the sensor's ceiling: its 12-bit reading
-    // tops out at 4095 counts, ~3050 above the usual ambient reading of ~1040, at ~1.66 Pa per count.
+    // Defaults chosen by playing WARBL (2026-11-04): about twice the blown pressure, more so when blowing
+    // softly (the curve), so normal WARBL breath reaches the whistle's second register; full output at 2.5 kPa
+    // measured. (The sensor's 12-bit reading tops out ~3050 counts above ambient, at ~1.66 Pa per count.)
     float inputMin = 10.0f;     // Pa measured. Below this: no breath (also rejects sensor noise).
-    float inputMax = 5000.0f;   // Pa measured that gives the full output.
-    float curve = 64.0f;
-    float outputMax = 5000.0f;  // Pa sent to the model at full input.
+    float inputMax = 2500.0f;   // Pa measured that gives the full output.
+    float curve = 34.0f;
+    float outputMax = 4930.0f;  // Pa sent to the model at full input.
 
     float map (float measuredPa) const
     {
@@ -55,9 +56,10 @@ struct Hole
 {
     float openBelow = 0.05f;  // Coverage (0 = open, 1 = covered at calibration) below which the hole is fully open.
     float closedAt = 1.0f;    // Coverage at which the hole is fully closed. Lower = more sensitive.
-    float curve = 64.0f;      // Power curve: exponent; S-curve: steepness (both on WARBL's 0-127 scale, 64 = straight)
+    float curve = 82.0f;      // Power curve: exponent; S-curve: steepness (both on WARBL's 0-127 scale, 64 = straight)
     bool sCurve = true;       // S-curve (flat at both ends) instead of a power curve
-    float centre = 0.5f;      // S-curve: where between "open below" and "closed at" the steep part is
+    float centre = 0.51f;     // S-curve: where between "open below" and "closed at" the steep part is
+    // (Steepness and centre chosen by playing WARBL, 2026-11-04.)
 
     // 0 = open, 1 = closed.
     float closedness (float coverage) const
