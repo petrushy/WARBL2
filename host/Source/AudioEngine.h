@@ -55,7 +55,7 @@ public:
     RoomReverb reverb;
     whistle::WhistleModel whistleModel;
 
-    std::atomic<bool> clickEnabled { true };
+    std::atomic<bool> clickEnabled { false };
     std::atomic<bool> whistleEnabled { true };
 
     // Sensor calibration from WARBL (or the simulator), set on the message thread.

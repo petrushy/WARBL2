@@ -199,7 +199,7 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
     streamButton.setToggleState (true, juce::dontSendNotification);  // Streaming is what the app is for.
     streamButton.onClick = [this] { applyStreamSettings(); };
     suppressButton.onClick = [this] { applyStreamSettings(); };
-    clickButton.setToggleState (true, juce::dontSendNotification);
+    clickButton.setToggleState (false, juce::dontSendNotification);  // For latency measurements only
     clickButton.onClick = [this] { audio.clickEnabled = clickButton.getToggleState(); };
     infoButton.onClick = [this] { receiver.requestInfo(); };
     audioButton.onClick = [this] { showAudioSettings(); };
