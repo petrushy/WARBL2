@@ -411,10 +411,14 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
 
     // Attack chiff: a jet that has just started (its speed well above its ~20 ms average, as after a tongued
     // attack, not in a slow swell) rolls up a starting vortex and is turbulent, and until the sound in the pipe
-    // steers it across the edge (the oscillation has built up) the edge hears mostly that turbulence.
+    // steers it across the edge (the oscillation has built up) the edge hears mostly that turbulence. Only a fast
+    // jet becomes turbulent: none below a Reynolds number U h / nu of 1000 (a 1 mm windway: ~200 Pa), fully above
+    // 3000 (~1100 Pa), so gentle attacks start clean and hard ones chiff.
     slowJetSpeed += slowCoeff * (jetSpeed - slowJetSpeed);
     const float starting = jetSpeed > 1.0f ? std::max (0.0f, 1.0f - slowJetSpeed / jetSpeed) : 0.0f;
-    const float chiff = 1.0f + attackChiff.load (std::memory_order_relaxed) * starting * (1.0f - jetLock);
+    const float reynolds = jetSpeed * h / kKinematicViscosity;
+    const float turbulent = juce::jlimit (0.0f, 1.0f, (reynolds - 1000.0f) / 2000.0f);
+    const float chiff = 1.0f + attackChiff.load (std::memory_order_relaxed) * turbulent * starting * (1.0f - jetLock);
 
     const float steadyEdgeNoise = chiff * amount * kEdgeNoise * rho * jetSpeed * jetSpeed * std::sqrt (jetSpeed / 20.0f) * band;  // Pa
     const float turbulence = chiff * amount * 0.15f * band;  // In jet half-widths: a slight unsteadiness, not roughness

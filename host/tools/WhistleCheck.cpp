@@ -606,7 +606,9 @@ int main (int argc, char* argv[])
                 std::printf (" %3.0fms ", (start + t) * 1000.0);
             std::printf ("\n");
             const auto clean = render (0.0f, 0.0f, rise, 0.6);
-            const double steady = levelDb (clean, (size_t) (0.5 * rate), (size_t) (0.6 * rate));
+            // The steady level with the breath noise (near the threshold the clean tone may never start).
+            const auto reference = render (presetVoicing (index).breathNoise, 0.0f, rise, 0.6);
+            const double steady = levelDb (reference, (size_t) (0.5 * rate), (size_t) (0.6 * rate));
             for (float chiffAmount : { 0.0f, 3.0f, 6.0f })
             {
                 const auto noisy = render (presetVoicing (index).breathNoise, chiffAmount, rise, 0.6);
