@@ -631,8 +631,12 @@ void InstrumentPage::setInstrument (const whistle::Instrument& instrument)
 
 juce::File InstrumentPage::userPresetFolder()
 {
-    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-        .getChildFile ("Application Support").getChildFile ("WARBL Stream").getChildFile ("Presets");
+    // macOS: ~/Library/Application Support/WARBL Stream/Presets; Linux: ~/.config/...; Windows: AppData\Roaming\...
+    auto folder = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
+   #if JUCE_MAC
+    folder = folder.getChildFile ("Application Support");
+   #endif
+    return folder.getChildFile ("WARBL Stream").getChildFile ("Presets");
 }
 
 void InstrumentPage::refreshPresetList()

@@ -2,25 +2,92 @@
 
 Computer-side tools for the WARBL2 sensor stream, where WARBL sends its sensor readings over USB MIDI SysEx instead of notes (see `warbl2_firmware/Sensor_stream.ino`). The plan is for a physical model on the computer to make the sound.
 
-- **WARBL Stream** (`Source/`): a Mac test app. It finds WARBL, turns the stream on, and shows the tone holes, pressure, accelerometer and gyro. It also measures frame rate, lost frames and arrival jitter. "Click on breath" (off by default) plays a 1 ms click when the pressure crosses the threshold, for measuring the delay from breath to sound (see below). It has a room reverb (see below).
+- **WARBL Stream** (`Source/`): the app (built and tested on macOS; see Building for Linux and Windows). It finds WARBL, turns the stream on, and shows the tone holes, pressure, accelerometer and gyro. It also measures frame rate, lost frames and arrival jitter. "Click on breath" (off by default) plays a 1 ms click when the pressure crosses the threshold, for measuring the delay from breath to sound (see below). It has a room reverb (see below).
 - **WARBL Simulator** (`tools/`): a virtual WARBL that plays a scale, as a separate MIDI device. The app also has this built in.
 - **ReverbCheck** (`tools/`): measures the generated rooms and renders WAV files for listening.
 - **WhistleCheck** (`tools/`): tunes and tabulates the whistle presets, and plays the model offline to measure what it sounds (see below).
 - **StreamProtocol.h**: the protocol decoder. It has no JUCE dependency, so a synth plugin can use it too.
 
-## Build
+## Building
 
-Needs Xcode command line tools and CMake (`brew install cmake`). JUCE 9.0.5 is downloaded the first time you configure.
+Two parts: the **WARBL firmware** (with the sensor stream) goes on the instrument, and the **WARBL Stream app** runs on the computer. The app only hears WARBL if the firmware has `Sensor_stream.ino`, and the stream only goes over a USB cable.
+
+**Platforms.** Everything here has been built and tested on **macOS** only (Apple silicon, macOS 15). The firmware builds with the cross-platform Arduino tools, so it should build the same way on Linux and Windows. The app uses only JUCE (audio, MIDI, GUI) and standard C++20, with nothing Mac-specific in its code, so it should also build on **Linux** and **Windows**, but it hasn't been tried there yet: expect to fix small compiler differences. Known limits elsewhere: the separate `WarblSimulator` tool makes virtual MIDI ports, which Windows doesn't support (the simulator built into the app works everywhere); on Windows, use WASAPI (exclusive mode) or an ASIO-capable interface for low latency, and on Linux JACK or PipeWire.
+
+### The app
+
+You need a C++20 compiler, CMake 3.22 or newer, and git. The first configure downloads JUCE 9.0.5 (about 100 MB), which takes a few minutes.
+
+**macOS:** install the Xcode command line tools (`xcode-select --install`) and CMake (`brew install cmake`). Then:
 
 ```
 cd host
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j8
-ctest --test-dir build          # protocol tests
+ctest --test-dir build          # protocol, instrument file and preset tuning tests
 open "build/WarblStream_artefacts/Release/WARBL Stream.app"
 ```
 
-The WARBL needs the firmware with `Sensor_stream.ino`, connected with a USB cable. The stream only goes over USB.
+**Linux** (untested; Debian/Ubuntu package names): install the build tools and JUCE's dependencies:
+
+```
+sudo apt install build-essential cmake git pkg-config libasound2-dev libjack-jackd2-dev \
+    libfreetype-dev libfontconfig1-dev libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+    libxinerama-dev libxrandr-dev libxrender-dev
+cd host
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j8
+ctest --test-dir build
+"build/WarblStream_artefacts/Release/WARBL Stream"
+```
+
+**Windows** (untested): install Visual Studio 2022 with the "Desktop development with C++" workload, CMake and git. In a "Developer PowerShell for VS 2022":
+
+```
+cd host
+cmake -B build
+cmake --build build --config Release
+ctest --test-dir build -C Release
+& "build\WarblStream_artefacts\Release\WARBL Stream.exe"
+```
+
+Settings and your presets are kept in `~/Library/Application Support/WARBL Stream/` on macOS, `~/.config/WARBL Stream/` on Linux and `%APPDATA%\WARBL Stream\` on Windows. The check tools (`WhistleCheck`, `ReverbCheck`, `WarblSimulator`) are built alongside, in `build/<Tool>_artefacts/Release/`.
+
+### The firmware
+
+The firmware is built with **arduino-cli** (or the Arduino IDE, see the repository's main README) and the Adafruit nRF52 board package, with WARBL's own board definition. These steps were used for this fork, on macOS; paths for Linux and Windows are given where they differ.
+
+1. **Install arduino-cli** (macOS: `brew install arduino-cli`; Linux and Windows: see arduino.github.io/arduino-cli) and **Python 3** (for the UF2 converter).
+2. **Install the Adafruit nRF52 boards, version 1.7.0:**
+   ```
+   arduino-cli config init
+   arduino-cli config add board_manager.additional_urls https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
+   arduino-cli core update-index
+   arduino-cli core install adafruit:nrf52@1.7.0
+   ```
+   On Linux the package's upload tool also needs `pip3 install --user adafruit-nrfutil`.
+3. **Add the WARBL2 board:** copy `warbl2_firmware/boards.local.txt` into the board package's folder:
+   - macOS: `~/Library/Arduino15/packages/adafruit/hardware/nrf52/1.7.0/`
+   - Linux: `~/.arduino15/packages/adafruit/hardware/nrf52/1.7.0/`
+   - Windows: `%LOCALAPPDATA%\Arduino15\packages\adafruit\hardware\nrf52\1.7.0\`
+4. **Install the libraries** (their own dependencies, Adafruit BusIO and Adafruit Unified Sensor, come with them):
+   ```
+   arduino-cli lib install "MIDI Library@5.0.2" "Adafruit LSM6DS@4.7.4" "ResponsiveAnalogRead@1.2.1" "SensorFusion@1.0.6"
+   ```
+5. **Compile**, from the repository's top folder:
+   ```
+   arduino-cli compile --fqbn adafruit:nrf52:warbl2 --output-dir build-firmware warbl2_firmware
+   ```
+   On macOS put `LC_ALL=en_US.UTF-8` in front: the package's nrfutil step fails without a UTF-8 locale. A successful build ends with "Sketch uses … bytes".
+6. **Make the UF2 file** that WARBL's bootloader takes:
+   ```
+   python3 <board package folder>/tools/uf2conv/uf2conv.py -c -f 0xADA52840 -o warbl2-sensor-stream.uf2 build-firmware/warbl2_firmware.ino.hex
+   ```
+   (`<board package folder>` is the folder from step 3.)
+7. **Flash it:** double-click WARBL's reset button (or hold button 1 while plugging it in). A drive called WARBLBOOT appears; copy the `.uf2` file onto it. WARBL restarts with the new firmware by itself.
+8. **Check:** start the app, tick **Stream** and press **Request info**. The Monitor tab should show "loop 2 ms", about 500 frames/s, "new hole readings in ~100 % of frames" and no lost frames.
+
+The tone-hole co-processor (`ATmega_firmware/`) is unchanged in this fork: WARBL only reprograms it when `ATMEGA_FIRMWARE_VERSION` in `Defines.h` changes, so leave that alone unless you change the ATmega code. To go back to the official firmware, flash a release `.uf2` from warbl.xyz the same way.
 
 ## Without a WARBL
 
