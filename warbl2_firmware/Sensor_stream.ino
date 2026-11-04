@@ -50,9 +50,14 @@ struct SysExBitWriter {
 
 
 void sendStreamSysEx(byte type, const byte* payload, byte payloadLength) {
-    byte message[STREAM_MAX_SYSEX] = { STREAM_SYSEX_ID_1, STREAM_SYSEX_ID_2, STREAM_PROTOCOL_VERSION, type };
-    memcpy(message + 4, payload, payloadLength);
-    MIDI.sendSysEx(payloadLength + 4, message, false);  // The library adds F0 and F7.
+    // The whole message in one write, straight to TinyUSB: the MIDI library writes a SysEx byte by byte, and
+    // TinyUSB starts a USB transfer after every write, so the first 4-byte packet left alone and the rest waited
+    // for the host's next poll (1 ms): at most 500 frames/s. A frame is 60 bytes as USB-MIDI packets, so it
+    // fits one 64-byte transfer.
+    byte message[STREAM_MAX_SYSEX + 2] = { 0xF0, STREAM_SYSEX_ID_1, STREAM_SYSEX_ID_2, STREAM_PROTOCOL_VERSION, type };
+    memcpy(message + 5, payload, payloadLength);
+    message[5 + payloadLength] = 0xF7;
+    tud_midi_stream_write(0, message, payloadLength + 6);
 }
 
 
