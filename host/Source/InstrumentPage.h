@@ -85,6 +85,8 @@ private:
     whistle::Geometry geometry;
 
     juce::ComboBox presetBox, materialBox, keyBox, octaveBox;
+    juce::Slider referenceBox;  // Reference A (Hz)
+    juce::Label referenceLabel { {}, "A =" };
     juce::TextButton tuneButton { "Tune holes" }, savePresetButton { "Save preset..." }, deleteButton { "Delete" },
         exportButton { "Export..." }, importButton { "Import..." };
     std::unique_ptr<juce::FileChooser> fileChooser;

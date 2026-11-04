@@ -70,7 +70,8 @@ double predictedCents (const Geometry&, const ChartFingering&, double lowestHz);
 // Moves the bore length and hole positions so the instrument's chart notes that tune something are in tune
 // (equal temperament, lowest note `lowestHz`). Keeps hole diameters, except that with `tuneCrossFingerings`
 // a chart note marked tunesDiameter also sets that hole's size (e.g. the whistle's cross-fingered C natural
-// sets L1's diameter). Returns false if it couldn't converge.
-bool tuneToScale (Geometry&, double lowestHz, bool tuneCrossFingerings = false);
+// sets L1's diameter). With `resizeHoles`, holes that can't reach their note where they are allowed to sit also
+// get new sizes (smaller to sit higher, larger to sit lower). Returns false if it couldn't converge.
+bool tuneToScale (Geometry&, double lowestHz, bool tuneCrossFingerings = false, bool resizeHoles = false);
 
 } // namespace whistle

@@ -57,6 +57,7 @@ struct Geometry
     double wallThickness = 0.0005;  // Sets the height of the tone hole chimneys.
     bool bellClosesFoot = false;    // The bell sensor covers the open foot (recorder technique).
     FingeringChart chart = FingeringChart::whistle;
+    double referenceA = 440.0;  // Hz: the pitch standard the instrument is tuned to (A4)
 
     // Fipple (mouthpiece). The windway ends in a flat jet that crosses the window and hits the edge (labium).
     double windwayHeight = 0.001;    // Jet thickness at the flue exit (h).

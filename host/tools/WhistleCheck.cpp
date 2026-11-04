@@ -481,6 +481,38 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "fit")  // fit: for every preset and key, whether the tuner succeeds with fixed hole sizes, and with resizing
+    {
+        static const char* keys[] = { "C", "C#", "D", "Eb", "E", "F", "F#", "G", "G#", "A", "Bb", "B" };
+        std::printf ("Tuning each preset to each key (its own octave): '+' tunes with its hole sizes, 'r' only with resizing,\n"
+                     "'-' not at all.\n\n");
+        for (size_t p = 0; p < presets().size(); ++p)
+        {
+            const auto& base = presets()[p];
+            const int baseMidi = (int) std::lround (69.0 + 12.0 * std::log2 (lowestNote (base) / 440.0));
+            std::printf ("  %-48s", base.name.toRawUTF8());
+            for (int k = 0; k < 12; ++k)
+            {
+                // The key closest to the preset's own (within half an octave up or down).
+                int midi = baseMidi - (baseMidi % 12) + k;
+                if (midi - baseMidi > 6) midi -= 12;
+                if (baseMidi - midi > 6) midi += 12;
+                const double hz = 440.0 * std::pow (2.0, (midi - 69) / 12.0);
+                auto g = base;
+                if (tuneToScale (g, hz))
+                {
+                    std::printf (" %s+", keys[k]);
+                    continue;
+                }
+                g = base;
+                const bool ok = tuneToScale (g, hz, false, true);
+                std::printf (" %s%s", keys[k], ok ? "r" : "-");
+            }
+            std::printf ("\n");
+        }
+        return 0;
+    }
+
     if (mode == "glide")  // glide [preset] [p=<Pa>] [ms=<ramp>] [vortex=]: level and pitch while one hole opens or closes gradually
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);

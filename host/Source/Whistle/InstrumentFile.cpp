@@ -65,6 +65,7 @@ juce::var toVar (const Instrument& instrument)
     root.getDynamicObject()->setProperty ("holes", holes);
     root.getDynamicObject()->setProperty ("bellClosesFoot", g.bellClosesFoot);
     root.getDynamicObject()->setProperty ("fingeringChart", g.chart == FingeringChart::baroqueRecorder ? "recorder (baroque)" : "whistle");
+    root.getDynamicObject()->setProperty ("referenceA_Hz", g.referenceA);
 
     auto fipple = object();
     set (fipple, "windwayHeight_mm", g.windwayHeight * 1000.0);
@@ -140,6 +141,8 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
         g.bellClosesFoot = (bool) root["bellClosesFoot"];
     if (root.hasProperty ("fingeringChart"))
         g.chart = root["fingeringChart"].toString().startsWith ("recorder") ? FingeringChart::baroqueRecorder : FingeringChart::whistle;
+    if (root.hasProperty ("referenceA_Hz"))
+        g.referenceA = (double) root["referenceA_Hz"];
 
     const auto& fipple = root["fipple"];
     read (fipple, "windwayHeight_mm", g.windwayHeight, 0.001);
@@ -168,6 +171,7 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     bad (g.boreLength < 0.05 || g.boreLength > 2.0, "Bore length must be between 50 and 2000 mm");
     bad (g.boreDiameterTop < 0.002 || g.boreDiameterFoot < 0.002 || g.headDiameter < 0.002, "Bore diameters must be at least 2 mm");
     bad (g.headLength < 0.0 || g.headLength >= g.boreLength, "The head section must be shorter than the bore");
+    bad (g.referenceA < 380.0 || g.referenceA > 500.0, "The reference A must be between 380 and 500 Hz");
     bad (g.windwayHeight <= 0.0 || g.windwayLength <= 0.0 || g.windowLength <= 0.0 || g.windowWidth <= 0.0, "Fipple sizes must be positive");
     for (const auto& h : g.holes)
         if (h.enabled)

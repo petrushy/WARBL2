@@ -11,10 +11,10 @@ const juce::Colour metal { 0xff9aa3ad };
 
 using whistle::kHoleNames;
 
-juce::String noteName (double hz)
+juce::String noteName (double hz, double referenceA)
 {
     static const char* names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-    const int midi = (int) std::lround (69.0 + 12.0 * std::log2 (hz / 440.0));
+    const int midi = (int) std::lround (69.0 + 12.0 * std::log2 (hz / referenceA));
     return juce::String (names[(midi % 12 + 12) % 12]) + juce::String (midi / 12 - 1);
 }
 
@@ -214,15 +214,36 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     for (int i = 0; i < 12; ++i)
         keyBox.addItem (keys[i], i + 1);
     keyBox.setSelectedId (3, juce::dontSendNotification);
-    octaveBox.addItem ("high (lowest note C5-B5)", 1);
-    octaveBox.addItem ("low (lowest note C4-B4)", 2);
+    octaveBox.addItem ("high (C5-B5)", 1);
+    octaveBox.addItem ("low (C4-B4)", 2);
     octaveBox.setSelectedId (1, juce::dontSendNotification);
+    octaveBox.setTooltip ("The instrument's lowest note: in octave 5 (high whistles, recorders) or 4 (low whistles)");
     keyBox.onChange = octaveBox.onChange = [this]
     {
         tuningDirty = true;
         tuningCountdown = 0;
         audio.setScaleInstrument (geometry, lowestNoteHz());
     };
+
+    referenceBox.setSliderStyle (juce::Slider::IncDecButtons);
+    referenceBox.setRange (380.0, 500.0, 0.5);
+    referenceBox.setTextValueSuffix (" Hz");
+    referenceBox.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 62, 20);
+    referenceBox.setValue (geometry.referenceA, juce::dontSendNotification);
+    referenceBox.setTooltip ("Pitch standard: the frequency of A4 that the tuner, the tuning table and the scale aim for "
+                             "(440 Hz; e.g. 442 for many orchestras, 415 for baroque pitch). Press Tune holes to retune.");
+    referenceBox.onValueChange = [this]
+    {
+        geometry.referenceA = referenceBox.getValue();
+        tuningDirty = true;
+        tuningCountdown = 0;
+        audio.setScaleInstrument (geometry, lowestNoteHz());
+    };
+    referenceLabel.setColour (juce::Label::textColourId, text);
+    referenceLabel.setJustificationType (juce::Justification::centredRight);
+    addAndMakeVisible (referenceBox);
+    addAndMakeVisible (referenceLabel);
+    refreshers.push_back ([this] { referenceBox.setValue (geometry.referenceA, juce::dontSendNotification); });
 
     crossButton.setColour (juce::ToggleButton::textColourId, text);
     crossButton.setToggleState (true, juce::dontSendNotification);
@@ -251,16 +272,33 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     {
         const double hz = lowestNoteHz();
         auto tuned = geometry;
-        if (whistle::tuneToScale (tuned, hz, crossButton.getToggleState()))
+        bool ok = whistle::tuneToScale (tuned, hz, crossButton.getToggleState());
+        juce::String resized;
+        if (! ok)
+        {
+            // The holes can't all reach their notes at these sizes: let the tuner change the sizes of the ones
+            // that are stuck, and say which.
+            tuned = geometry;
+            ok = whistle::tuneToScale (tuned, hz, crossButton.getToggleState(), true);
+            for (int i = 0; ok && i < whistle::kNumHoles; ++i)
+            {
+                const double before = geometry.holes[(size_t) i].diameter, after = tuned.holes[(size_t) i].diameter;
+                if (geometry.holes[(size_t) i].enabled && std::abs (after - before) > 0.00005)
+                    resized << (resized.isEmpty() ? "; resized " : ", ") << whistle::kHoleNames[(size_t) i] << " "
+                            << juce::String (before * 1000.0, 1) << " -> " << juce::String (after * 1000.0, 1) << " mm";
+            }
+        }
+        if (ok)
         {
             geometry = tuned;
-            tuneStatus.setText ("Holes placed for " + noteName (hz), juce::dontSendNotification);
+            tuneStatus.setText ("Holes placed for " + noteName (hz, geometry.referenceA) + resized, juce::dontSendNotification);
+            tuneStatus.setTooltip (tuneStatus.getText());
             refreshSliders();
             geometryChanged();
         }
         else
         {
-            tuneStatus.setText ("Couldn't tune: try other hole sizes", juce::dontSendNotification);
+            tuneStatus.setText ("Couldn't tune, even with other hole sizes: try another key or bore length", juce::dontSendNotification);
         }
     };
 
@@ -478,7 +516,7 @@ void InstrumentPage::showKeyOfInstrument()
     const auto r = whistle::resonances (geometry, whistle::Openness::allClosed(), 100.0, 2000.0);
     if (! r.empty())
     {
-        const int midi = (int) std::lround (69.0 + 12.0 * std::log2 (r.front() / 440.0));
+        const int midi = (int) std::lround (69.0 + 12.0 * std::log2 (r.front() / geometry.referenceA));
         octaveBox.setSelectedId (midi >= 72 ? 1 : 2, juce::dontSendNotification);
         keyBox.setSelectedId ((midi % 12 + 12) % 12 + 1, juce::dontSendNotification);
     }
@@ -537,7 +575,7 @@ void InstrumentPage::timerCallback()
                     pattern << '|';
                 pattern << (holes[(size_t) i] == '-' ? 'o' : holes[(size_t) i]);
             }
-            entries.push_back ({ noteName (lowest * std::pow (2.0, c.semitones / 12.0)), pattern, whistle::predictedCents (geometry, c, lowest) });
+            entries.push_back ({ noteName (lowest * std::pow (2.0, c.semitones / 12.0), geometry.referenceA), pattern, whistle::predictedCents (geometry, c, lowest) });
         }
         tuningTable.setEntries (std::move (entries));
     }
@@ -688,8 +726,8 @@ void InstrumentPage::deletePreset()
     juce::AlertWindow::showAsync (juce::MessageBoxOptions()
                                       .withIconType (juce::MessageBoxIconType::QuestionIcon)
                                       .withTitle ("Delete preset")
-                                      .withMessage ("Delete your preset \"" + file.getFileNameWithoutExtension() + "\"? The whistle "
-                                                    "stays as it is on screen.")
+                                      .withMessage ("Delete your preset \"" + file.getFileNameWithoutExtension() + "\"? The next preset in the list "
+                                                    "is loaded.")
                                       .withButton ("Delete", 1)
                                       .withButton ("Cancel", 0)
                                       .withAssociatedComponent (this),
@@ -700,10 +738,16 @@ void InstrumentPage::deletePreset()
         auto& page = *safeThis;
         if (file.moveToTrash() || file.deleteFile())
         {
+            // Go on to the next preset of the player's (or the one before, if it was the last), or the first
+            // built-in one if none are left.
+            const auto deletedName = file.getFileNameWithoutExtension();
+            const int position = (int) std::distance (page.userPresets.begin(), std::find (page.userPresets.begin(), page.userPresets.end(), file));
             page.refreshPresetList();
-            page.presetBox.setText (page.geometry.name, juce::dontSendNotification);
-            page.deleteButton.setEnabled (false);
-            page.tuneStatus.setText ("Deleted preset " + file.getFileNameWithoutExtension(), juce::dontSendNotification);
+            if (! page.userPresets.empty())
+                page.presetBox.setSelectedId (kUserPresetId + std::min (position, (int) page.userPresets.size() - 1), juce::sendNotificationSync);
+            else
+                page.presetBox.setSelectedId (1, juce::sendNotificationSync);
+            page.tuneStatus.setText ("Deleted preset " + deletedName, juce::dontSendNotification);
         }
         else
         {
@@ -764,7 +808,7 @@ double InstrumentPage::lowestNoteHz() const
 {
     // Lowest note in octave 5 (high whistles: C5..B5) or 4 (low whistles).
     const int midi = (octaveBox.getSelectedId() == 1 ? 72 : 60) + keyBox.getSelectedId() - 1;
-    return 440.0 * std::pow (2.0, (midi - 69) / 12.0);
+    return geometry.referenceA * std::pow (2.0, (midi - 69) / 12.0);
 }
 
 void InstrumentPage::paint (juce::Graphics& g)
@@ -789,7 +833,9 @@ void InstrumentPage::resized()
     auto tuneRow = left.removeFromTop (28);
     tuneButton.setBounds (tuneRow.removeFromLeft (100).reduced (2));
     keyBox.setBounds (tuneRow.removeFromLeft (70).reduced (2));
-    octaveBox.setBounds (tuneRow.removeFromLeft (160).reduced (2));
+    octaveBox.setBounds (tuneRow.removeFromLeft (110).reduced (2));
+    referenceLabel.setBounds (tuneRow.removeFromLeft (34));
+    referenceBox.setBounds (tuneRow.removeFromLeft (122).reduced (2));
     tuneStatus.setBounds (tuneRow);
     crossButton.setBounds (left.removeFromTop (24));
     auto chartRow = left.removeFromTop (28);

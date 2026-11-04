@@ -261,7 +261,11 @@ bool solveLength (Geometry& g, double& value, double lo, double hi, const Openne
 // Tunes the bore and hole positions (diameters fixed), in chart order: the lowest note first, then holes
 // from the bottom up. Moving a hole slightly changes the notes below it (its closed chimney is part of
 // their bore), so the pass is repeated.
-bool tunePositions (Geometry& g, double lowestHz)
+//
+// With `resize`, a hole that can't reach its note gets a new size (the maker's trade-off between a hole's
+// size and position): one that would have to sit lower than the hole below allows is made smaller (it vents
+// less, so it sits higher for the same note), one that would have to sit above the top of its range larger.
+bool tunePositions (Geometry& g, double lowestHz, bool resize = false)
 {
     const auto& chart = chartFor (g.chart);
     auto targetFor = [&] (const ChartFingering& c) { return lowestHz * std::pow (2.0, c.semitones / 12.0); };
@@ -275,16 +279,33 @@ bool tunePositions (Geometry& g, double lowestHz)
             const int index = ChartFingering::holeFor (g, c.tunes);
             if (c.tunes == ChartFingering::kTunesBore)
             {
+                const double before = g.boreLength;
                 if (! solveLength (g, g.boreLength, 0.05, 2.0, c.openness (g), targetFor (c)))
                     return false;
                 below = g.boreLength;
+                // A new key can change the length a lot: start the holes from where they would be on the scaled
+                // instrument, not where they were (on a shorter bore some would be past the foot).
+                if (pass == 0)
+                    for (auto& h : g.holes)
+                        h.position *= g.boreLength / before;
             }
             else if (index >= 0 && g.holes[(size_t) index].enabled)
             {
                 auto& hole = g.holes[(size_t) index];
-                const double hi = index == 0 ? g.boreLength - hole.diameter  // The thumb hole is on the back.
-                                             : below - hole.diameter;
-                if (! solveLength (g, hole.position, 0.01, hi, c.openness (g), targetFor (c)))
+                auto upperLimit = [&] { return index == 0 ? g.boreLength - hole.diameter  // The thumb hole is on the back.
+                                                          : below - hole.diameter; };
+                bool solved = solveLength (g, hole.position, 0.01, upperLimit(), c.openness (g), targetFor (c));
+                for (int attempt = 0; ! solved && resize && attempt < 20; ++attempt)
+                {
+                    const bool wantsLower = hole.position > upperLimit() - 0.0005;  // Stopped at the hole below
+                    const double widest = 0.85 * 2.0 * g.radiusAt (hole.position);
+                    const double resized = juce::jlimit (0.0025, widest, hole.diameter * (wantsLower ? 0.9 : 1.1));
+                    if (std::abs (resized - hole.diameter) < 1.0e-6)
+                        break;  // At the size limit
+                    hole.diameter = resized;
+                    solved = solveLength (g, hole.position, 0.01, upperLimit(), c.openness (g), targetFor (c));
+                }
+                if (! solved)
                     return false;
                 if (index != 0)
                     below = hole.position;
@@ -306,7 +327,7 @@ namespace
 {
 // Sets one hole's diameter (positions retuned for each try) so a cross-fingering is in tune.
 // E.g. a smaller top hole vents less, so the covered holes below it pull the cross-fingered note further down.
-bool tuneDiameter (Geometry& g, double lowestHz, const ChartFingering& cross)
+bool tuneDiameter (Geometry& g, double lowestHz, const ChartFingering& cross, bool resize)
 {
     auto& diameter = g.holes[(size_t) ChartFingering::holeFor (g, cross.tunesDiameter)].diameter;
     const double original = diameter;
@@ -314,7 +335,7 @@ bool tuneDiameter (Geometry& g, double lowestHz, const ChartFingering& cross)
     auto crossError = [&] (double d)
     {
         diameter = d;
-        if (! tunePositions (g, lowestHz))
+        if (! tunePositions (g, lowestHz, resize))
             return 1.0e9;
         return predictedCents (g, cross, lowestHz);
     };
@@ -360,12 +381,12 @@ bool tuneDiameter (Geometry& g, double lowestHz, const ChartFingering& cross)
 
     // The hole's size alone can't put the cross-fingering in tune: keep it and tune the rest.
     g = originalGeometry;
-    tunePositions (g, lowestHz);
+    tunePositions (g, lowestHz, resize);
     return false;
 }
 } // namespace
 
-bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingerings)
+bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingerings, bool resizeHoles)
 {
     std::vector<const ChartFingering*> crosses;
     if (tuneCrossFingerings)
@@ -374,7 +395,7 @@ bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingerings)
                 crosses.push_back (&c);
 
     if (crosses.empty())
-        return tunePositions (g, lowestHz);
+        return tunePositions (g, lowestHz, resizeHoles);
 
     // Several cross-fingerings, each with its own hole size: take turns until they all hold.
     bool ok = true;
@@ -382,7 +403,7 @@ bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingerings)
     {
         ok = true;
         for (const auto* cross : crosses)
-            ok = tuneDiameter (g, lowestHz, *cross) && ok;
+            ok = tuneDiameter (g, lowestHz, *cross, resizeHoles) && ok;
     }
     for (const auto* cross : crosses)
         ok = ok && std::abs (predictedCents (g, *cross, lowestHz)) < 5.0;
