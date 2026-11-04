@@ -681,7 +681,7 @@ int main (int argc, char* argv[])
                     model.setGeometry (g);
                     model.prepare (rate);
                     model.setVoicing (v);
-                    model.testGapResistance = gapResistance;
+                    model.fingerGapDamping = gapResistance ? 1.0f : 0.0f;
                     std::vector<float> out ((size_t) (0.7 * rate), 0.0f);
                     const int block = 16;  // Fine control steps, so the S-path is followed closely
                     for (int start = 0; start < (int) out.size(); start += block)

@@ -180,6 +180,7 @@ void WhistleModel::setVoicing (const Voicing& v)
     windwayFriction = v.windwayFriction;
     vortexLoss = v.vortexLoss;
     attackChiff = v.attackChiff;
+    fingerGapDamping = v.fingerGapDamping;
 }
 
 Voicing WhistleModel::getVoicing() const
@@ -194,6 +195,7 @@ Voicing WhistleModel::getVoicing() const
     v.windwayFriction = windwayFriction.load();
     v.vortexLoss = vortexLoss.load();
     v.attackChiff = attackChiff.load();
+    v.fingerGapDamping = fingerGapDamping.load();
     return v;
 }
 
@@ -537,10 +539,11 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
             // air mass with the trapped chimney air, which otherwise "plops" as a finger lifts), negligible once the
             // hole is more than about a quarter open. Scaled by the openness like the rest of the open branch (orv).
             double orv = 0.0;
-            if (open > 0.0 && open < 1.0 && testGapResistance)
+            const double gapDamping = fingerGapDamping.load (std::memory_order_relaxed);
+            if (open > 0.0 && open < 1.0 && gapDamping > 0.0)
             {
                 const double gap = cfg.holeGapHeight[(size_t) hole] / (1.0 / open - 1.0);
-                orv = std::min (1.0e15, open * cfg.holeGapViscous[(size_t) hole] / (gap * gap * gap));
+                orv = std::min (1.0e15, gapDamping * open * cfg.holeGapViscous[(size_t) hole] / (gap * gap * gap));
             }
 
             // Open branch Y_o = open (r + s mr) / (mi mr s^2 + ((mi + mr) r + orv mr) s + orv r), covered part s C.

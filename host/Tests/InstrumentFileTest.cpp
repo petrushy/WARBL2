@@ -29,7 +29,7 @@ int main()
     {
         Instrument in;
         in.geometry = preset;
-        in.voicing = { 0.031f, 0.55f, 0.4f, -3.5f, 0.7f, 0.3f, 0.6f, 0.45f, 2.5f };
+        in.voicing = { 0.031f, 0.55f, 0.4f, -3.5f, 0.7f, 0.3f, 0.6f, 0.45f, 2.5f, 0.8f };
 
         juce::String error;
         const auto out = fromJson (toJson (in), error);
@@ -56,7 +56,8 @@ int main()
         CHECK (near (out->voicing.jetStrouhal, 0.031f) && near (out->voicing.jetConvection, 0.55f) && near (out->voicing.breathNoise, 0.4f)
                && near (out->voicing.outputGainDb, -3.5f) && near (out->voicing.directNoise, 0.7f)
                && near (out->voicing.windwayMass, 0.3f) && near (out->voicing.windwayFriction, 0.6f)
-               && near (out->voicing.vortexLoss, 0.45f) && near (out->voicing.attackChiff, 2.5f));
+               && near (out->voicing.vortexLoss, 0.45f) && near (out->voicing.attackChiff, 2.5f)
+               && near (out->voicing.fingerGapDamping, 0.8f));
     }
 
     // A file with only some fields: the rest come from the first preset.

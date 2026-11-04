@@ -130,6 +130,9 @@ struct Voicing
     // Extra breath noise while the jet is starting and not yet steered by the sound (the attack "chiff"), as a
     // multiple of the breath noise: 0 = none.
     float attackChiff = 0.0f;
+    // The viscous resistance of the thin gap under a finger just above a hole, as a multiple of the computed one:
+    // 0 = off (a barely lifted finger already lets the hole act), 1 = physical (it leaks almost nothing at first).
+    float fingerGapDamping = 0.0f;
 };
 
 // Starting points, tuned (see WhistleGeometry.cpp).

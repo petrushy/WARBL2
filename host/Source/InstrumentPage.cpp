@@ -409,6 +409,11 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
         .setTooltip ("A burst of breath noise at a quick (tongued) attack: the jet has just started, is turbulent, and isn't yet "
                      "steered by the sound in the pipe. It fades as the note takes over; slow swells and held notes are unchanged. "
                      "A multiple of the breath noise; 0 = none.");
+    addRow ("Finger gap damping", 0.0, 1.0, 0.01, "", [&model] { return (double) model.fingerGapDamping.load(); },
+            [&model] (double v) { model.fingerGapDamping = (float) v; }, false)
+        .setTooltip ("Air leaving a hole under a finger just above it has to squeeze through a thin gap, which barely lets it "
+                     "through: 1 = that physical resistance (a just-lifted finger changes little at first), 0 = off (the hole "
+                     "acts as soon as the finger lifts).");
 
     addHeading ("Output (breath and hole response: Sensors tab)");
     addRow ("Output level", -30.0, 12.0, 0.5, "dB", [&model] { return (double) model.outputGainDb.load(); },

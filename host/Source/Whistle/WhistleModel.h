@@ -64,6 +64,7 @@ public:
     std::atomic<float> windwayFriction { 1.0f };
     std::atomic<float> vortexLoss { 1.0f };  // See Voicing
     std::atomic<float> attackChiff { 0.0f };  // See Voicing
+    std::atomic<float> fingerGapDamping { 0.0f };  // See Voicing
 
     // Sets all of the above that a Voicing holds, or reads them back.
     void setVoicing (const Voicing&);
@@ -74,7 +75,6 @@ public:
     float testSource = 0.0f;
     std::vector<float>* windowFlowLog = nullptr;
     float testWindowRadiation = 1.0f, testBodyRadiation = 1.0f;  // Scale what the window / the holes and foot radiate
-    bool testGapResistance = true;  // The viscous resistance of the gap under a finger (off: as before 2026-11-04)
 
     // For display.
     std::atomic<float> jetVelocity { 0.0f };   // m/s

@@ -94,7 +94,8 @@ void AudioEngine::playScale()
                                  && same (voicing.breathNoise, scaleVoicing.breathNoise) && same (voicing.windwayMass, scaleVoicing.windwayMass)
                                  && same (voicing.windwayFriction, scaleVoicing.windwayFriction)
                                  && same (voicing.vortexLoss, scaleVoicing.vortexLoss)
-                                 && same (voicing.attackChiff, scaleVoicing.attackChiff);
+                                 && same (voicing.attackChiff, scaleVoicing.attackChiff)
+                                 && same (voicing.fingerGapDamping, scaleVoicing.fingerGapDamping);
         if (scaleCacheValid && sameVoicing)
         {
             startScale (scaleCache);
