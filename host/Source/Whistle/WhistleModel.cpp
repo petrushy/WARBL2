@@ -121,6 +121,8 @@ void WhistleModel::prepare (double hostSampleRate)
     // twice the host rate and decimates; at 88.2 kHz and above it runs at the host rate.
     oversampling = hostSampleRate < 80000.0 ? 2 : 1;
     rate = oversampling * hostSampleRate;
+    slowCoeff = (float) (1.0 - std::exp (-1.0 / (0.02 * rate)));
+    lockCoeff = (float) (1.0 - std::exp (-1.0 / (0.005 * rate)));
 
     // Decimation lowpass (Blackman-windowed sinc) at ~0.45 of the host rate.
     const double cutoff = 0.225;  // Of the internal rate
@@ -163,7 +165,7 @@ void WhistleModel::resetState()
         d.fill (0.0f);
     lastRadiatedFlow = dcX1 = dcY1 = {};
     topPressure = lastSource = footX1 = footY1 = flowIntoBore = lastJetFlow = 0.0f;
-    windwaySpeed = 0.0f;
+    windwaySpeed = slowJetSpeed = jetLock = 0.0f;
     levelState = 0.0f;
 }
 
@@ -177,6 +179,7 @@ void WhistleModel::setVoicing (const Voicing& v)
     windwayMass = v.windwayMass;
     windwayFriction = v.windwayFriction;
     vortexLoss = v.vortexLoss;
+    attackChiff = v.attackChiff;
 }
 
 Voicing WhistleModel::getVoicing() const
@@ -190,6 +193,7 @@ Voicing WhistleModel::getVoicing() const
     v.windwayMass = windwayMass.load();
     v.windwayFriction = windwayFriction.load();
     v.vortexLoss = vortexLoss.load();
+    v.attackChiff = attackChiff.load();
     return v;
 }
 
@@ -404,8 +408,16 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
     const float amount = breathNoise.load (std::memory_order_relaxed);
     // Edge noise: of order rho U^2, growing a little faster (U^2.5): the edge-dipole law (U^3) let the hiss
     // overtake the tone at the high pressures of the top notes.
-    const float steadyEdgeNoise = amount * kEdgeNoise * rho * jetSpeed * jetSpeed * std::sqrt (jetSpeed / 20.0f) * band;  // Pa
-    const float turbulence = amount * 0.15f * band;  // In jet half-widths: a slight unsteadiness, not roughness
+
+    // Attack chiff: a jet that has just started (its speed well above its ~20 ms average, as after a tongued
+    // attack, not in a slow swell) rolls up a starting vortex and is turbulent, and until the sound in the pipe
+    // steers it across the edge (the oscillation has built up) the edge hears mostly that turbulence.
+    slowJetSpeed += slowCoeff * (jetSpeed - slowJetSpeed);
+    const float starting = jetSpeed > 1.0f ? std::max (0.0f, 1.0f - slowJetSpeed / jetSpeed) : 0.0f;
+    const float chiff = 1.0f + attackChiff.load (std::memory_order_relaxed) * starting * (1.0f - jetLock);
+
+    const float steadyEdgeNoise = chiff * amount * kEdgeNoise * rho * jetSpeed * jetSpeed * std::sqrt (jetSpeed / 20.0f) * band;  // Pa
+    const float turbulence = chiff * amount * 0.15f * band;  // In jet half-widths: a slight unsteadiness, not roughness
 
     // A jet amplifies disturbances most around one frequency, set by its speed and thickness (Strouhal number
     // f h / U), and less above and below. Blowing harder moves that band up, which is what lets the higher
@@ -441,6 +453,7 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
     // which the ear hears as breathiness in the note rather than as a separate hiss. Below the playing threshold
     // the jet hardly moves off the edge, so the airy noise stays steady.
     const float acrossEdge = 1.0f / std::cosh ((deflection - cfg.edgeOffset) / jetHalfWidth);
+    jetLock += lockCoeff * (std::min (1.0f, std::abs (deflection - cfg.edgeOffset) / jetHalfWidth) - jetLock);
     const float pulsing = noisePulsing.load (std::memory_order_relaxed);
     const float edgeNoise = steadyEdgeNoise * (1.0f - pulsing + pulsing * acrossEdge * acrossEdge);
     const float jetFlowRate = (jetFlow - lastJetFlow) * (float) rate;

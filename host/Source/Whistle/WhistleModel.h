@@ -63,6 +63,7 @@ public:
     std::atomic<float> windwayMass { 1.0f };
     std::atomic<float> windwayFriction { 1.0f };
     std::atomic<float> vortexLoss { 1.0f };  // See Voicing
+    std::atomic<float> attackChiff { 0.0f };  // See Voicing
 
     // Sets all of the above that a Voicing holds, or reads them back.
     void setVoicing (const Voicing&);
@@ -156,6 +157,9 @@ private:
     float flowIntoBore = 0.0f;  // Through the window, last sample (m^3/s)
     float lastJetFlow = 0.0f;
     float windwaySpeed = 0.0f;  // Core speed of the air leaving the windway (m/s)
+    float slowJetSpeed = 0.0f;  // Jet speed averaged over ~20 ms (for the attack chiff)
+    float jetLock = 0.0f;       // How far the jet swings across the edge, 0..1, averaged over ~5 ms
+    float slowCoeff = 0.0f, lockCoeff = 0.0f;
     float jetB0 = 0.0f, jetA1 = 0.0f, jetA2 = 0.0f;
     std::array<std::array<float, 4>, 3> jetState {};  // x1, x2, y1, y2 per band-pass stage
     int jetFilterCountdown = 0;

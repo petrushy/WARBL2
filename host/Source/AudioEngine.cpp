@@ -93,7 +93,8 @@ void AudioEngine::playScale()
         const bool sameVoicing = same (voicing.jetStrouhal, scaleVoicing.jetStrouhal) && same (voicing.jetConvection, scaleVoicing.jetConvection)
                                  && same (voicing.breathNoise, scaleVoicing.breathNoise) && same (voicing.windwayMass, scaleVoicing.windwayMass)
                                  && same (voicing.windwayFriction, scaleVoicing.windwayFriction)
-                                 && same (voicing.vortexLoss, scaleVoicing.vortexLoss);
+                                 && same (voicing.vortexLoss, scaleVoicing.vortexLoss)
+                                 && same (voicing.attackChiff, scaleVoicing.attackChiff);
         if (scaleCacheValid && sameVoicing)
         {
             startScale (scaleCache);

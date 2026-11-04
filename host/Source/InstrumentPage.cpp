@@ -404,6 +404,11 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
             [&model] (double v) { model.vortexLoss = (float) v; }, false)
         .setTooltip ("Energy lost in the vortices shed where the sound flows round the edge (1 = the textbook value). It is what "
                      "limits how loud the low notes get: lower gives fuller, louder low notes with more harmonics.");
+    addRow ("Attack chiff", 0.0, 10.0, 0.1, "", [&model] { return (double) model.attackChiff.load(); },
+            [&model] (double v) { model.attackChiff = (float) v; }, false)
+        .setTooltip ("A burst of breath noise at a quick (tongued) attack: the jet has just started, is turbulent, and isn't yet "
+                     "steered by the sound in the pipe. It fades as the note takes over; slow swells and held notes are unchanged. "
+                     "A multiple of the breath noise; 0 = none.");
 
     addHeading ("Output (breath and hole response: Sensors tab)");
     addRow ("Output level", -30.0, 12.0, 0.5, "dB", [&model] { return (double) model.outputGainDb.load(); },

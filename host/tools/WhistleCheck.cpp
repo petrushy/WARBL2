@@ -577,6 +577,69 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "chiff")  // chiff [preset] [p=<Pa>] [wav=<prefix>]: breath noise against tone in the first 60 ms of an attack
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        const auto& g = presets()[index];
+        double pressure = 700.0;
+        for (int i = 3; i < argc; ++i)
+            if (juce::String (argv[i]).startsWith ("p="))
+                pressure = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        std::printf ("%s, low G at %.0f Pa: the breath noise (sound with noise minus sound without) against the tone,\n"
+                     "in 5 ms windows after a tongued attack (2 ms) and after a slow swell (300 ms), for several\n"
+                     "Attack chiff settings. dB relative to the steady tone. After ~25 ms the 'noise' is mostly tone: the noise\n"
+                     "seeds the oscillation, so the noisy sound's tone builds up sooner than the clean one's.\n\n", g.name.toRawUTF8(), pressure);
+        constexpr double rate = 48000.0;
+        const auto open = ChartFingering { "G", "xxxooo", 7.0, 1 }.openness (g);
+        auto render = [&] (float noise, float chiffAmount, double rise, double seconds)
+        {
+            auto v = presetVoicing (index);
+            v.breathNoise = noise;
+            v.attackChiff = chiffAmount;
+            return playGesture (g, v, open, [=] (double t) { return pressure * std::min (1.0, t / rise); }, seconds, rate);
+        };
+        for (double rise : { 0.002, 0.3 })
+        {
+            const double start = rise > 0.1 ? 0.15 : 0.0;  // Where to look: the onset, or the middle of the swell
+            std::printf ("  %s\n  chiff     ", rise < 0.1 ? "tongued attack (noise, then tone, per 5 ms window)" : "slow swell");
+            for (double t = 0.0; t < 0.06; t += 0.005)
+                std::printf (" %3.0fms ", (start + t) * 1000.0);
+            std::printf ("\n");
+            const auto clean = render (0.0f, 0.0f, rise, 0.6);
+            const double steady = levelDb (clean, (size_t) (0.5 * rate), (size_t) (0.6 * rate));
+            for (float chiffAmount : { 0.0f, 3.0f, 6.0f })
+            {
+                const auto noisy = render (presetVoicing (index).breathNoise, chiffAmount, rise, 0.6);
+                std::vector<float> noise (noisy.size());
+                for (size_t i = 0; i < noise.size(); ++i)
+                    noise[i] = noisy[i] - clean[i];
+                std::printf ("  %4.1f noise", chiffAmount);
+                for (double t = 0.0; t < 0.06; t += 0.005)
+                    std::printf (" %+5.0f ", levelDb (noise, (size_t) ((start + t) * rate), (size_t) ((start + t + 0.005) * rate)) - steady);
+                std::printf ("\n       tone ");
+                for (double t = 0.0; t < 0.06; t += 0.005)
+                    std::printf (" %+5.0f ", levelDb (clean, (size_t) ((start + t) * rate), (size_t) ((start + t + 0.005) * rate)) - steady);
+                std::printf ("\n");
+            }
+        }
+
+        // Tongued phrases to listen to: four notes, 250 ms each with 40 ms gaps, per chiff setting.
+        for (float chiffAmount : { 0.0f, 3.0f, 6.0f })
+        {
+            auto v = presetVoicing (index);
+            v.attackChiff = chiffAmount;
+            std::vector<float> phrase;
+            for (const char* pattern : { "xxxxxx", "xxxooo", "xxoooo", "xxxxoo" })
+            {
+                const auto o = ChartFingering { "", pattern, 0.0, 1 }.openness (g);
+                const auto note = playGesture (g, v, o, [=] (double t) { return t < 0.25 ? pressure * std::min (1.0, t / 0.002) : 0.0; }, 0.29, rate);
+                phrase.insert (phrase.end(), note.begin(), note.end());
+            }
+            saveWavArg (argc, argv, "chiff" + juce::String (chiffAmount, 0), phrase, rate);
+        }
+        return 0;
+    }
+
     if (mode == "glide")  // glide [preset] [p=<Pa>] [ms=<ramp>] [vortex=]: level and pitch while one hole opens or closes gradually
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);

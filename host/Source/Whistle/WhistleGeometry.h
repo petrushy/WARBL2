@@ -127,6 +127,9 @@ struct Voicing
     // Loss from vortices shed where the sound flows round the edge, as a multiple of Verge's 1/2 rho (v / 0.6)^2.
     // It is what limits the low notes' loudness: lower = fuller, louder low notes (with more odd harmonics).
     float vortexLoss = 1.0f;
+    // Extra breath noise while the jet is starting and not yet steered by the sound (the attack "chiff"), as a
+    // multiple of the breath noise: 0 = none.
+    float attackChiff = 0.0f;
 };
 
 // Starting points, tuned (see WhistleGeometry.cpp).
