@@ -511,6 +511,72 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "rates")  // rates [preset] [p=<Pa>]: one note at several sample rates: harmonics and what lies between them
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        const auto& g = presets()[index];
+        auto voicing = presetVoicing (index);
+        voicing.breathNoise = 0.0f;  // Only the tone: anything between its harmonics is then aliasing or other artefacts
+        double pressure = 700.0;
+        for (int i = 3; i < argc; ++i)
+            if (juce::String (argv[i]).startsWith ("p="))
+                pressure = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        std::printf ("%s at %.0f Pa, breath noise off. Per host rate: pitch, harmonics 1-12 (dB re the fundamental), and the\n"
+                     "energy between the harmonics up to 20 kHz relative to the tone (aliasing, inharmonic artefacts).\n\n", g.name.toRawUTF8(), pressure);
+        for (const char* pattern : { "xxxxxx", "xxoooo", "xooooo" })
+        {
+            ChartFingering c { "", pattern, 0.0, 1 };
+            std::printf ("  %s\n", c.holePattern (g).c_str());
+            for (double rate : { 44100.0, 48000.0, 96000.0 })
+            {
+                WhistleModel model;
+                model.setGeometry (g);
+                model.prepare (rate);
+                model.setVoicing (voicing);
+                auto controls = controlsFor (c.openness (g));
+                std::vector<float> out ((size_t) (0.8 * rate), 0.0f);
+                const int block = (int) (rate * 0.002);
+                for (int start = 0; start < (int) out.size(); start += block)
+                {
+                    controls.mouthPressure = (float) (pressure * std::min (1.0, start / (rate * 0.04)));
+                    model.setControls (controls);
+                    model.render (out.data() + start, std::min (block, (int) out.size() - start));
+                }
+                double clarity = 0.0;
+                const double f0 = measurePitch (out, rate, clarity);
+                // Spectrum of the last 2^14 samples (Hann), as power per bin.
+                constexpr int order = 14, n = 1 << order;
+                juce::dsp::FFT fft (order);
+                std::vector<float> buffer (2 * n, 0.0f);
+                for (int i = 0; i < n; ++i)
+                    buffer[(size_t) i] = out[out.size() - n + (size_t) i] * (float) (0.5 - 0.5 * std::cos (2.0 * juce::MathConstants<double>::pi * i / n));
+                fft.performFrequencyOnlyForwardTransform (buffer.data());
+                const double binHz = rate / n;
+                double tone = 0.0, between = 0.0;
+                std::vector<double> harmonics (13, 0.0);
+                for (int b = 1; b < n / 2 && b * binHz < 20000.0; ++b)
+                {
+                    const double hz = b * binHz, power = (double) buffer[(size_t) b] * buffer[(size_t) b];
+                    const double k = f0 > 0.0 ? hz / f0 : 0.0;
+                    if (f0 > 0.0 && std::abs (k - std::round (k)) * f0 < 4.0 * binHz)
+                    {
+                        tone += power;
+                        const int h = (int) std::round (k);
+                        if (h >= 1 && h <= 12)
+                            harmonics[(size_t) h] += power;
+                    }
+                    else
+                        between += power;
+                }
+                std::printf ("    %6.1f kHz  %7.1f Hz ", rate / 1000.0, f0);
+                for (int h = 2; h <= 12; ++h)
+                    std::printf (" %+4.0f", 10.0 * std::log10 (harmonics[(size_t) h] / (harmonics[1] + 1e-30) + 1e-12));
+                std::printf ("   between %+5.0f dB\n", 10.0 * std::log10 (between / (tone + 1e-30) + 1e-12));
+            }
+        }
+        return 0;
+    }
+
     if (mode == "glide")  // glide [preset] [p=<Pa>] [ms=<ramp>] [vortex=]: level and pitch while one hole opens or closes gradually
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);

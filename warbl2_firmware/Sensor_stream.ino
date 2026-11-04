@@ -128,8 +128,8 @@ void setSensorStream(bool on, bool suppressNotes) {
     sensorStreamSuppressNotes = on && suppressNotes;
 
     if (on) {
-        sox.setAccelDataRate(LSM6DS_RATE_833_HZ);  // Faster than the loop, so each frame has a fresh reading.
-        sox.setGyroDataRate(LSM6DS_RATE_833_HZ);
+        sox.setAccelDataRate(LSM6DS_RATE_1_66K_HZ);  // Faster than the 1 kHz stream loop, so each frame has a fresh reading.
+        sox.setGyroDataRate(LSM6DS_RATE_1_66K_HZ);
     } else {
         sox.setAccelDataRate(LSM6DS_RATE_208_HZ);  // Back to the startup rate.
         loadPrefs();                               // Turns the gyro back on or off as the preset needs.

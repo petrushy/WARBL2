@@ -91,6 +91,7 @@ public:
         uint64_t frames = 0;
         uint64_t lostFrames = 0;
         double framesPerSecond = 0.0;
+        double freshHoles = 0.0;  // Share of recent frames with a new tone hole reading (WARBL's ATmega kept up)
         std::array<uint32_t, kHistogramBins> histogram {};
         uint32_t histogramOverflow = 0;
     };
@@ -115,7 +116,7 @@ private:
     double windowMin[2] = { 1.0e12, 1.0e12 };  // Minimum (arrival - device) in the current and previous second.
     double windowStartMs = 0.0;
     double rateWindowStartMs = 0.0;
-    uint64_t rateWindowFrames = 0;
+    uint64_t rateWindowFrames = 0, rateWindowHoleUpdates = 0;
 
     std::atomic<bool> simulating { false };
     warbl::SimulatedPlayer player;  // Simulator timer thread only.

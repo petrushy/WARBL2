@@ -117,7 +117,10 @@ WhistleModel::WhistleModel()
 void WhistleModel::prepare (double hostSampleRate)
 {
     hostRate = hostSampleRate;
-    rate = 2.0 * hostSampleRate;
+    // The model needs ~96 kHz for accurate short delays (the bore's sections, the jet): at 44.1/48 kHz it runs at
+    // twice the host rate and decimates; at 88.2 kHz and above it runs at the host rate.
+    oversampling = hostSampleRate < 80000.0 ? 2 : 1;
+    rate = oversampling * hostSampleRate;
 
     // Decimation lowpass (Blackman-windowed sinc) at ~0.45 of the host rate.
     const double cutoff = 0.225;  // Of the internal rate
@@ -594,7 +597,7 @@ void WhistleModel::render (float* windowOut, float* bodyOut, int numSamples)
 
     for (int i = 0; i < numSamples; ++i)
     {
-        for (int phase = 0; phase < 2; ++phase)
+        for (int phase = 0; phase < oversampling; ++phase)
         {
             // DC blocker on the internal-rate signals, then into the decimation filters.
             float x[2];
@@ -610,11 +613,21 @@ void WhistleModel::render (float* windowOut, float* bodyOut, int numSamples)
         }
 
         float sample[2] = { 0.0f, 0.0f };
-        for (int t = 0; t < kDecimatorTaps; ++t)
+        if (oversampling == 1)
         {
-            const auto at = (size_t) ((decimatorWrite + t) % kDecimatorTaps);
-            sample[0] += decimatorCoeffs[(size_t) t] * decimatorBuffer[0][at];
-            sample[1] += decimatorCoeffs[(size_t) t] * decimatorBuffer[1][at];
+            // No decimation: the newest samples (the filter's delay doesn't matter, so take them at once).
+            const auto newest = (size_t) ((decimatorWrite + kDecimatorTaps - 1) % kDecimatorTaps);
+            sample[0] = decimatorBuffer[0][newest];
+            sample[1] = decimatorBuffer[1][newest];
+        }
+        else
+        {
+            for (int t = 0; t < kDecimatorTaps; ++t)
+            {
+                const auto at = (size_t) ((decimatorWrite + t) % kDecimatorTaps);
+                sample[0] += decimatorCoeffs[(size_t) t] * decimatorBuffer[0][at];
+                sample[1] += decimatorCoeffs[(size_t) t] * decimatorBuffer[1][at];
+            }
         }
 
         sample[0] *= gain;

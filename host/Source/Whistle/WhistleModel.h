@@ -10,7 +10,7 @@
 //    of the pipe (jet-drive model, Verge/Fabre/Hirschberg). That delay is what makes the whistle overblow to
 //    the next register as you blow harder. Turbulence adds breath noise.
 //
-// Runs internally at twice the host sample rate for accurate short delays. Audio thread: render() and
+// Runs internally at ~96 kHz or more for accurate short delays (twice the host rate below 88.2 kHz). Audio thread: render() and
 // setControls(); setGeometry() from any other thread.
 
 #pragma once
@@ -135,6 +135,7 @@ private:
     void tick (float& window, float& body);  // One sample at the internal rate: the two sources' sound.
 
     double hostRate = 48000.0, rate = 96000.0;
+    int oversampling = 2;  // Internal samples per host sample: 2 below 88.2 kHz, 1 at 88.2 kHz and above
     Geometry geometry;
 
     juce::SpinLock pendingLock;

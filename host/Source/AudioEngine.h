@@ -146,6 +146,9 @@ private:
     void placeAtEars (int numSamples);
     double sampleRate = 48000.0;
     int samplesSinceControls = 0;
+    uint32_t lastFrameTime = 0;  // Device timestamp of the last frame
+    bool haveFrameTime = false;
+    double frameInterval = 0.002;  // s, smoothed
     whistle::Controls lastControls;
     int dryCapacity = 0;
 };

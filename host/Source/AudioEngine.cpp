@@ -300,6 +300,17 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     {
         clickModel.handleFrame (received.frame);
         controls = controlsFromFrame (received.frame);
+        // WARBL's frame interval (2 ms, or 1 ms with the 1 kHz stream loop), from its own timestamps: each frame's
+        // controls are reached over that time, so the model follows the sensors without steps or extra lag.
+        if (haveFrameTime)
+        {
+            const auto ticks = (received.frame.timestamp - lastFrameTime) & ((1u << warbl::kTimestampBits) - 1);
+            const double interval = ticks / warbl::kDeviceTicksPerSecond;
+            if (interval > 0.0003 && interval < 0.01)
+                frameInterval += 0.1 * (interval - frameInterval);
+        }
+        lastFrameTime = received.frame.timestamp;
+        haveFrameTime = true;
         bunch[(size_t) (count % kMaxBunch)] = controls;  // Beyond kMaxBunch, the oldest are dropped (stale anyway)
         haveControls = true;
         ++count;
@@ -338,7 +349,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         samplesSinceControls = 0;
         lastControls = controls;
         if (bunchSize < 2)
-            whistleModel.setControls (controls);
+            whistleModel.setControls (controls, frameInterval);
         for (int i = 0; i < whistle::kNumHoles; ++i)
             shownOpenness[(size_t) i] = controls.openness[(size_t) i];
         shownFootOpenness = controls.footOpenness;

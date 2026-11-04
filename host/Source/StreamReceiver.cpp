@@ -201,10 +201,14 @@ void StreamReceiver::acceptFrame (const warbl::SensorFrame& frame, double nowMs)
         stats.histogramOverflow++;
 
     rateWindowFrames++;
+    if (frame.holesUpdated())
+        rateWindowHoleUpdates++;
     if (nowMs - rateWindowStartMs >= 500.0)
     {
         stats.framesPerSecond = (double) rateWindowFrames * 1000.0 / (nowMs - rateWindowStartMs);
+        stats.freshHoles = (double) rateWindowHoleUpdates / (double) std::max<uint64_t> (1, rateWindowFrames);
         rateWindowFrames = 0;
+        rateWindowHoleUpdates = 0;
         rateWindowStartMs = nowMs;
     }
 }
