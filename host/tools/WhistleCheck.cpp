@@ -337,6 +337,94 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "passive")  // passive [preset]: the time-domain bore against the frequency-domain calculation, jet off
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        const auto& g = presets()[index];
+        std::printf ("%s: passive resonances (jet off). An impulse at the window; the model's admittance U/p there\n"
+                     "against Acoustics' 1/Z. Per resonance: frequency (Acoustics), the model's offset in cents,\n"
+                     "Q (Acoustics / model) and the model's peak height relative to Acoustics (dB).\n\n", g.name.toRawUTF8());
+
+        constexpr double hostRate = 48000.0, rate = 2.0 * hostRate;  // The model runs at twice the host rate
+        constexpr int order = 17;
+        constexpr size_t size = (size_t) 1 << order;
+
+        // Peak of a sampled magnitude curve near index i: refined frequency, peak value, and Q from the half-power width.
+        struct Peak { double hz, height, q; };
+        auto describe = [] (const std::vector<double>& freq, const std::vector<double>& mag, size_t i)
+        {
+            const double l = std::log (mag[i - 1]), m = std::log (mag[i]), r = std::log (mag[i + 1]);
+            const double denom = l - 2.0 * m + r;
+            const double offset = denom < 0.0 ? 0.5 * (l - r) / denom : 0.0;
+            const double hz = freq[i] + offset * (freq[i + 1] - freq[i - 1]) * 0.5;
+            const double half = mag[i] / std::sqrt (2.0);
+            size_t lo = i, hi = i;
+            while (lo > 0 && mag[lo] > half) --lo;
+            while (hi + 1 < mag.size() && mag[hi] > half) ++hi;
+            return Peak { hz, mag[i], hz / std::max (1.0e-9, freq[hi] - freq[lo]) };
+        };
+
+        juce::dsp::FFT fft (order);
+        for (const auto& c : chartFor (g.chart))
+        {
+            const auto open = c.openness (g);
+            WhistleModel model;
+            model.setGeometry (g);
+            model.prepare (hostRate);
+            model.setControls (controlsFor (open));  // No breath: the jet does nothing
+            std::vector<float> settle ((size_t) (0.01 * hostRate), 0.0f);
+            model.render (settle.data(), (int) settle.size());
+
+            std::vector<float> flow, sink (1, 0.0f);
+            flow.reserve (size + 4);
+            model.windowFlowLog = &flow;
+            model.testSource = 1.0f;  // 1 Pa for one host sample = two internal samples
+            model.render (sink.data(), 1);
+            model.testSource = 0.0f;
+            while (flow.size() < size)
+                model.render (sink.data(), 1);
+
+            std::vector<std::complex<float>> in (size), out (size);
+            for (size_t i = 0; i < size; ++i)
+                in[i] = flow[i];
+            fft.perform (in.data(), out.data(), false);
+
+            std::vector<double> freq, modelMag;
+            for (size_t i = 0; i < size / 2; ++i)
+            {
+                const double hz = (double) i * rate / (double) size;
+                const auto source = 1.0 + std::exp (std::complex<double> (0.0, -2.0 * juce::MathConstants<double>::pi * hz / rate));  // The 2-sample pulse
+                freq.push_back (hz);
+                modelMag.push_back (std::abs (std::complex<double> (out[i]) / source) + 1.0e-30);
+            }
+
+            std::printf ("  %-8s %s", c.name, c.holePattern (g).c_str());
+            const auto expected = resonances (g, open, lowestNote (g) * 0.7, 5000.0);
+            for (size_t r = 0; r < std::min<size_t> (3, expected.size()); ++r)
+            {
+                // Acoustics' peak, sampled finely around its resonance.
+                std::vector<double> af, am;
+                for (double cents = -150.0; cents <= 150.0; cents += 0.5)
+                {
+                    af.push_back (expected[r] * std::pow (2.0, cents / 1200.0));
+                    am.push_back (1.0 / std::abs (windowImpedance (g, open, af.back())));
+                }
+                const auto a = describe (af, am, (size_t) (std::max_element (am.begin() + 1, am.end() - 1) - am.begin()));
+
+                // The model's highest admittance peak within 150 cents.
+                size_t best = 0;
+                for (size_t i = 1; i + 1 < freq.size(); ++i)
+                    if (freq[i] > a.hz * 0.917 && freq[i] < a.hz * 1.09 && (best == 0 || modelMag[i] > modelMag[best]))
+                        best = i;
+                const auto m = describe (freq, modelMag, best);
+                std::printf ("   %6.0f Hz %+4.0f c Q %3.0f/%3.0f %+5.1f dB", a.hz, 1200.0 * std::log2 (m.hz / a.hz), a.q, m.q,
+                             20.0 * std::log10 (m.height / a.height));
+            }
+            std::printf ("\n");
+        }
+        return 0;
+    }
+
     if (mode == "attack")  // attack [preset] [mass= friction= windway=]: how fast notes build up, tongued
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
@@ -535,31 +623,14 @@ int main (int argc, char* argv[])
         std::printf ("%s: %d notes, planned in %.0f ms\n", g.name.toRawUTF8(), (int) steps.size(), juce::Time::getMillisecondCounterHiRes() - planStart);
         // Play it exactly as the app does (same timing and breath envelope), measure every note, and save a WAV.
         constexpr double rate = 48000.0;
-        WhistleModel model;
-        model.setGeometry (g);
-        model.prepare (rate);
-        model.setVoicing (scaleVoicing);
-        std::vector<float> out ((size_t) (rate * (kScaleNoteSeconds * (double) steps.size() + 0.5)), 0.0f);
-        const int block = 64;
-        for (int start = 0; start < (int) out.size(); start += block)
-        {
-            Controls controls;
-            scaleControlsAt (steps, start / rate, controls);
-            model.setControls (controls);
-            model.render (out.data() + start, std::min (block, (int) out.size() - start));
-        }
-
+        std::vector<float> out;
+        const auto played = playScale (g, scaleVoicing, steps, rate, &out);
         for (size_t i = 0; i < steps.size(); ++i)
         {
-            // The steady part of each note: from its start to just before its release.
-            const auto from = (size_t) (rate * kScaleNoteSeconds * (double) i);
-            const auto to = from + (size_t) (rate * (kScaleNoteSeconds - kScaleGap - kScaleRelease));
-            std::vector<float> note (out.begin() + (long) from, out.begin() + (long) to);
-            double clarity = 0.0;
-            const double f = measurePitch (note, rate, clarity);
+            const double f = played[i];
             const double target = lowest * std::pow (2.0, std::round (12.0 * std::log2 (f > 0.0 ? f / lowest : 1.0)) / 12.0);
             std::printf ("  %-5s  %5.0f Pa  planned %+4.0f c   played %s\n", steps[i].name.c_str(), steps[i].pressure, steps[i].cents,
-                         f > 0.0 && clarity > 0.8 ? (noteName (f) + " " + std::to_string ((int) std::lround (1200.0 * std::log2 (f / target))) + " c").c_str() : "-");
+                         f > 0.0 ? (noteName (f) + " " + std::to_string ((int) std::lround (1200.0 * std::log2 (f / target))) + " c").c_str() : "-");
         }
 
         if (argc > 3 && ! juce::String (argv[3]).containsChar ('='))  // A WAV file name, not an option

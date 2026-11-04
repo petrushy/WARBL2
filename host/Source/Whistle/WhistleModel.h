@@ -19,6 +19,7 @@
 
 #include <atomic>
 #include <random>
+#include <vector>
 
 namespace whistle
 {
@@ -63,6 +64,11 @@ public:
     void setVoicing (const Voicing&);
     Voicing getVoicing() const;
 
+    // Offline measurements only (WhistleCheck passive), never on the audio thread: an extra pressure source at
+    // the window (Pa), and a log of the flow into the bore (m^3/s), both per internal sample.
+    float testSource = 0.0f;
+    std::vector<float>* windowFlowLog = nullptr;
+
     // For display.
     std::atomic<float> jetVelocity { 0.0f };   // m/s
     std::atomic<float> level { 0.0f };         // Output RMS, linear
@@ -83,10 +89,16 @@ private:
         float read (float delay) const;  // Delay in samples (>= 2), Lagrange interpolated.
     };
 
-    struct OnePole
+    struct Biquad  // Transposed direct form II
     {
-        float b0 = 1.0f, a1 = 0.0f, y1 = 0.0f;
-        float process (float x) { y1 = b0 * x + a1 * y1; return y1; }
+        float s1 = 0.0f, s2 = 0.0f;
+        float process (float x, const std::array<float, 5>& c)  // b0 b1 b2 a1 a2
+        {
+            const float y = c[0] * x + s1;
+            s1 = c[1] * x - c[3] * y + s2;
+            s2 = c[2] * x - c[4] * y;
+            return y;
+        }
     };
 
     struct Config
@@ -94,10 +106,13 @@ private:
         int numSegments = 0;
         std::array<float, kMaxSegments> delay {};      // Samples
         std::array<float, kMaxSegments> area {};       // m^2
-        std::array<float, kMaxSegments> lossB0 {}, lossA1 {};
+        std::array<std::array<float, 5>, kMaxSegments> loss {};  // Wall loss and dispersion filter (b0 b1 b2 a1 a2)
         std::array<int, kMaxSegments + 1> holeAt {};   // Hole index at junction j (between sections j-1 and j), or -1.
         std::array<float, kMaxSegments + 1> radiationDelay {};  // Samples from junction j to the listener (relative).
-        std::array<float, kNumHoles> holeArea {}, holeLength {}, holeChimney {};
+        // Per hole (full size): inner air mass (chimney and inner end correction) and outer air mass (outer end
+        // correction, b / 2) in kg/m^4, the radiation resistance rho c / A in parallel with the outer mass
+        // (Pa s/m^3), and the chimney's compliance when covered (m^3/Pa).
+        std::array<double, kNumHoles> holeInnerMass {}, holeOuterMass {}, holeRadiationResistance {}, holeCompliance {};
 
         float windowArea = 0.0f;
         float windowMass = 0.0f;     // Inertance of the air in the window, as M * 2 * rate / Z0 (trapezoidal rule).
@@ -124,8 +139,8 @@ private:
 
     // Bore state
     std::array<DelayLine, kMaxSegments> right {}, left {};
-    std::array<OnePole, kMaxSegments> lossRight {}, lossLeft {};
-    std::array<std::array<float, 4>, kMaxSegments + 1> holeState {};  // Hole junction filters: x1, x2, y1, y2
+    std::array<Biquad, kMaxSegments> lossRight {}, lossLeft {};
+    std::array<std::array<double, 9>, kMaxSegments + 1> holeState {};  // Hole junction filters: sum, p, open flow; 3 samples each
     float topPressure = 0.0f, lastSource = 0.0f;  // At the top of the bore, previous sample.
     float footX1 = 0.0f, footY1 = 0.0f;
 

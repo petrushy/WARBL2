@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 
 namespace whistle
 {
@@ -18,11 +19,79 @@ constexpr float kEdgeNoise = 0.15f;       // Edge pressure fluctuation at 20 m/s
 constexpr float kDirectNoise = 1.0f;      // Share of the edge noise radiated straight from the window (at 1)
 constexpr float kKinematicViscosity = (float) (kAirViscosity / kAirDensity);  // m^2/s
 
-// Amplitude attenuation per metre from viscous and thermal wall losses at frequency hz (tube radius a).
+// Amplitude attenuation per metre from viscous and thermal wall losses at frequency hz (tube radius a), as in
+// Acoustics (Keefe). The same boundary layers slow the sound down: the extra phase per metre equals this.
 double wallAttenuation (double hz, double a, double wallLoss)
 {
     const double omega = 2.0 * kPi * hz;
     return omega / kSpeedOfSound * 1.045 / (a * std::sqrt (kAirDensity * omega / kAirViscosity)) * wallLoss;
+}
+
+// A biquad (b0 b1 b2 a1 a2) for what the wall does to a wave over one section, on top of its delay length / c:
+// exp(-(1 + j) alpha(f) length), loss and dispersion together. Both grow as sqrt(f), which a one-pole lowpass
+// can't follow (it had a fraction of the loss at the notes' frequencies). Fitted over 150 Hz-6 kHz by
+// linearised least squares (Levy), weighted for relative error, with one Sanathanan-Koerner pass to undo
+// Levy's bias: within about +-6 % of the loss from 300 Hz to 4 kHz.
+std::array<float, 5> fitWallLoss (double length, double a, double wallLoss, double rate)
+{
+    constexpr int kPoints = 80, n = 5;
+    double x[n] = { 1.0, 0.0, 0.0, 0.0, 0.0 };
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        double normal[n][n + 1] {};
+        for (int i = 0; i < kPoints; ++i)
+        {
+            const double hz = 150.0 * std::pow (6000.0 / 150.0, i / (kPoints - 1.0));
+            const double alphaL = wallAttenuation (hz, a, wallLoss) * length;
+            const std::complex<double> target = std::exp (std::complex<double> (-alphaL, -alphaL));
+            const std::complex<double> z1 = std::polar (1.0, -2.0 * kPi * hz / rate), z2 = z1 * z1;
+            const double weight = 1.0 / (std::abs (1.0 + x[3] * z1 + x[4] * z2) * std::max (alphaL, 1.0e-12));
+            // Residual = row . (b0 b1 b2 a1 a2) - target, as real and imaginary parts.
+            const std::complex<double> row[n] = { 1.0, z1, z2, -target * z1, -target * z2 };
+            for (int part = 0; part < 2; ++part)
+            {
+                double r[n];
+                const double t = weight * (part == 0 ? target.real() : target.imag());
+                for (int k = 0; k < n; ++k)
+                    r[k] = weight * (part == 0 ? row[k].real() : row[k].imag());
+                for (int p = 0; p < n; ++p)
+                {
+                    for (int q = 0; q < n; ++q)
+                        normal[p][q] += r[p] * r[q];
+                    normal[p][n] += r[p] * t;
+                }
+            }
+        }
+
+        // Gauss-Jordan elimination with partial pivoting.
+        for (int col = 0; col < n; ++col)
+        {
+            int pivot = col;
+            for (int row = col + 1; row < n; ++row)
+                if (std::abs (normal[row][col]) > std::abs (normal[pivot][col]))
+                    pivot = row;
+            for (int k = 0; k <= n; ++k)
+                std::swap (normal[col][k], normal[pivot][k]);
+            if (std::abs (normal[col][col]) < 1.0e-300)
+                return { 1.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+            for (int row = 0; row < n; ++row)
+            {
+                if (row == col)
+                    continue;
+                const double factor = normal[row][col] / normal[col][col];
+                for (int k = col; k <= n; ++k)
+                    normal[row][k] -= factor * normal[col][k];
+            }
+        }
+        for (int k = 0; k < n; ++k)
+            x[k] = normal[k][n] / normal[k][k];
+    }
+
+    // Stable poles only (inside the stability triangle, with a margin); otherwise just the loss at 1 kHz.
+    const bool stable = std::abs (x[4]) < 0.9999 && std::abs (x[3]) < 1.0 + x[4] - 1.0e-6;
+    if (! stable || ! std::isfinite (x[0] + x[1] + x[2] + x[3] + x[4]))
+        return { (float) std::exp (-wallAttenuation (1000.0, a, wallLoss) * length), 0.0f, 0.0f, 0.0f, 0.0f };
+    return { (float) x[0], (float) x[1], (float) x[2], (float) x[3], (float) x[4] };
 }
 } // namespace
 
@@ -75,8 +144,8 @@ void WhistleModel::resetState()
 {
     for (auto& d : right) d = {};
     for (auto& d : left) d = {};
-    for (auto& f : lossRight) f.y1 = 0.0f;
-    for (auto& f : lossLeft) f.y1 = 0.0f;
+    for (auto& f : lossRight) f = {};
+    for (auto& f : lossLeft) f = {};
     for (auto& st : holeState)
         st.fill (0.0f);
     jetLine.fill (0.0f);
@@ -170,26 +239,13 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
         double length = x1 - x0;
         const double a = g.radiusAt (0.5 * (x0 + x1));
 
-        // The foot reflection lowpass delays low frequencies by a/c; the open end correction is 0.61 a.
+        // Open end correction 0.61 a (as in Acoustics). The foot's reflection lowpass already delays low
+        // frequencies by a / c, there and back: that is a / 2 of extra length, so the section adds the rest.
         if (k == out.numSegments - 1)
-            length += (0.6133 - 1.0) * footRadius;
+            length += (0.6133 - 0.5) * footRadius;
 
-        // Wall losses as a one-pole lowpass matching the attenuation at 100 Hz and 4 kHz.
-        const double gainLow = std::exp (-wallAttenuation (100.0, a, g.wallLoss) * length);
-        const double gainHigh = std::exp (-wallAttenuation (4000.0, a, g.wallLoss) * length);
-        const double r = gainHigh / gainLow;
-        const double cosw = std::cos (2.0 * kPi * 4000.0 / rate);
-        double pole = 0.0;
-        if (r < 0.99999)
-        {
-            const double r2 = r * r, bq = 1.0 - r2 * cosw;
-            pole = (bq - std::sqrt (std::max (0.0, bq * bq - (1.0 - r2) * (1.0 - r2)))) / (1.0 - r2);
-        }
-        out.lossA1[(size_t) k] = (float) pole;
-        out.lossB0[(size_t) k] = (float) (gainLow * (1.0 - pole));
-
-        const double lossDelay = pole / (1.0 - pole);  // The filter's own delay at low frequencies.
-        out.delay[(size_t) k] = (float) std::max (2.0, length / kSpeedOfSound * rate - lossDelay);
+        out.loss[(size_t) k] = fitWallLoss (length, a, g.wallLoss, rate);
+        out.delay[(size_t) k] = (float) std::max (2.0, length / kSpeedOfSound * rate);
         out.area[(size_t) k] = (float) (kPi * a * a);
     }
 
@@ -207,9 +263,12 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
     for (int i = 0; i < kNumHoles; ++i)
     {
         const double b = 0.5 * g.holes[(size_t) i].diameter;
-        out.holeArea[(size_t) i] = (float) (kPi * b * b);
-        out.holeLength[(size_t) i] = (float) g.holeEffectiveLength (i);
-        out.holeChimney[(size_t) i] = (float) std::max (g.wallThickness, 0.0003);  // As in Acoustics
+        const double area = kPi * b * b;
+        const double outer = 0.5 * b;  // With rho c / A in parallel, this gives the radiation resistance rho w^2 / (4 pi c)
+        out.holeInnerMass[(size_t) i] = kAirDensity * std::max (g.holeEffectiveLength (i) - outer, 0.0001) / area;
+        out.holeOuterMass[(size_t) i] = kAirDensity * outer / area;
+        out.holeRadiationResistance[(size_t) i] = kAirDensity * kSpeedOfSound / area;
+        out.holeCompliance[(size_t) i] = area * std::max (g.wallThickness, 0.0003) / (kAirDensity * kSpeedOfSound * kSpeedOfSound);  // As in Acoustics
     }
 
     // Window end: the air in the window (area Aw, effective length tw) is a mass the jet's pressure has to
@@ -264,12 +323,9 @@ float WhistleModel::tick()
     // 1. Waves arriving at the ends of each section.
     for (int k = 0; k < n; ++k)
     {
-        lossRight[(size_t) k].b0 = cfg.lossB0[(size_t) k];
-        lossRight[(size_t) k].a1 = cfg.lossA1[(size_t) k];
-        lossLeft[(size_t) k].b0 = cfg.lossB0[(size_t) k];
-        lossLeft[(size_t) k].a1 = cfg.lossA1[(size_t) k];
-        arriveRight[(size_t) k] = lossRight[(size_t) k].process (right[(size_t) k].read (cfg.delay[(size_t) k]));  // At junction k+1
-        arriveLeft[(size_t) k] = lossLeft[(size_t) k].process (left[(size_t) k].read (cfg.delay[(size_t) k]));     // At junction k
+        const auto& loss = cfg.loss[(size_t) k];
+        arriveRight[(size_t) k] = lossRight[(size_t) k].process (right[(size_t) k].read (cfg.delay[(size_t) k]), loss);  // At junction k+1
+        arriveLeft[(size_t) k] = lossLeft[(size_t) k].process (left[(size_t) k].read (cfg.delay[(size_t) k]), loss);     // At junction k
     }
 
     // 2. Jet. Breath pressure gives the jet speed; the sound in the window deflects the jet, the deflection
@@ -385,7 +441,7 @@ float WhistleModel::tick()
     // Pressure the jet produces across the window (jet drive), minus losses from vortices shed at the edge.
     const float jetDrive = rho * cfg.dipoleLength / cfg.windowArea * jetFlowRate;
     const float vortexLoss = -0.5f * rho * (windowVelocity / 0.6f) * std::abs (windowVelocity / 0.6f);
-    const float source = jetDrive + vortexLoss + edgeNoise;
+    const float source = jetDrive + vortexLoss + edgeNoise + testSource;
 
     // 3. Window end. The jet's pressure pushes the air in the window (mass M) into the bore:
     //    p_top = source - M dU/dt, with p_top = p+ + p- and U = (p+ - p-) / Z0, solved for the outgoing p+
@@ -397,6 +453,8 @@ float WhistleModel::tick()
     topPressure = outgoing + arrivingTop;
     lastSource = source;
     flowIntoBore = (outgoing - arrivingTop) / z0;
+    if (windowFlowLog != nullptr)
+        windowFlowLog->push_back (flowIntoBore);
 
     float radiatedTotal = 0.0f;
     auto radiate = [&] (int junction, float flow)
@@ -412,10 +470,20 @@ float WhistleModel::tick()
 
     // 4. Junctions inside the bore. Pressure there is the area-weighted sum of the arriving waves, filtered by
     //    the hole's shunt: its open part is a short tube to the outside that lets low frequencies escape (an
-    //    inertance), its covered part a small closed chimney whose air volume flattens the notes below it (a
-    //    compliance). In units of bore area: p = sum * s / (tau s^2 + s + w), with w = A_open c / (t_e (S1 + S2))
-    //    and tau = A_covered t / (c (S1 + S2)); bilinear transform per sample.
-    const float bilinear = 2.0f * (float) rate;
+    //    inertance, and radiating: the outer part of its air mass in parallel with the resistance rho c / A, which
+    //    takes energy out as Acoustics' radiation resistance does), its covered part a small closed chimney whose
+    //    air volume flattens the notes below it (a compliance). With G = (S1 + S2) / (rho c) the bore's
+    //    admittance at the junction and Y the hole's, p = sum G / (G + Y): third order in s, bilinear transform
+    //    per sample (openness changes). The open branch's own flow is what radiates.
+    const double bilinearK = 2.0 * rate;
+    auto bilinear = [bilinearK] (double c0, double c1, double c2, double c3, double* out)  // c0 + c1 s + c2 s^2 + c3 s^3
+    {
+        const double k = bilinearK, a0 = c0, a1 = c1 * k, a2 = c2 * k * k, a3 = c3 * k * k * k;
+        out[0] = a0 + a1 + a2 + a3;
+        out[1] = 3.0 * a0 + a1 - a2 - 3.0 * a3;
+        out[2] = 3.0 * a0 - a1 - a2 + 3.0 * a3;
+        out[3] = a0 - a1 + a2 - a3;
+    };
     for (int jn = 1; jn < n; ++jn)
     {
         const float a = arriveRight[(size_t) jn - 1], b = arriveLeft[(size_t) jn];
@@ -426,26 +494,31 @@ float WhistleModel::tick()
         const int hole = cfg.holeAt[(size_t) jn];
         if (hole >= 0)
         {
-            const float open = juce::jlimit (0.0f, 1.0f, current.openness[(size_t) hole]);
-            const float area = cfg.holeArea[(size_t) hole];
-            const float w = area * open * c / (cfg.holeLength[(size_t) hole] * (s1 + s2));
-            const float tau = area * (1.0f - open) * cfg.holeChimney[(size_t) hole] / (c * (s1 + s2));
+            const double open = juce::jlimit (0.0, 1.0, (double) current.openness[(size_t) hole]);
+            const double mi = cfg.holeInnerMass[(size_t) hole], mr = cfg.holeOuterMass[(size_t) hole];
+            const double r = cfg.holeRadiationResistance[(size_t) hole];
+            // A fully open hole keeps a trace of compliance: avoids a pole-zero pair exactly at the Nyquist frequency.
+            const double compliance = cfg.holeCompliance[(size_t) hole] * std::max (1.0 - open, 0.02);
+            const double gj = (s1 + s2) / (rho * c);
 
-            const float k = bilinear, tk2 = tau * k * k;
-            const float a0 = tk2 + k + w;
-            const float a1 = (2.0f * w - 2.0f * tk2) / a0;
-            const float a2 = (tk2 - k + w) / a0;
-            const float b0 = k / a0;  // b1 = 0, b2 = -b0
+            // Open branch Y_o = open (r + s mr) / (s (mi mr s + (mi + mr) r)), covered part s C.
+            // p / sum = G (mi mr s^2 + (mi + mr) r s) / D, open-branch flow / sum = G open (r + s mr) / D, with
+            // D = C mi mr s^3 + (G mi mr + C (mi + mr) r) s^2 + (G (mi + mr) r + open mr) s + open r.
+            double num[4], flowNum[4], den[4];
+            bilinear (0.0, gj * (mi + mr) * r, gj * mi * mr, 0.0, num);
+            bilinear (gj * open * r, gj * open * mr, 0.0, 0.0, flowNum);
+            bilinear (open * r, gj * (mi + mr) * r + open * mr, gj * mi * mr + compliance * (mi + mr) * r, compliance * mi * mr, den);
 
-            auto& st = holeState[(size_t) jn];  // x1, x2, y1, y2
-            p = b0 * (sum - st[1]) - a1 * st[2] - a2 * st[3];
-            st[1] = st[0];
-            st[0] = sum;
-            st[3] = st[2];
-            st[2] = p;
+            auto& st = holeState[(size_t) jn];  // sum x1 x2 x3, p y1 y2 y3, flow f1 f2 f3
+            const double x0 = sum;
+            const double pNew = (num[0] * x0 + num[1] * st[0] + num[2] * st[1] + num[3] * st[2]
+                                 - den[1] * st[3] - den[2] * st[4] - den[3] * st[5]) / den[0];
+            const double flow = (flowNum[0] * x0 + flowNum[1] * st[0] + flowNum[2] * st[1] + flowNum[3] * st[2]
+                                 - den[1] * st[6] - den[2] * st[7] - den[3] * st[8]) / den[0];
+            st = { x0, st[0], st[1], pNew, st[3], st[4], flow, st[6], st[7] };
+            p = (float) pNew;
 
-            // Flow leaving the junction; only the open part of the hole radiates (the chimney is closed).
-            radiate (jn, open * (s1 * (2.0f * a - p) + s2 * (2.0f * b - p)) / (rho * c));
+            radiate (jn, (float) flow);
         }
 
         sendRight[(size_t) jn] = p - b;

@@ -3,6 +3,7 @@
 #include "PitchDetect.h"
 #include "WhistleModel.h"
 
+#include <algorithm>
 #include <set>
 
 namespace whistle
@@ -17,7 +18,9 @@ std::string noteName (double hz)
     return names[(midi % 12 + 12) % 12] + std::to_string (midi / 12 - 1);
 }
 
-// Plays one fingering at one pressure (blown up over 40 ms, like a player) and returns the pitch, or 0.
+// Plays one fingering at one pressure (blown up over 40 ms, like a player) and returns the pitch, or 0 if it
+// doesn't sound clearly as a note: periodic, and at least -40 dBFS (~60 dB SPL at the listener), not a whisper
+// right at the threshold that may not start at all when played.
 double play (const Geometry& g, const Voicing& v, const Openness& open, double pressure)
 {
     constexpr double rate = 48000.0;
@@ -39,6 +42,13 @@ double play (const Geometry& g, const Voicing& v, const Openness& open, double p
         model.setControls (controls);
         model.render (out.data() + start, std::min (block, (int) out.size() - start));
     }
+
+    double sum = 0.0;
+    const auto tail = (size_t) (0.1 * rate);
+    for (size_t i = out.size() - tail; i < out.size(); ++i)
+        sum += (double) out[i] * out[i];
+    if (sum / (double) tail < 1.0e-8)  // -40 dBFS
+        return 0.0;
 
     double clarity = 0.0;
     const double f = measurePitch (out, rate, clarity);
@@ -118,11 +128,72 @@ std::vector<ScaleStep> planScale (const Geometry& g, const Voicing& v, double lo
         {
             best.name = noteName (target);
             best.openness = open;
+            best.targetHz = target;
             steps.push_back (best);
             done.insert (c.semitones);
         }
     }
+
+    // Check in context, and give notes that don't sound there more breath.
+    for (int pass = 0; pass < 4 && ! steps.empty(); ++pass)
+    {
+        const auto played = playScale (g, v, steps, 48000.0);
+        bool changed = false;
+        for (size_t i = 0; i < steps.size(); ++i)
+        {
+            const double cents = played[i] > 0.0 ? 1200.0 * std::log2 (played[i] / steps[i].targetHz) : 1.0e9;
+            if (std::abs (cents) <= 60.0)
+            {
+                steps[i].cents = (float) cents;
+            }
+            else if (pass < 3)
+            {
+                steps[i].pressure *= 1.15f;
+                changed = true;
+            }
+            else
+            {
+                steps[i].pressure = 0.0f;  // Still not playing: left out below
+            }
+        }
+        if (! changed)
+            break;
+    }
+    steps.erase (std::remove_if (steps.begin(), steps.end(), [] (const ScaleStep& s) { return s.pressure <= 0.0f; }), steps.end());
     return steps;
+}
+
+std::vector<double> playScale (const Geometry& g, const Voicing& v, const std::vector<ScaleStep>& steps, double rate,
+                               std::vector<float>* audio)
+{
+    WhistleModel model;
+    model.setGeometry (g);
+    model.prepare (rate);
+    model.setVoicing (v);
+    std::vector<float> out ((size_t) (rate * (kScaleNoteSeconds * (double) steps.size() + 0.5)), 0.0f);
+    constexpr int block = 64;
+    for (int start = 0; start < (int) out.size(); start += block)
+    {
+        Controls controls;
+        scaleControlsAt (steps, start / rate, controls);
+        model.setControls (controls);
+        model.render (out.data() + start, std::min (block, (int) out.size() - start));
+    }
+
+    std::vector<double> pitches;
+    for (size_t i = 0; i < steps.size(); ++i)
+    {
+        // The steady part of each note: from its start to just before its release.
+        const auto from = (size_t) (rate * kScaleNoteSeconds * (double) i);
+        const auto to = from + (size_t) (rate * (kScaleNoteSeconds - kScaleGap - kScaleRelease));
+        const std::vector<float> note (out.begin() + (long) from, out.begin() + (long) to);
+        double clarity = 0.0;
+        const double f = measurePitch (note, rate, clarity);
+        pitches.push_back (clarity > 0.8 ? f : 0.0);
+    }
+    if (audio != nullptr)
+        *audio = std::move (out);
+    return pitches;
 }
 
 } // namespace whistle
