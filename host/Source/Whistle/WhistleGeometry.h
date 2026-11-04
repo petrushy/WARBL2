@@ -60,6 +60,7 @@ struct Geometry
 
     // Fipple (mouthpiece). The windway ends in a flat jet that crosses the window and hits the edge (labium).
     double windwayHeight = 0.001;    // Jet thickness at the flue exit (h).
+    double windwayLength = 0.018;    // Mouth end to flue exit: the air the breath accelerates, and its friction.
     double windowLength = 0.005;     // Flue exit to the edge (W): sets how long the jet takes to cross.
     double windowWidth = 0.008;      // Width of the jet and window.
     double edgeOffset = 0.0001;      // Edge position relative to the jet centre line (y0); positive = into the pipe.
@@ -117,6 +118,10 @@ struct Voicing
     float breathNoise = 0.05f;   // Turbulence at the jet and edge (grows with jet speed)
     float outputGainDb = 0.0f;
     float directNoise = 0.0f;    // How much of the edge noise escapes straight from the window
+    // The windway's physics, 1 = as computed from its size, 0 = off (jet speed follows the pressure at once,
+    // no friction): kept adjustable because WARBL's own mouthpiece already smooths the breath a little.
+    float windwayMass = 1.0f;      // The air in the windway has to be accelerated (~1 ms)
+    float windwayFriction = 1.0f;  // Boundary layers on the windway walls carry less flow than the jet core
 };
 
 // Starting points, tuned (see WhistleGeometry.cpp).

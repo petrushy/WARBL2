@@ -76,8 +76,7 @@ void AudioEngine::playScale()
     if (scalePlanning)
         return;
 
-    const whistle::Voicing voicing { whistleModel.jetStrouhal.load(), whistleModel.jetConvection.load(), whistleModel.breathNoise.load(),
-                                     whistleModel.outputGainDb.load() };
+    const auto voicing = whistleModel.getVoicing();
     whistle::Geometry g;
     double lowest;
     {
@@ -85,7 +84,8 @@ void AudioEngine::playScale()
         // Voicing is set from sliders: compare to within a tiny tolerance.
         auto same = [] (float a, float b) { return std::abs (a - b) < 1.0e-6f; };
         const bool sameVoicing = same (voicing.jetStrouhal, scaleVoicing.jetStrouhal) && same (voicing.jetConvection, scaleVoicing.jetConvection)
-                                 && same (voicing.breathNoise, scaleVoicing.breathNoise);
+                                 && same (voicing.breathNoise, scaleVoicing.breathNoise) && same (voicing.windwayMass, scaleVoicing.windwayMass)
+                                 && same (voicing.windwayFriction, scaleVoicing.windwayFriction);
         if (scaleCacheValid && sameVoicing)
         {
             startScale (scaleCache);

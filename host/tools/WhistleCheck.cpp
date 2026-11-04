@@ -98,6 +98,28 @@ static int presetArg (const char* arg)
 
 static float strouhal = 0.02f, jetQ = 0.7f, convection = 0.6f;
 static int stages = 2;
+static float windwayMass = 1.0f, windwayFriction = 1.0f;
+
+// noise=<0-1>: breath noise.
+static void windwayNoiseArg (int argc, char* argv[], Voicing& v)
+{
+    for (int i = 3; i < argc; ++i)
+        if (juce::String (argv[i]).startsWith ("noise="))
+            v.breathNoise = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+}
+
+// mass=<0-1> friction=<0-1> windway=<length mm>: try the windway's physics.
+static void windwayArgs (int argc, char* argv[], int from, Geometry& g)
+{
+    for (int i = from; i < argc; ++i)
+    {
+        const juce::String arg (argv[i]);
+        const double value = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        if (arg.startsWith ("mass=")) windwayMass = (float) value;
+        if (arg.startsWith ("friction=")) windwayFriction = (float) value;
+        if (arg.startsWith ("windway=")) g.windwayLength = value * 0.001;
+    }
+}
 
 static void play (const Geometry& g)
 {
@@ -123,6 +145,8 @@ static void play (const Geometry& g)
             model.jetQ = jetQ;
             model.jetConvection = convection;
             model.jetStages = stages;
+            model.windwayMass = windwayMass;
+            model.windwayFriction = windwayFriction;
             auto controls = controlsFor (c.openness (g));
             // Blow up to the pressure over 40 ms, like a player, then hold.
             std::vector<float> out ((size_t) (rate * 0.6), 0.0f);
@@ -194,6 +218,8 @@ static double playOnce (const Geometry& g, const Openness& open, double pressure
     model.jetQ = jetQ;
     model.jetConvection = convection;
     model.jetStages = stages;
+    model.windwayMass = windwayMass;
+    model.windwayFriction = windwayFriction;
 
     auto controls = controlsFor (open);
 
@@ -295,6 +321,7 @@ int main (int argc, char* argv[])
             if (arg.startsWith ("conv=")) convection = (float) value;
             if (arg.startsWith ("h=")) g.windwayHeight = value * 0.001;
         }
+        windwayArgs (argc, argv, 3, g);
         if (g.headLength > 0.0)
         {
             const bool ok = tuneToScale (g, lowestNote (g), true);
@@ -307,6 +334,62 @@ int main (int argc, char* argv[])
                          g.holes[0].diameter * 1000.0, g.holes[0].position * 1000.0);
         }
         chart (g);
+        return 0;
+    }
+
+    if (mode == "attack")  // attack [preset] [mass= friction= windway=]: how fast notes build up, tongued
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        windwayArgs (argc, argv, 3, g);
+        auto voicing = presetVoicing (index);  // With its breath noise, which seeds the note as in the app
+        windwayNoiseArg (argc, argv, voicing);
+        voicing.windwayMass = windwayMass;
+        voicing.windwayFriction = windwayFriction;
+        std::printf ("%s, windway %.0f mm, mass %.2f, friction %.2f, breath noise %.2f\n", g.name.toRawUTF8(), g.windwayLength * 1000.0, windwayMass,
+                     windwayFriction, voicing.breathNoise);
+        std::printf ("  Breath steps to the pressure in 2 ms (a hard tongued attack). Times from the step to reach\n"
+                     "  10 %% and 90 %% of the note's steady level (RMS in 2 ms windows), and the steady level.\n");
+        std::printf ("  fingering   pressure    10 %%     90 %%    level\n");
+
+        constexpr double rate = 48000.0;
+        const auto window = (size_t) (rate * 0.002);
+        for (const auto& c : lowRegister (g))
+        {
+            for (double pressure : { 300.0, 1500.0 })
+            {
+                WhistleModel model;
+                model.setGeometry (g);
+                model.prepare (rate);
+                model.setVoicing (voicing);
+                auto controls = controlsFor (c.openness (g));
+                controls.mouthPressure = (float) pressure;  // Reached in one 2 ms ramp, as from one sensor frame
+                model.setControls (controls);
+                std::vector<float> out ((size_t) (rate * 0.3), 0.0f);
+                model.render (out.data(), (int) out.size());
+
+                std::vector<double> rms;
+                for (size_t start = 0; start + window <= out.size(); start += window)
+                {
+                    double sum = 0.0;
+                    for (size_t i = start; i < start + window; ++i)
+                        sum += (double) out[i] * out[i];
+                    rms.push_back (std::sqrt (sum / (double) window));
+                }
+                double steady = 0.0;  // Average of the last 50 ms
+                for (size_t i = rms.size() - 25; i < rms.size(); ++i)
+                    steady += rms[i] / 25.0;
+                auto reach = [&] (double share)
+                {
+                    for (size_t i = 0; i < rms.size(); ++i)
+                        if (rms[i] >= share * steady)
+                            return (double) (i + 1) * 2.0;  // ms, end of the window
+                    return 0.0;
+                };
+                std::printf ("  %s  %6.0f Pa  %5.0f ms %5.0f ms  %6.1f dB\n", c.holePattern (g).c_str(), pressure, reach (0.1), reach (0.9),
+                             20.0 * std::log10 (steady + 1e-12));
+            }
+        }
         return 0;
     }
 
@@ -443,6 +526,9 @@ int main (int argc, char* argv[])
             if (arg.startsWith ("edge=")) g.edgeOffset = value * 0.001;
             if (arg.startsWith ("noise=")) scaleVoicing.breathNoise = (float) value;
         }
+        windwayArgs (argc, argv, 3, g);
+        scaleVoicing.windwayMass = windwayMass;
+        scaleVoicing.windwayFriction = windwayFriction;
         const double lowest = lowestNote (g);
         const auto planStart = juce::Time::getMillisecondCounterHiRes();
         const auto steps = planScale (g, scaleVoicing, lowest);
@@ -452,10 +538,7 @@ int main (int argc, char* argv[])
         WhistleModel model;
         model.setGeometry (g);
         model.prepare (rate);
-        const auto& voicing = scaleVoicing;
-        model.jetStrouhal = voicing.jetStrouhal;
-        model.jetConvection = voicing.jetConvection;
-        model.breathNoise = voicing.breathNoise;
+        model.setVoicing (scaleVoicing);
         std::vector<float> out ((size_t) (rate * (kScaleNoteSeconds * (double) steps.size() + 0.5)), 0.0f);
         const int block = 64;
         for (int start = 0; start < (int) out.size(); start += block)
@@ -479,7 +562,7 @@ int main (int argc, char* argv[])
                          f > 0.0 && clarity > 0.8 ? (noteName (f) + " " + std::to_string ((int) std::lround (1200.0 * std::log2 (f / target))) + " c").c_str() : "-");
         }
 
-        if (argc > 3)
+        if (argc > 3 && ! juce::String (argv[3]).containsChar ('='))  // A WAV file name, not an option
         {
             juce::AudioBuffer<float> buffer (1, (int) out.size());
             buffer.copyFrom (0, 0, out.data(), (int) out.size());
@@ -604,8 +687,11 @@ int main (int argc, char* argv[])
             if (arg.startsWith ("conv=")) convection = value;
             if (arg.startsWith ("stages=")) stages = (int) value;
         }
-        std::printf ("jet: Strouhal %.3f, Q %.2f, convection %.2f, stages %d\n", strouhal, jetQ, convection, stages);
-        play (presets()[(size_t) juce::jlimit (0, (int) presets().size() - 1, index)]);
+        auto g = presets()[(size_t) juce::jlimit (0, (int) presets().size() - 1, index)];
+        windwayArgs (argc, argv, 3, g);
+        std::printf ("jet: Strouhal %.3f, Q %.2f, convection %.2f, stages %d; windway mass %.2f, friction %.2f\n", strouhal, jetQ, convection,
+                     stages, windwayMass, windwayFriction);
+        play (g);
         return 0;
     }
 

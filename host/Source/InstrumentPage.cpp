@@ -318,6 +318,7 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
 
     addHeading ("Fipple");
     addLength ("Windway height (jet thickness)", geometry.windwayHeight, 0.4, 3.0, 0.01);
+    addLength ("Windway length", geometry.windwayLength, 5.0, 50.0, 0.5);
     addLength ("Window length (flue to edge)", geometry.windowLength, 2.0, 14.0, 0.05);
     addLength ("Window width", geometry.windowWidth, 3.0, 25.0);
     addLength ("Edge offset (into the pipe)", geometry.edgeOffset, -0.5, 0.5, 0.01);
@@ -335,6 +336,14 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     addRow ("Breath noise heard directly", 0.0, 1.0, 0.01, "", [&model] { return (double) model.directNoise.load(); },
             [&model] (double v) { model.directNoise = (float) v; }, false)
         .setTooltip ("How much of the edge noise escapes straight out of the window, rather than only through the bore.");
+    addRow ("Windway air mass", 0.0, 1.0, 0.01, "", [&model] { return (double) model.windwayMass.load(); },
+            [&model] (double v) { model.windwayMass = (float) v; }, false)
+        .setTooltip ("The breath has to accelerate the air in the windway, so the jet reaches its speed in about a millisecond "
+                     "(rounder attacks). 1 = as for the windway's length, 0 = off: WARBL's mouthpiece already smooths the breath a little.");
+    addRow ("Windway friction", 0.0, 1.0, 0.01, "", [&model] { return (double) model.windwayFriction.load(); },
+            [&model] (double v) { model.windwayFriction = (float) v; }, false)
+        .setTooltip ("Boundary layers on the windway walls carry less air than the jet's core, most of all when blowing softly "
+                     "(a long, narrow windway loses more). 1 = as computed, 0 = off.");
 
     addHeading ("Output (breath and hole response: Sensors tab)");
     addRow ("Output level", -30.0, 12.0, 0.5, "dB", [&model] { return (double) model.outputGainDb.load(); },
@@ -471,13 +480,7 @@ void InstrumentPage::loadPreset (int index)
         return;
     geometry = whistle::presets()[(size_t) index];
 
-    const auto voicing = whistle::presetVoicing ((size_t) index);
-    auto& model = audio.whistleModel;
-    model.jetStrouhal = voicing.jetStrouhal;
-    model.jetConvection = voicing.jetConvection;
-    model.breathNoise = voicing.breathNoise;
-    model.outputGainDb = voicing.outputGainDb;
-    model.directNoise = voicing.directNoise;
+    audio.whistleModel.setVoicing (whistle::presetVoicing ((size_t) index));
 
     for (size_t i = 0; i < whistle::materials().size(); ++i)
         if (std::abs (whistle::materials()[i].wallThickness - geometry.wallThickness) < 1e-6)
@@ -538,21 +541,14 @@ whistle::Instrument InstrumentPage::getInstrument() const
 {
     whistle::Instrument instrument;
     instrument.geometry = geometry;
-    const auto& model = audio.whistleModel;
-    instrument.voicing = { model.jetStrouhal.load(), model.jetConvection.load(), model.breathNoise.load(), model.outputGainDb.load(),
-                           model.directNoise.load() };
+    instrument.voicing = audio.whistleModel.getVoicing();
     return instrument;
 }
 
 void InstrumentPage::setInstrument (const whistle::Instrument& instrument)
 {
     geometry = instrument.geometry;
-    auto& model = audio.whistleModel;
-    model.jetStrouhal = instrument.voicing.jetStrouhal;
-    model.jetConvection = instrument.voicing.jetConvection;
-    model.breathNoise = instrument.voicing.breathNoise;
-    model.outputGainDb = instrument.voicing.outputGainDb;
-    model.directNoise = instrument.voicing.directNoise;
+    audio.whistleModel.setVoicing (instrument.voicing);
 
     presetBox.setText (geometry.name, juce::dontSendNotification);
     materialBox.setSelectedId (0, juce::dontSendNotification);
@@ -652,7 +648,7 @@ void InstrumentPage::resized()
     left.removeFromTop (4);
 
     // Rows: holes get two sliders side by side to save space.
-    const int rowHeight = 23;
+    const int rowHeight = 22;
     size_t rowIndex = 0;
     for (auto* c : leftColumn)
     {

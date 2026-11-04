@@ -24,9 +24,7 @@ double play (const Geometry& g, const Voicing& v, const Openness& open, double p
     WhistleModel model;
     model.setGeometry (g);
     model.prepare (rate);
-    model.jetStrouhal = v.jetStrouhal;
-    model.jetConvection = v.jetConvection;
-    model.breathNoise = 0.0f;  // The pitch comes from the tone; breath noise would only confuse the pitch detector.
+    model.setVoicing (v);  // With its breath noise, which seeds the note as when the scale is played
 
     Controls controls;
     for (int i = 0; i < kNumHoles; ++i)
@@ -92,15 +90,21 @@ std::vector<ScaleStep> planScale (const Geometry& g, const Voicing& v, double lo
         const double target = lowestHz * std::pow (2.0, c.semitones / 12.0);
         const auto open = c.openness (g);
 
-        // Try pressures from soft to hard (each register in its usual range) and keep the closest in tune.
+        // Try pressures from soft to hard (each register in its usual range) and keep the closest in tune, among
+        // those at which the fingering also sounds one step softer (in any register): right at the threshold a
+        // note is unreliable, and the breath noise can decide whether it starts at all.
         const double from = c.reg == 1 ? 150.0 : c.reg == 2 ? 600.0 : 1200.0;
         const double to = c.reg == 1 ? 3000.0 : 5000.0;
         ScaleStep best;
         best.cents = 1.0e9f;
+        bool softerSounds = play (g, v, open, from / 1.15) > 0.0;
         for (double pressure = from; pressure <= to; pressure *= 1.15)
         {
             const double f = play (g, v, open, pressure);
-            if (f <= 0.0)
+            const bool sounds = f > 0.0;
+            const bool reliable = sounds && softerSounds;
+            softerSounds = sounds;
+            if (! reliable)
                 continue;
             const auto cents = (float) (1200.0 * std::log2 (f / target));
             if (std::abs (cents) < std::abs (best.cents))

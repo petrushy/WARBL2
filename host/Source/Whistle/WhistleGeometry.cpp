@@ -99,10 +99,15 @@ const std::vector<Geometry>& presets()
                   { { { false, 0.0, 0.0 }, { true, 0.11835, 0.00672 }, { true, 0.14030, 0.00850 }, { true, 0.15909, 0.00800 },
                       { true, 0.18208, 0.00700 }, { true, 0.19543, 0.00920 }, { true, 0.21689, 0.00720 }, { false, 0.0, 0.0 } } },
                   0.0040, 1.3, 0.0010, 0.0050, 0.0085),
-            make ("Low D whistle", 0.54129, 0.0220, 0.0220,
-                  { { { false, 0.0, 0.0 }, { true, 0.24368, 0.00693 }, { true, 0.29238, 0.01100 }, { true, 0.33283, 0.01050 },
-                      { true, 0.38549, 0.01150 }, { true, 0.40603, 0.01100 }, { true, 0.45773, 0.00950 }, { false, 0.0, 0.0 } } },
-                  0.0010, 1.0, 0.0016, 0.0090, 0.0150),
+            [&]
+            {
+                auto g = make ("Low D whistle", 0.54129, 0.0220, 0.0220,
+                               { { { false, 0.0, 0.0 }, { true, 0.24368, 0.00693 }, { true, 0.29238, 0.01100 }, { true, 0.33283, 0.01050 },
+                                   { true, 0.38549, 0.01150 }, { true, 0.40603, 0.01100 }, { true, 0.45773, 0.00950 }, { false, 0.0, 0.0 } } },
+                               0.0010, 1.0, 0.0016, 0.0090, 0.0150);
+                g.windwayLength = 0.028;  // A bigger fipple
+                return g;
+            }(),
             [&]
             {
                 // Soprano recorder in C with baroque fingering: reverse-conical bore (wide at the top), thumb hole on
@@ -114,6 +119,7 @@ const std::vector<Geometry>& presets()
                                0.0035, 1.1, 0.0012, 0.0045, 0.0100);
                 g.chart = FingeringChart::baroqueRecorder;
                 g.windwayHeight = 0.0009;  // A thin windway lets the jet drive the top notes (WhistleCheck notes/chart)
+                g.windwayLength = 0.030;  // The block is longer than a whistle's fipple plug
                 g.bellClosesFoot = true;  // Top C# closes the foot (on the knee); without a bell sensor it stays open.
                 return g;
             }(),

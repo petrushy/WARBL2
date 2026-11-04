@@ -68,6 +68,7 @@ juce::var toVar (const Instrument& instrument)
 
     auto fipple = object();
     set (fipple, "windwayHeight_mm", g.windwayHeight * 1000.0);
+    set (fipple, "windwayLength_mm", g.windwayLength * 1000.0);
     set (fipple, "windowLength_mm", g.windowLength * 1000.0);
     set (fipple, "windowWidth_mm", g.windowWidth * 1000.0);
     set (fipple, "edgeOffset_mm", g.edgeOffset * 1000.0);
@@ -80,6 +81,8 @@ juce::var toVar (const Instrument& instrument)
     set (voicing, "breathNoise", v.breathNoise);
     set (voicing, "outputGain_dB", v.outputGainDb);
     set (voicing, "directNoise", v.directNoise);
+    set (voicing, "windwayMass", v.windwayMass);
+    set (voicing, "windwayFriction", v.windwayFriction);
     root.getDynamicObject()->setProperty ("voicing", voicing);
 
     return root;
@@ -139,6 +142,7 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
 
     const auto& fipple = root["fipple"];
     read (fipple, "windwayHeight_mm", g.windwayHeight, 0.001);
+    read (fipple, "windwayLength_mm", g.windwayLength, 0.001);
     read (fipple, "windowLength_mm", g.windowLength, 0.001);
     read (fipple, "windowWidth_mm", g.windowWidth, 0.001);
     read (fipple, "edgeOffset_mm", g.edgeOffset, 0.001);
@@ -149,6 +153,8 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     read (voicing, "breathNoise", instrument.voicing.breathNoise);
     read (voicing, "outputGain_dB", instrument.voicing.outputGainDb);
     read (voicing, "directNoise", instrument.voicing.directNoise);
+    read (voicing, "windwayMass", instrument.voicing.windwayMass);
+    read (voicing, "windwayFriction", instrument.voicing.windwayFriction);
 
     // Sanity checks: anything that would make the model meaningless.
     auto bad = [&] (bool condition, const char* message)
@@ -160,7 +166,7 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     bad (g.boreLength < 0.05 || g.boreLength > 2.0, "Bore length must be between 50 and 2000 mm");
     bad (g.boreDiameterTop < 0.002 || g.boreDiameterFoot < 0.002 || g.headDiameter < 0.002, "Bore diameters must be at least 2 mm");
     bad (g.headLength < 0.0 || g.headLength >= g.boreLength, "The head section must be shorter than the bore");
-    bad (g.windwayHeight <= 0.0 || g.windowLength <= 0.0 || g.windowWidth <= 0.0, "Fipple sizes must be positive");
+    bad (g.windwayHeight <= 0.0 || g.windwayLength <= 0.0 || g.windowLength <= 0.0 || g.windowWidth <= 0.0, "Fipple sizes must be positive");
     for (const auto& h : g.holes)
         if (h.enabled)
             bad (h.diameter <= 0.0 || h.position <= 0.0 || h.position >= g.boreLength, "Every hole needs a positive size and a position inside the bore");

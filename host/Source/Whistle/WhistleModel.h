@@ -4,7 +4,8 @@
 //    At every tone hole the waves meet a junction whose behaviour depends on how open the hole is (from its
 //    WARBL sensor), so pitch, half-holing and slides come from the simulated air column, not from a fingering
 //    lookup. Wall losses, the radiating open foot and the window opening at the top are included.
-//  - Jet: breath pressure sets the jet speed (Bernoulli). The jet leaves the windway, is deflected by the
+//  - Jet: breath pressure accelerates the air in the windway, up to the jet speed (Bernoulli); the walls'
+//    boundary layers carry less flow than the core. The jet leaves the windway, is deflected by the
 //    sound in the window and takes a pressure-dependent time to reach the edge, where it is split in and out
 //    of the pipe (jet-drive model, Verge/Fabre/Hirschberg). That delay is what makes the whistle overblow to
 //    the next register as you blow harder. Turbulence adds breath noise.
@@ -54,6 +55,13 @@ public:
     std::atomic<float> jetQ { 0.7f };
     std::atomic<float> jetConvection { 0.6f };
     std::atomic<int> jetStages { 2 };  // Band-pass stages: more = sharper.
+    // Windway physics, 0..1 (see Voicing).
+    std::atomic<float> windwayMass { 1.0f };
+    std::atomic<float> windwayFriction { 1.0f };
+
+    // Sets all of the above that a Voicing holds, or reads them back.
+    void setVoicing (const Voicing&);
+    Voicing getVoicing() const;
 
     // For display.
     std::atomic<float> jetVelocity { 0.0f };   // m/s
@@ -97,7 +105,7 @@ private:
         float footB = 0.0f, footA = 0.0f;  // Open foot reflection lowpass.
         bool bellClosesFoot = false;
 
-        float windwayHeight = 0.001f, windowLength = 0.005f, windowWidth = 0.008f, edgeOffset = 0.0f;
+        float windwayHeight = 0.001f, windwayLength = 0.018f, windowLength = 0.005f, windowWidth = 0.008f, edgeOffset = 0.0f;
         float jetGrowth = 1.0f;     // Amplification of the jet's deflection on its way to the edge.
         float dipoleLength = 0.0f;  // delta_d in the jet-drive pressure.
     };
@@ -126,6 +134,7 @@ private:
     int jetWrite = 0;
     float flowIntoBore = 0.0f;  // Through the window, last sample (m^3/s)
     float lastJetFlow = 0.0f;
+    float windwaySpeed = 0.0f;  // Core speed of the air leaving the windway (m/s)
     float jetB0 = 0.0f, jetA1 = 0.0f, jetA2 = 0.0f;
     std::array<std::array<float, 4>, 3> jetState {};  // x1, x2, y1, y2 per band-pass stage
     int jetFilterCountdown = 0;

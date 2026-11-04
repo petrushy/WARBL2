@@ -16,6 +16,7 @@ constexpr double kMaxHeadSectionLength = 0.008;  // Finer sections where a head 
 constexpr double kListenerDistance = 0.5;  // m in front of the window, for the radiation delays and level.
 constexpr float kEdgeNoise = 0.15f;       // Edge pressure fluctuation at 20 m/s, as a fraction of rho U^2 (Breath noise 1)
 constexpr float kDirectNoise = 1.0f;      // Share of the edge noise radiated straight from the window (at 1)
+constexpr float kKinematicViscosity = (float) (kAirViscosity / kAirDensity);  // m^2/s
 
 // Amplitude attenuation per metre from viscous and thermal wall losses at frequency hz (tube radius a).
 double wallAttenuation (double hz, double a, double wallLoss)
@@ -87,7 +88,32 @@ void WhistleModel::resetState()
     radiation.fill (0.0f);
     decimatorBuffer.fill (0.0f);
     topPressure = lastSource = footX1 = footY1 = flowIntoBore = lastJetFlow = lastRadiatedFlow = dcX1 = dcY1 = 0.0f;
+    windwaySpeed = 0.0f;
     levelState = 0.0f;
+}
+
+void WhistleModel::setVoicing (const Voicing& v)
+{
+    jetStrouhal = v.jetStrouhal;
+    jetConvection = v.jetConvection;
+    breathNoise = v.breathNoise;
+    outputGainDb = v.outputGainDb;
+    directNoise = v.directNoise;
+    windwayMass = v.windwayMass;
+    windwayFriction = v.windwayFriction;
+}
+
+Voicing WhistleModel::getVoicing() const
+{
+    Voicing v;
+    v.jetStrouhal = jetStrouhal.load();
+    v.jetConvection = jetConvection.load();
+    v.breathNoise = breathNoise.load();
+    v.outputGainDb = outputGainDb.load();
+    v.directNoise = directNoise.load();
+    v.windwayMass = windwayMass.load();
+    v.windwayFriction = windwayFriction.load();
+    return v;
 }
 
 void WhistleModel::setGeometry (const Geometry& g)
@@ -200,6 +226,7 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
     out.bellClosesFoot = g.bellClosesFoot;
 
     out.windwayHeight = (float) g.windwayHeight;
+    out.windwayLength = (float) g.windwayLength;
     out.windowLength = (float) g.windowLength;
     out.windowWidth = (float) g.windowWidth;
     out.edgeOffset = (float) g.edgeOffset;
@@ -247,10 +274,39 @@ float WhistleModel::tick()
 
     // 2. Jet. Breath pressure gives the jet speed; the sound in the window deflects the jet, the deflection
     //    grows on the way to the edge and arrives there after the jet's travel time.
+    //
+    //    The breath accelerates the air in the windway (mass rho L per unit area) against the pressure it takes
+    //    to leave at that speed (Bernoulli): rho L dU/dt = p - rho U^2 / 2. Time constant L / U: ~1 ms when
+    //    blowing softly, ~0.3 ms when blowing hard. Solved implicitly, which is stable for any length; with
+    //    no mass the speed follows the pressure at once.
     const float pressure = std::max (0.0f, current.mouthPressure);
-    const float jetSpeed = std::sqrt (2.0f * pressure / rho);
+    const float massLength = windwayMass.load (std::memory_order_relaxed) * cfg.windwayLength;  // m
+    if (massLength > 1.0e-6f)
+    {
+        // U' + a U'^2 = b, with a = dt / 2L, b = U + p dt / (rho L); root written to avoid cancellation.
+        const float dt = 1.0f / (float) rate;
+        const float a = dt / (2.0f * massLength);
+        const float b = windwaySpeed + pressure * dt / (rho * massLength);
+        windwaySpeed = 2.0f * b / (1.0f + std::sqrt (1.0f + 4.0f * a * b));
+    }
+    else
+    {
+        windwaySpeed = std::sqrt (2.0f * pressure / rho);
+    }
+    const float jetSpeed = windwaySpeed;
     const float speed = std::max (jetSpeed, 0.5f);
     const float h = cfg.windwayHeight;
+
+    // Friction: boundary layers grow along the windway walls (laminar, Blasius: displacement thickness
+    // 1.72 sqrt(nu L / U) on each wall) and carry less flow than the jet's core, at most down to fully
+    // developed flow (Poiseuille, 2/3 of the core speed on average). Blowing softly loses the most.
+    float flowShare = 1.0f;
+    const float friction = windwayFriction.load (std::memory_order_relaxed);
+    if (friction > 0.0f)
+    {
+        const float displacement = std::min (h / 6.0f, 1.72f * std::sqrt (kKinematicViscosity * cfg.windwayLength / speed));
+        flowShare = 1.0f - friction * 2.0f * displacement / h;
+    }
     const float windowVelocity = flowIntoBore / cfg.windowArea;  // Into the pipe
 
     jetLine[(size_t) jetWrite] = windowVelocity;
@@ -315,7 +371,7 @@ float WhistleModel::tick()
 
     const float jetHalfWidth = 0.4f * h;
     const float deflection = cfg.jetGrowth * h * filtered / speed + turbulence * jetHalfWidth * std::min (1.0f, jetSpeed / 20.0f);
-    const float jetFlow = cfg.windowWidth * jetHalfWidth * jetSpeed * std::tanh ((deflection - cfg.edgeOffset) / jetHalfWidth);
+    const float jetFlow = cfg.windowWidth * jetHalfWidth * jetSpeed * flowShare * std::tanh ((deflection - cfg.edgeOffset) / jetHalfWidth);
 
     // The edge turbulence comes in bursts as the jet sweeps across the edge (pulsed noise, locked to the tone),
     // which the ear hears as breathiness in the note rather than as a separate hiss. Below the playing threshold
