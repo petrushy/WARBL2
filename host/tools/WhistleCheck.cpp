@@ -14,6 +14,7 @@
 #include <juce_dsp/juce_dsp.h>
 
 #include "Whistle/Acoustics.h"
+#include "Whistle/JetStability.h"
 #include "Whistle/PitchDetect.h"
 #include "Whistle/ScalePlan.h"
 #include "Whistle/WhistleModel.h"
@@ -147,6 +148,7 @@ static int presetArg (const char* arg)
     std::exit (1);
 }
 
+using Complex = std::complex<double>;
 static float strouhal = 0.02f, jetQ = 0.7f, convection = 0.6f;
 static int stages = 2;
 static float windwayMass = 1.0f, windwayFriction = 1.0f;
@@ -385,6 +387,56 @@ int main (int argc, char* argv[])
                          g.holes[0].diameter * 1000.0, g.holes[0].position * 1000.0);
         }
         chart (g);
+        return 0;
+    }
+
+    if (mode == "jet")  // jet [preset]: jet stability from the windway profile, against the model's current jet
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        const auto& g = presets()[index];
+        const auto v = presetVoicing (index);
+        const double h = g.windwayHeight, w = g.windowLength;
+        constexpr double nu = kAirViscosity / kAirDensity;
+
+        std::printf ("Check: thin shear layers (theta/h 0.003) against Rayleigh's vortex-sheet jet. alpha h:\n");
+        for (double om : { 0.05, 0.1, 0.2, 0.4, 0.8 })
+        {
+            const auto vs = vortexSheetJetWavenumber (om), ry = jetWavenumber (om, 0.003);
+            std::printf ("  omega h/U %.2f: vortex sheet %.4f%+.4fi   Rayleigh %.4f%+.4fi\n", om, vs.real(), vs.imag(), ry.real(), ry.imag());
+        }
+
+        std::printf ("\n%s: windway %.1f mm long, %.2f mm high; window %.1f mm (W/h %.1f).\n"
+                     "Per frequency: phase speed c/U and growth over the window (dB) from the profile theory, then\n"
+                     "the model's current jet (delay at %.2f U, band-pass at Strouhal %.3f, growth e^(0.38 W/h)).\n",
+                     g.name.toRawUTF8(), g.windwayLength * 1000.0, h * 1000.0, w * 1000.0, w / h, v.jetConvection, v.jetStrouhal);
+        for (double pressure : { 300.0, 1000.0, 3000.0 })
+        {
+            const double u = std::sqrt (2.0 * pressure / kAirDensity);
+            const double theta = std::min (0.067 * h, 0.664 * std::sqrt (nu * g.windwayLength / u));  // Blasius, at most Poiseuille
+            std::printf ("\n  %.0f Pa: U %.0f m/s, boundary layers theta/h %.3f\n     f (Hz)  omega h/U    theory c/U  growth     model c/U  gain\n",
+                         pressure, u, theta / h);
+            Complex guess (0.0, 0.0);
+            for (double f : { 300.0, 600.0, 1200.0, 2400.0, 4800.0 })
+            {
+                const double om = 2.0 * juce::MathConstants<double>::pi * f * h / u;
+                const auto k = jetWavenumber (om, theta / h, guess);
+                // The model: band-pass(es) (unity at the centre) and a pure delay, times the fixed growth.
+                const double centre = 2.0 * juce::MathConstants<double>::pi * v.jetStrouhal;  // omega h/U at the centre
+                const std::complex<double> s (0.0, om / centre);
+                const auto bp = std::pow (s / (1.0 / 0.7) / (s * s + s / 0.7 + 1.0) * (1.0 / 0.7) * 0.7, 2.0);  // two stages, Q 0.7
+                const double modelGain = 20.0 * std::log10 (std::abs (bp) * std::exp (0.38 * w / h));
+                const double phaseDelay = om * w / h / v.jetConvection - std::arg (bp);  // radians
+                const double modelSpeed = om * w / h / phaseDelay;
+                if (std::isfinite (k.real()))
+                {
+                    guess = k;
+                    std::printf ("    %6.0f   %6.3f      %6.2f   %+6.1f dB    %6.2f   %+6.1f dB\n", f, om, om / k.real(),
+                                 -k.imag() * w / h * 20.0 / std::log (10.0), modelSpeed, modelGain);
+                }
+                else
+                    std::printf ("    %6.0f   %6.3f      (no growing wave)      %6.2f   %+6.1f dB\n", f, om, modelSpeed, modelGain);
+            }
+        }
         return 0;
     }
 
