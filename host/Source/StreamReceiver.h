@@ -91,7 +91,8 @@ public:
         uint64_t frames = 0;
         uint64_t lostFrames = 0;
         double framesPerSecond = 0.0;
-        double freshHoles = 0.0;  // Share of recent frames with a new tone hole reading (WARBL's ATmega kept up)
+        double freshHoles = 0.0;
+        uint64_t rejectedHoleReadings = 0;  // Garbled tone hole transfers WARBL caught (see SensorFrame::holesRejected)  // Share of recent frames with a new tone hole reading (WARBL's ATmega kept up)
         std::array<uint32_t, kHistogramBins> histogram {};
         uint32_t histogramOverflow = 0;
     };

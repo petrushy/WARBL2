@@ -203,6 +203,8 @@ void StreamReceiver::acceptFrame (const warbl::SensorFrame& frame, double nowMs)
     rateWindowFrames++;
     if (frame.holesUpdated())
         rateWindowHoleUpdates++;
+    if (frame.holesRejected())
+        stats.rejectedHoleReadings++;
     if (nowMs - rateWindowStartMs >= 500.0)
     {
         stats.framesPerSecond = (double) rateWindowFrames * 1000.0 / (nowMs - rateWindowStartMs);

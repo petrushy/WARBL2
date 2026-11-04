@@ -361,7 +361,8 @@ void MonitorPage::timerCallback()
     const auto stats = receiver.getStats();
     timingView.update (stats);
     statsLabel.setText (juce::String (stats.framesPerSecond, 0) + " frames/s   lost " + juce::String (stats.lostFrames)
-                            + "   new hole readings in " + juce::String (juce::roundToInt (stats.freshHoles * 100.0)) + " % of frames",
+                            + "   new hole readings in " + juce::String (juce::roundToInt (stats.freshHoles * 100.0)) + " % of frames"
+                            + "   garbled ones rejected " + juce::String (stats.rejectedHoleReadings),
                         juce::dontSendNotification);
 
     if (auto* device = audio.deviceManager.getCurrentAudioDevice())

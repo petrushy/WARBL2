@@ -282,6 +282,7 @@ int toneholeBaseline[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };                         
 int toneholeRead[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };                                // Tonehole sensor readings after being reassembled from above bytes
 int toneholeRaw[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };                                 // Tonehole readings as received from the ATmega, before smoothing and baseline subtraction (for the sensor stream)
 bool toneholeRawUpdated = false;                                                   // Whether toneholeRaw[] got new readings since the last sensor stream frame
+bool toneholeRawRejected = false;                 // A tone hole transfer was rejected as implausible since the last stream frame
 unsigned int holeCovered = 0;                                                      // Whether each hole is covered-- each bit corresponds to a tonehole.
 bool fingersChanged = 1;                                                           // Keeps track of when the fingering pattern has changed.
 unsigned int prevHoleCovered = 1;                                                  // So we can track changes.

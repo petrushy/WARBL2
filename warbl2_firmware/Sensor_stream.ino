@@ -92,8 +92,9 @@ void sendSensorFrame() {
     w.put((uint16_t)sox.rawGyroY, 16);
     w.put((uint16_t)sox.rawGyroZ, 16);
     w.put(holeCovered & 0x1FF, 9);
-    w.put(toneholeRawUpdated ? 1 : 0, 7);
+    w.put((toneholeRawUpdated ? 1 : 0) | (toneholeRawRejected ? 2 : 0), 7);  // Flags: new hole readings; a garbled transfer was rejected
     toneholeRawUpdated = false;
+    toneholeRawRejected = false;
 
     sendStreamSysEx(STREAM_FRAME, payload, w.length);
 }

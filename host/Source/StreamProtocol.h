@@ -58,6 +58,7 @@ struct SensorFrame
     uint8_t flags = 0;
 
     bool holesUpdated() const { return (flags & 0x01) != 0; }
+    bool holesRejected() const { return (flags & 0x02) != 0; }  // WARBL rejected a garbled tone hole transfer (kept the last)
 };
 
 struct DeviceInfo

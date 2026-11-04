@@ -180,27 +180,51 @@ void getSensors(void) {
 
 
         // Unpack the readings from bytes to ints.
+        int unpacked[9];
         for (byte i = 0; i < 9; i++) {
-            toneholeRead[i] = toneholePacked[i];
+            unpacked[i] = toneholePacked[i];
         }
 
         byte b9 = toneholePacked[9];
         byte b10 = toneholePacked[10];
 
         for (byte i = 0; i < 4; i++) {
-            toneholeRead[i] |= ((b9 << 2) & 0b1100000000);
+            unpacked[i] |= ((b9 << 2) & 0b1100000000);
             b9 <<= 2;
         }
 
         for (byte i = 4; i < 8; i++) {
-            toneholeRead[i] |= ((b10 << 2) & 0b1100000000);
+            unpacked[i] |= ((b10 << 2) & 0b1100000000);
             b10 <<= 2;
         }
 
-        toneholeRead[8] |= ((toneholePacked[11] & 0x03) << 8);
+        unpacked[8] |= ((toneholePacked[11] & 0x03) << 8);
+
+        // Sensor stream (1 kHz loop): the ATmega sometimes hasn't finished its reading when we fetch, and the 4-bit
+        // checksum lets about 1 in 16 garbled transfers through. A finger can't move a reading by more than ~half
+        // its range in a millisecond, so reject a transfer with such a jump (keep the previous readings). After a
+        // few rejections in a row, accept it anyway, so a real change can never be locked out.
+        static int lastAccepted[9];
+        static byte rejectedInRow = 0;
+        bool plausible = true;
+        if (sensorStreamOn && rejectedInRow < 3) {
+            for (byte i = 0; i < 9; i++) {
+                if (abs(unpacked[i] - lastAccepted[i]) > 400) {
+                    plausible = false;
+                }
+            }
+        }
+        if (!plausible) {
+            rejectedInRow++;
+            toneholeRawRejected = true;  // Keep the previous readings and try again next loop.
+            return;
+        }
+        rejectedInRow = 0;
 
         for (byte i = 0; i < 9; i++) {
-            toneholeRaw[i] = toneholeRead[i];  // Keep the unfiltered readings for the sensor stream.
+            toneholeRead[i] = unpacked[i];
+            lastAccepted[i] = unpacked[i];
+            toneholeRaw[i] = unpacked[i];  // Keep the unfiltered readings for the sensor stream.
         }
         toneholeRawUpdated = true;
 
