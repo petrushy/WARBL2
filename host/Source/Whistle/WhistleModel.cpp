@@ -154,9 +154,12 @@ void WhistleModel::resetState()
     for (auto& st : jetState)
         st.fill (0.0f);
     jetFilterCountdown = 0;
-    radiation.fill (0.0f);
-    decimatorBuffer.fill (0.0f);
-    topPressure = lastSource = footX1 = footY1 = flowIntoBore = lastJetFlow = lastRadiatedFlow = dcX1 = dcY1 = 0.0f;
+    for (auto& r : radiation)
+        r.fill (0.0f);
+    for (auto& d : decimatorBuffer)
+        d.fill (0.0f);
+    lastRadiatedFlow = dcX1 = dcY1 = {};
+    topPressure = lastSource = footX1 = footY1 = flowIntoBore = lastJetFlow = 0.0f;
     windwaySpeed = 0.0f;
     levelState = 0.0f;
 }
@@ -306,7 +309,7 @@ void WhistleModel::setControls (const Controls& controls, double rampSeconds)
     rampRemaining = rampSamples;
 }
 
-float WhistleModel::tick()
+void WhistleModel::tick (float& windowOut, float& bodyOut)
 {
     if (rampRemaining > 0)
     {
@@ -458,14 +461,14 @@ float WhistleModel::tick()
     if (windowFlowLog != nullptr)
         windowFlowLog->push_back (flowIntoBore);
 
-    float radiatedTotal = 0.0f;
-    auto radiate = [&] (int junction, float flow)
+    auto radiate = [&] (int junction, float flow)  // Junction 0 is the window; the others the holes and the foot.
     {
+        auto& buffer = radiation[junction == 0 ? 0 : 1];
         const float d = cfg.radiationDelay[(size_t) junction];
         const int i = (int) d;
         const float f = d - (float) i;
-        radiation[(size_t) ((radiationRead + i) & (kRadiationSize - 1))] += flow * (1.0f - f);
-        radiation[(size_t) ((radiationRead + i + 1) & (kRadiationSize - 1))] += flow * f;
+        buffer[(size_t) ((radiationRead + i) & (kRadiationSize - 1))] += flow * (1.0f - f);
+        buffer[(size_t) ((radiationRead + i + 1) & (kRadiationSize - 1))] += flow * f;
     };
     // Out of the window: the air the bore pushes out, plus the edge noise that escapes directly.
     radiate (0, testWindowRadiation * -flowIntoBore + directNoise.load (std::memory_order_relaxed) * kDirectNoise * edgeNoise * cfg.windowArea / (rho * c));
@@ -546,18 +549,27 @@ float WhistleModel::tick()
     }
 
     // Radiated sound: pressure at the listener is proportional to the rate of change of the radiated flow.
-    radiatedTotal = radiation[(size_t) radiationRead];
-    radiation[(size_t) radiationRead] = 0.0f;
+    float out[2];
+    for (size_t part = 0; part < 2; ++part)  // Window, then holes and foot
+    {
+        const float radiated = radiation[part][(size_t) radiationRead];
+        radiation[part][(size_t) radiationRead] = 0.0f;
+        out[part] = rho / (4.0f * (float) kPi * (float) kListenerDistance) * (radiated - lastRadiatedFlow[part]) * (float) rate;
+        lastRadiatedFlow[part] = radiated;
+    }
     radiationRead = (radiationRead + 1) & (kRadiationSize - 1);
-
-    float out = rho / (4.0f * (float) kPi * (float) kListenerDistance) * (radiatedTotal - lastRadiatedFlow) * (float) rate;
-    lastRadiatedFlow = radiatedTotal;
+    windowOut = out[0];
+    bodyOut = out[1];
 
     jetVelocity.store (jetSpeed, std::memory_order_relaxed);
-    return out;
 }
 
 void WhistleModel::render (float* out, int numSamples)
+{
+    render (out, out, numSamples);
+}
+
+void WhistleModel::render (float* windowOut, float* bodyOut, int numSamples)
 {
     if (hasPending.load())
     {
@@ -584,27 +596,38 @@ void WhistleModel::render (float* out, int numSamples)
     {
         for (int phase = 0; phase < 2; ++phase)
         {
-            // DC blocker on the internal-rate signal, then into the decimation filter.
-            const float x = tick();
-            const float y = x - dcX1 + 0.9995f * dcY1;
-            dcX1 = x;
-            dcY1 = y;
-            decimatorBuffer[(size_t) decimatorWrite] = y;
+            // DC blocker on the internal-rate signals, then into the decimation filters.
+            float x[2];
+            tick (x[0], x[1]);
+            for (size_t source = 0; source < 2; ++source)
+            {
+                const float y = x[source] - dcX1[source] + 0.9995f * dcY1[source];
+                dcX1[source] = x[source];
+                dcY1[source] = y;
+                decimatorBuffer[source][(size_t) decimatorWrite] = y;
+            }
             decimatorWrite = (decimatorWrite + 1) % kDecimatorTaps;
         }
 
-        float sample = 0.0f;
+        float sample[2] = { 0.0f, 0.0f };
         for (int t = 0; t < kDecimatorTaps; ++t)
-            sample += decimatorCoeffs[(size_t) t] * decimatorBuffer[(size_t) ((decimatorWrite + t) % kDecimatorTaps)];
+        {
+            const auto at = (size_t) ((decimatorWrite + t) % kDecimatorTaps);
+            sample[0] += decimatorCoeffs[(size_t) t] * decimatorBuffer[0][at];
+            sample[1] += decimatorCoeffs[(size_t) t] * decimatorBuffer[1][at];
+        }
 
-        sample *= gain;
-        if (! std::isfinite (sample))  // Extreme settings can make the simulation unstable: start again from rest.
+        sample[0] *= gain;
+        sample[1] *= gain;
+        if (! std::isfinite (sample[0] + sample[1]))  // Extreme settings can make the simulation unstable: start again from rest.
         {
             resetState();
-            sample = 0.0f;
+            sample[0] = sample[1] = 0.0f;
         }
-        levelState += 0.001f * (sample * sample - levelState);
-        out[i] += sample;
+        const float sum = sample[0] + sample[1];
+        levelState += 0.001f * (sum * sum - levelState);
+        windowOut[i] += sample[0];
+        bodyOut[i] += sample[1];
     }
 
     level.store (std::sqrt (levelState), std::memory_order_relaxed);

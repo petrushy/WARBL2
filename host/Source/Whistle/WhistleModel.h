@@ -44,6 +44,9 @@ public:
 
     // Adds the radiated sound (mono) to out.
     void render (float* out, int numSamples);
+    // The same as two sources, so they can be placed apart: what comes out of the window, and what comes out of
+    // the tone holes and the foot. Their sum is what render() gives; window and body may be the same buffer.
+    void render (float* window, float* body, int numSamples);
 
     std::atomic<float> noiseStrouhal { 0.08f };  // Turbulence band centre, as f h / U (0.08: ~2-3 kHz when playing)
     std::atomic<float> breathNoise { 0.05f };  // Turbulence at the jet and edge, 0..1 (its level grows with jet speed)
@@ -129,7 +132,7 @@ private:
 
     void buildConfig (const Geometry&, Config&) const;
     void resetState();
-    float tick();  // One sample at the internal rate.
+    void tick (float& window, float& body);  // One sample at the internal rate: the two sources' sound.
 
     double hostRate = 48000.0, rate = 96000.0;
     Geometry geometry;
@@ -161,11 +164,12 @@ private:
     std::normal_distribution<float> gauss { 0.0f, 1.0f };
 
     // Radiation and output
-    std::array<float, kRadiationSize> radiation {};
+    // Radiation and output, per source: 0 = window, 1 = tone holes and foot.
+    std::array<std::array<float, kRadiationSize>, 2> radiation {};
     int radiationRead = 0;
-    float lastRadiatedFlow = 0.0f;
-    float dcX1 = 0.0f, dcY1 = 0.0f;
-    std::array<float, kDecimatorTaps> decimatorCoeffs {}, decimatorBuffer {};
+    std::array<float, 2> lastRadiatedFlow {}, dcX1 {}, dcY1 {};
+    std::array<float, kDecimatorTaps> decimatorCoeffs {};
+    std::array<std::array<float, kDecimatorTaps>, 2> decimatorBuffer {};
     int decimatorWrite = 0;
     float levelState = 0.0f;
 

@@ -22,9 +22,12 @@ public:
         // "--snapshot <file.png>" saves a picture of the window after a few seconds, then quits.
         const auto args = juce::StringArray::fromTokens (commandLine, true);
         // "--output <device>" picks the audio output; "--play" plays the test phrase at start.
-        // "--instrument" opens the Instrument tab.
+        // "--monitor", "--instrument", "--sensors" open that tab.
         if (auto* main = dynamic_cast<MainComponent*> (mainWindow->getContentComponent()))
         {
+            // A snapshot run may run next to the player's own copy of the app: compute the sound, but play none.
+            if (args.contains ("--snapshot"))
+                main->getAudio().silent = true;
             auto& monitor = main->getMonitor();
             const auto output = args.indexOf ("--output");
             if (output >= 0 && output + 1 < args.size())
@@ -33,6 +36,8 @@ public:
                 monitor.setSimulating (true);
             if (args.contains ("--play"))
                 monitor.playTestPhrase();
+            if (args.contains ("--monitor"))
+                main->showMonitor();
             if (args.contains ("--instrument"))
                 main->showInstrument();
             if (args.contains ("--sensors"))

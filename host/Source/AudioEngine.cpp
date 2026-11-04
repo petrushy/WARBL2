@@ -225,12 +225,52 @@ whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& fram
     return c;
 }
 
+void AudioEngine::placeAtEars (int numSamples)
+{
+    // Each source as heard from its direction (azimuth, from the reverb's spread): the far ear hears it later
+    // (spherical head, Woodworth: a/c (theta + sin theta), a = 8.75 cm) and a little quieter (head shadow,
+    // about 6 dB at the side). The room responses start at each ear's direct sound, so they get the same signals.
+    constexpr double headRadius = 0.0875, speedOfSound = 343.0;
+    const float* sources[2] = { windowDry.get(), bodyDry.get() };
+    float delay[2][2], gain[2][2];  // [source][ear], samples
+    for (int s = 0; s < 2; ++s)
+    {
+        const double azimuth = reverb.sourceAzimuth (s), side = std::abs (azimuth);
+        const int far = azimuth < 0.0 ? 1 : 0;  // Source on the left: the right ear is the far one
+        delay[s][far] = (float) (headRadius / speedOfSound * (side + std::sin (side)) * sampleRate);
+        delay[s][1 - far] = 0.0f;
+        gain[s][far] = (float) std::pow (10.0, -6.0 * std::sin (side) / 20.0);
+        gain[s][1 - far] = 1.0f;
+    }
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        for (int s = 0; s < 2; ++s)
+            earDelay[(size_t) s][(size_t) earDelayWrite] = sources[s][i];
+        for (int s = 0; s < 2; ++s)
+            for (int e = 0; e < 2; ++e)
+            {
+                const float d = std::min (delay[s][e], (float) kEarDelaySize - 2.0f);
+                const int whole = (int) d;
+                const float frac = d - (float) whole;
+                const auto& line = earDelay[(size_t) s];
+                const float a = line[(size_t) ((earDelayWrite - whole + kEarDelaySize) % kEarDelaySize)];
+                const float b = line[(size_t) ((earDelayWrite - whole - 1 + kEarDelaySize) % kEarDelaySize)];
+                ears[(size_t) (2 * s + e)][i] = gain[s][e] * (a + frac * (b - a));
+            }
+        earDelayWrite = (earDelayWrite + 1) % kEarDelaySize;
+    }
+}
+
 void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
 {
     const double rate = device->getCurrentSampleRate();
     sampleRate = rate;
     const int maxBlock = std::max (device->getCurrentBufferSizeSamples(), 4096);
-    dry.allocate ((size_t) maxBlock, true);
+    windowDry.allocate ((size_t) maxBlock, true);
+    bodyDry.allocate ((size_t) maxBlock, true);
+    for (auto& e : ears)
+        e.allocate ((size_t) maxBlock, true);
     dryCapacity = maxBlock;
 
     clickModel.prepare (rate, maxBlock);
@@ -311,8 +351,9 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     if (numSamples > dryCapacity || numOutputs < 2 || outputs[0] == nullptr || outputs[1] == nullptr)
         return;
 
-    // Instrument -> dry to both channels + room reverb.
-    juce::FloatVectorOperations::clear (dry.get(), numSamples);
+    // Instrument as two sources -> placed at the two ears (dry) + room reverb for each.
+    juce::FloatVectorOperations::clear (windowDry.get(), numSamples);
+    juce::FloatVectorOperations::clear (bodyDry.get(), numSamples);
     if (whistleEnabled)
     {
         if (bunchSize >= 2)
@@ -323,20 +364,26 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
             {
                 const int from = i * numSamples / bunchSize, to = (i + 1) * numSamples / bunchSize;
                 whistleModel.setControls (bunch[(size_t) ((oldest + i) % kMaxBunch)], (to - from) / sampleRate);
-                whistleModel.render (dry.get() + from, to - from);
+                whistleModel.render (windowDry.get() + from, bodyDry.get() + from, to - from);
             }
         }
         else
         {
-            whistleModel.render (dry.get(), numSamples);
+            whistleModel.render (windowDry.get(), bodyDry.get(), numSamples);
         }
     }
 
-    juce::FloatVectorOperations::copy (outputs[0], dry.get(), numSamples);
-    juce::FloatVectorOperations::copy (outputs[1], dry.get(), numSamples);
-    reverb.process (dry.get(), outputs[0], outputs[1], numSamples);
+    placeAtEars (numSamples);
+    juce::FloatVectorOperations::add (outputs[0], ears[0].get(), ears[2].get(), numSamples);
+    juce::FloatVectorOperations::add (outputs[1], ears[1].get(), ears[3].get(), numSamples);
+    reverb.process (ears[0].get(), ears[1].get(), ears[2].get(), ears[3].get(), outputs[0], outputs[1], numSamples);
 
     // The click stays dry so latency measurements aren't smeared by the reverb.
     if (clickEnabled)
         clickModel.render (outputs, numOutputs, numSamples);
+
+    if (silent)
+        for (int ch = 0; ch < numOutputs; ++ch)
+            if (outputs[ch] != nullptr)
+                juce::FloatVectorOperations::clear (outputs[ch], numSamples);
 }

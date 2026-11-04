@@ -57,6 +57,7 @@ public:
 
     std::atomic<bool> clickEnabled { false };
     std::atomic<bool> whistleEnabled { true };
+    std::atomic<bool> silent { false };  // Computes everything but outputs silence (test runs next to the player's app)
 
     // Sensor calibration from WARBL (or the simulator), set on the message thread.
     void setCalibration (const warbl::DeviceInfo&);
@@ -135,7 +136,14 @@ private:
     std::shared_ptr<bool> alive = std::make_shared<bool> (true);
     juce::ThreadPool scalePlanner { juce::ThreadPoolOptions().withNumberOfThreads (1) };  // Last: stops before the rest
 
-    juce::HeapBlock<float> dry;  // Mono instrument signal before the reverb.
+    // The instrument as two sources (window, tube), each then at the two ears (window L R, tube L R).
+    juce::HeapBlock<float> windowDry, bodyDry;
+    std::array<juce::HeapBlock<float>, 4> ears;
+    // Each source's recent samples, for the small delay between the ears.
+    static constexpr int kEarDelaySize = 128;
+    std::array<std::array<float, kEarDelaySize>, 2> earDelay {};
+    int earDelayWrite = 0;
+    void placeAtEars (int numSamples);
     double sampleRate = 48000.0;
     int samplesSinceControls = 0;
     whistle::Controls lastControls;

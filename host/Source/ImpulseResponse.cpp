@@ -70,7 +70,7 @@ double mixingTimeSeconds (const RoomSpec& room)
     return juce::jlimit (0.008, 0.12, std::sqrt (volume) * 0.001);
 }
 
-juce::AudioBuffer<float> generate (const RoomSpec& room, double sampleRate, uint32_t seed)
+juce::AudioBuffer<float> generate (const RoomSpec& room, double sampleRate, uint32_t seed, double sourceOffset)
 {
     const double W = room.width, D = room.depth, H = room.height;
     const double volume = W * D * H;
@@ -84,11 +84,13 @@ juce::AudioBuffer<float> generate (const RoomSpec& room, double sampleRate, uint
     juce::AudioBuffer<float> ir (2, length);
     ir.clear();
 
-    // Source near the front of the room, listener further back, both at ear height.
-    const double sx = W * 0.5, sy = std::min (D * 0.25, 4.0), sz = std::min (1.5, H * 0.5);
+    // Source near the front of the room (moved sideways by sourceOffset), listener in the middle further back,
+    // both at ear height.
+    const double lx = W * 0.5;
+    const double sx = juce::jlimit (0.3, W - 0.3, lx + sourceOffset), sy = std::min (D * 0.25, 4.0), sz = std::min (1.5, H * 0.5);
     const double ly = std::min (sy + room.distance, D - 0.5), lz = std::min (1.6, H * 0.6);
     const double distance = std::hypot (ly - sy, lz - sz);
-    const double ears[2] = { sx - kEarSpacing * 0.5, sx + kEarSpacing * 0.5 };
+    const double ears[2] = { lx - kEarSpacing * 0.5, lx + kEarSpacing * 0.5 };
 
     const double mixTime = mixingTimeSeconds (room);
     const double rampStart = 0.5 * mixTime, rampEnd = 1.5 * mixTime;

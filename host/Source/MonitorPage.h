@@ -92,9 +92,10 @@ private:
     juce::Slider thresholdSlider;
     juce::Label thresholdLabel { {}, "Click threshold" };
 
-    juce::Label reverbLabel { {}, "Reverb" }, wetLabel { {}, "Level" }, preDelayLabel { {}, "Pre-delay" }, reverbStatus;
+    juce::Label reverbLabel { {}, "Reverb" }, wetLabel { {}, "Level" }, preDelayLabel { {}, "Pre-delay" }, spreadLabel { {}, "Spread" },
+        reverbStatus;
     juce::ComboBox roomBox;
-    juce::Slider wetSlider, preDelaySlider;
+    juce::Slider wetSlider, preDelaySlider, spreadSlider;
     juce::TextButton loadIrButton { "Load IR file..." }, playButton { "Play scale" };
     std::unique_ptr<juce::FileChooser> irChooser;
 

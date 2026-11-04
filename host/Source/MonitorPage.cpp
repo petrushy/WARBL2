@@ -174,7 +174,7 @@ void TimingView::paint (juce::Graphics& g)
 //==============================================================================
 MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), audio (a)
 {
-    for (auto* l : { &statusLabel, &infoLabel, &statsLabel, &audioLabel, &thresholdLabel, &reverbLabel, &wetLabel, &preDelayLabel, &reverbStatus })
+    for (auto* l : { &statusLabel, &infoLabel, &statsLabel, &audioLabel, &thresholdLabel, &reverbLabel, &wetLabel, &preDelayLabel, &spreadLabel, &reverbStatus })
     {
         l->setColour (juce::Label::textColourId, text);
         addAndMakeVisible (l);
@@ -240,6 +240,16 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
     preDelaySlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 70, 20);
     preDelaySlider.onValueChange = [this] { audio.reverb.preDelayMs = (float) preDelaySlider.getValue(); };
     addAndMakeVisible (preDelaySlider);
+
+    spreadSlider.setRange (0.0, 90.0, 1.0);
+    spreadSlider.setTextValueSuffix (juce::String::fromUTF8 ("°"));
+    spreadSlider.setValue (audio.reverb.getSpread(), juce::dontSendNotification);
+    spreadSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 50, 20);
+    spreadSlider.setTooltip ("The whistle is two sound sources: the window at the mouth and the tone holes and foot along the tube. "
+                             "This is the angle between them as you hear them (window left, tube right): each gets its own "
+                             "direction and its own reflections in the room. 0 = one source, as before.");
+    spreadSlider.onValueChange = [this] { audio.reverb.setSpread ((float) spreadSlider.getValue()); };
+    addAndMakeVisible (spreadSlider);
 
     playButton.onClick = [this] { audio.playScale(); };
     playButton.setTooltip ("Plays the instrument (Instrument tab) through a scale of its own fingerings, two octaves up, with the breath each note needs (space bar does the same).");
@@ -443,9 +453,11 @@ void MonitorPage::resized()
     roomBox.setBounds (reverbRow.removeFromLeft (180).reduced (2));
     loadIrButton.setBounds (reverbRow.removeFromLeft (120).reduced (2));
     wetLabel.setBounds (reverbRow.removeFromLeft (45));
-    wetSlider.setBounds (reverbRow.removeFromLeft (220));
+    wetSlider.setBounds (reverbRow.removeFromLeft (170));
     preDelayLabel.setBounds (reverbRow.removeFromLeft (70));
-    preDelaySlider.setBounds (reverbRow.removeFromLeft (200));
+    preDelaySlider.setBounds (reverbRow.removeFromLeft (160));
+    spreadLabel.setBounds (reverbRow.removeFromLeft (52));
+    spreadSlider.setBounds (reverbRow.removeFromLeft (160));
     playButton.setBounds (reverbRow.removeFromLeft (130).reduced (2));
     reverbStatus.setBounds (area.removeFromTop (22));
     area.removeFromTop (6);

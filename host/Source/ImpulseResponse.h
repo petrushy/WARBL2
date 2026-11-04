@@ -34,7 +34,8 @@ float rt60At (const RoomSpec& room, float hz);
 // Mixing time: when reflections become dense enough to treat as diffuse (rule of thumb sqrt(V) ms).
 double mixingTimeSeconds (const RoomSpec& room);
 
-// Stereo IR, without the direct sound.
-juce::AudioBuffer<float> generate (const RoomSpec& room, double sampleRate, uint32_t seed = 1);
+// Stereo IR, without the direct sound. `sourceOffset` moves the source sideways (m, + = to the listener's right)
+// from straight ahead of the listener; a different `seed` gives an independent diffuse tail.
+juce::AudioBuffer<float> generate (const RoomSpec& room, double sampleRate, uint32_t seed = 1, double sourceOffset = 0.0);
 
 } // namespace reverb
