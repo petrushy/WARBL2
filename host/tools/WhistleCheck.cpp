@@ -481,6 +481,85 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "glide")  // glide [preset] [p=<Pa>] [ms=<ramp>] [vortex=]: level and pitch while one hole opens or closes gradually
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        windwayArgs (argc, argv, 3, g);
+        auto voicing = presetVoicing (index);
+        windwayNoiseArg (argc, argv, voicing);
+        double pressure = 600.0, rampMs = 10.0;
+        for (int i = 3; i < argc; ++i)
+        {
+            const juce::String arg (argv[i]);
+            if (arg.startsWith ("p=")) pressure = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+            if (arg.startsWith ("ms=")) rampMs = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        }
+        std::printf ("%s at %.0f Pa: fingering changed over %.0f ms (openness ramped, frames every 2 ms). Level in 2 ms windows\n"
+                     "relative to the old note (dB), from 4 ms before to 30 ms after the start; then the lowest level and any\n"
+                     "period between zero crossings far from both notes (a chirp: another register or a glitch).\n\n",
+                     g.name.toRawUTF8(), pressure, rampMs);
+        constexpr double rate = 48000.0;
+        const auto low = lowRegister (g);
+        for (size_t k = 0; k + 1 < low.size(); ++k)
+        {
+            for (int direction = 0; direction < 2; ++direction)
+            {
+                const auto& from = low[k + (size_t) direction];
+                const auto& to = low[k + 1 - (size_t) direction];
+                const auto a = from.openness (g), b = to.openness (g);
+                WhistleModel model;
+                model.setGeometry (g);
+                model.prepare (rate);
+                model.setVoicing (voicing);
+                model.vortexLoss = vortexArg;
+                std::vector<float> out ((size_t) (0.55 * rate), 0.0f);
+                const int block = (int) (rate * 0.002);
+                for (int start = 0; start < (int) out.size(); start += block)
+                {
+                    const double t = start / rate;
+                    const double share = std::clamp ((t - 0.4) / (rampMs * 0.001), 0.0, 1.0);
+                    Controls controls;
+                    for (int i = 0; i < kNumHoles; ++i)
+                        controls.openness[(size_t) i] = (float) (a.holes[(size_t) i] + share * (b.holes[(size_t) i] - a.holes[(size_t) i]));
+                    controls.footOpenness = (float) a.foot;
+                    controls.mouthPressure = (float) (pressure * std::min (1.0, t / 0.04));
+                    model.setControls (controls);
+                    model.render (out.data() + start, std::min (block, (int) out.size() - start));
+                }
+                const double before = levelDb (out, (size_t) (0.35 * rate), (size_t) (0.4 * rate));
+                std::printf ("  %-5s -> %-5s", from.name, to.name);
+                double lowest = 0.0;
+                for (double t = -0.004; t < 0.030; t += 0.002)
+                {
+                    const double l = levelDb (out, (size_t) ((0.4 + t) * rate), (size_t) ((0.402 + t) * rate)) - before;
+                    lowest = std::min (lowest, l);
+                    std::printf (" %+3.0f", l);
+                }
+                // Periods far (> 150 cents) from both notes' periods.
+                double fa = 0.0, fb = 0.0, clarity = 0.0;
+                fa = measurePitch (std::vector<float> (out.begin(), out.begin() + (long) (0.4 * rate)), rate, clarity);
+                fb = measurePitch (out, rate, clarity);
+                int odd = 0;
+                double last = -1.0;
+                for (size_t i = (size_t) (0.4 * rate); i + 1 < (size_t) (0.45 * rate); ++i)
+                    if (out[i] < 0.0f && out[i + 1] >= 0.0f)
+                    {
+                        const double t = (double) i / rate;
+                        if (last > 0.0 && fa > 0.0 && fb > 0.0)
+                        {
+                            const double f = 1.0 / (t - last);
+                            if (std::abs (1200.0 * std::log2 (f / fa)) > 150.0 && std::abs (1200.0 * std::log2 (f / fb)) > 150.0)
+                                ++odd;
+                        }
+                        last = t;
+                    }
+                std::printf ("   lowest %+3.0f dB, odd periods %d\n", lowest, odd);
+            }
+        }
+        return 0;
+    }
+
     if (mode == "radiation")  // radiation [preset] [p=<Pa>]: harmonics from the window and from the holes and foot
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
