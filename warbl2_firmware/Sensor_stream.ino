@@ -116,7 +116,7 @@ void sendSensorStreamInfo() {
     w.put(sensorCalibration, 16);
     w.put(sox.getAccelRange(), 16);
     w.put(sox.getGyroRange(), 16);
-    w.put(connIntvl == 0 ? 2 : 3, 16);  // Loop period in ms (see calculateDelayTime()).
+    w.put((connIntvl == 0 || (sensorStreamOn && USBstatus == USB_HOST)) ? 2 : 3, 16);  // Loop period in ms (see calculateDelayTime()).
 
     sendStreamSysEx(STREAM_INFO, payload, w.length);
 }

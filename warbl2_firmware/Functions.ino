@@ -54,7 +54,7 @@ byte calculateDelayTime(void) {
 
     byte delayTime = 3;
 
-    if (connIntvl == 0) {  // Use a 2 ms sleep instead if we are only using USB MIDI.
+    if (connIntvl == 0 || (sensorStreamOn && USBstatus == USB_HOST)) {  // Use a 2 ms sleep instead if we are only using USB MIDI, or streaming sensors over USB (even with BLE connected).
         delayTime = 2;
     }
 
