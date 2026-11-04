@@ -293,10 +293,10 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
     out.dipoleLength = (float) (4.0 / kPi * std::sqrt (2.0 * g.windwayHeight * g.windowLength));
 }
 
-void WhistleModel::setControls (const Controls& controls)
+void WhistleModel::setControls (const Controls& controls, double rampSeconds)
 {
     target = controls;
-    const int rampSamples = std::max (1, (int) (0.002 * rate));  // One sensor frame period.
+    const int rampSamples = std::max (1, (int) (rampSeconds * rate));
     for (int i = 0; i < kNumHoles; ++i)
         opennessStep[(size_t) i] = (target.openness[(size_t) i] - current.openness[(size_t) i]) / rampSamples;
     footStep = (target.footOpenness - current.footOpenness) / rampSamples;

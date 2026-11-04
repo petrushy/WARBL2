@@ -238,7 +238,11 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         if (outputs[ch] != nullptr)
             juce::FloatVectorOperations::clear (outputs[ch], numSamples);
 
-    // Apply every frame that has arrived as soon as possible: no de-jitter buffer, lowest latency.
+    // Apply every frame that has arrived as soon as possible: no de-jitter buffer, lowest latency. Frames that
+    // arrive together (USB and MIDI can deliver them in bunches) are spread over this block, each reached within
+    // its share of it, so a short finger lift or breath gap isn't lost by jumping straight to the last frame.
+    constexpr int kMaxBunch = 16;
+    std::array<whistle::Controls, kMaxBunch> bunch;
     ReceivedFrame received;
     int count = 0;
     whistle::Controls controls;
@@ -247,13 +251,16 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     {
         clickModel.handleFrame (received.frame);
         controls = controlsFromFrame (received.frame);
+        bunch[(size_t) (count % kMaxBunch)] = controls;  // Beyond kMaxBunch, the oldest are dropped (stale anyway)
         haveControls = true;
         ++count;
     }
+    int bunchSize = std::min (count, kMaxBunch);
 
     if (scaleControls (controls, numSamples))
     {
         haveControls = true;
+        bunchSize = 0;
     }
     else if (manualPlay)
     {
@@ -262,6 +269,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         controls.mouthPressure = manualPressure.load();
         controls.footOpenness = manualFootOpenness.load();
         haveControls = true;
+        bunchSize = 0;
     }
 
     // If frames stop arriving (stream off, cable pulled), stop blowing rather than hold the last breath.
@@ -280,7 +288,8 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     {
         samplesSinceControls = 0;
         lastControls = controls;
-        whistleModel.setControls (controls);
+        if (bunchSize < 2)
+            whistleModel.setControls (controls);
         for (int i = 0; i < whistle::kNumHoles; ++i)
             shownOpenness[(size_t) i] = controls.openness[(size_t) i];
         shownFootOpenness = controls.footOpenness;
@@ -296,7 +305,23 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     // Instrument -> dry to both channels + room reverb.
     juce::FloatVectorOperations::clear (dry.get(), numSamples);
     if (whistleEnabled)
-        whistleModel.render (dry.get(), numSamples);
+    {
+        if (bunchSize >= 2)
+        {
+            // Oldest first: frame i takes over at i/n of the block and is reached by the end of its share.
+            const int oldest = count - bunchSize;
+            for (int i = 0; i < bunchSize; ++i)
+            {
+                const int from = i * numSamples / bunchSize, to = (i + 1) * numSamples / bunchSize;
+                whistleModel.setControls (bunch[(size_t) ((oldest + i) % kMaxBunch)], (to - from) / sampleRate);
+                whistleModel.render (dry.get() + from, to - from);
+            }
+        }
+        else
+        {
+            whistleModel.render (dry.get(), numSamples);
+        }
+    }
 
     juce::FloatVectorOperations::copy (outputs[0], dry.get(), numSamples);
     juce::FloatVectorOperations::copy (outputs[1], dry.get(), numSamples);

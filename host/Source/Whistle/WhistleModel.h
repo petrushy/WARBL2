@@ -39,8 +39,8 @@ public:
     void prepare (double hostSampleRate);
     void setGeometry (const Geometry&);
 
-    // New target controls; reached with a short ramp (the sensor frame period) to avoid steps.
-    void setControls (const Controls&);
+    // New target controls; reached with a short ramp (by default the sensor frame period) to avoid steps.
+    void setControls (const Controls&, double rampSeconds = 0.002);
 
     // Adds the radiated sound (mono) to out.
     void render (float* out, int numSamples);
