@@ -188,6 +188,8 @@ Rooms: small wooden room (0.4 s), studio live room (0.6 s), chamber music hall (
 
 **Record** on the Monitor tab (or `--record` on the command line) saves what you play into `~/Downloads/WARBL Stream recordings/`: the sound as you hear it (stereo WAV) and every sensor frame (CSV: device and arrival time, sequence number, the nine raw hole readings, raw pressure, flags), with the instrument, the Sensors settings and WARBL's calibration in the CSV's header. That is enough to replay a performance through the model offline and find out what made a glitch. Press it again to stop; the files are named by date and time.
 
+`WhistleCheck replay <recording.csv> [from=<s>] [to=<s>] [st=] [outmax=<Pa>] [wav=<prefix>]` feeds the recorded frames through the same sensor mapping and model as the app, at their recorded spacing, and prints a timeline around every fingering change: model breath, which holes are covered (x), open (o) or in between (h), the pitch from the last 15 ms and the level. `st=` and `outmax=` try another jet Strouhal number or breath output maximum on the same playing. Found this way (2026-11-04): "plops" in a quick A-D-A at ~1300 Pa were low D cracking to high D (its octave break is ~950 Pa at Strouhal 0.020) and then sliding up through the octave as the fingers lifted; at Strouhal 0.014-0.016 the same playing stays in the low register.
+
 ## Reading the numbers
 
 - **frames/s**: should be ~500 with the current firmware (2 ms loop). **lost** counts gaps in the sequence numbers and should stay 0.

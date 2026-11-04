@@ -13,7 +13,9 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_dsp/juce_dsp.h>
 
+#include "SensorResponse.h"
 #include "Whistle/Acoustics.h"
+#include "Whistle/InstrumentFile.h"
 #include "Whistle/JetStability.h"
 #include "Whistle/PitchDetect.h"
 #include "Whistle/ScalePlan.h"
@@ -638,6 +640,200 @@ int main (int argc, char* argv[])
                 phrase.insert (phrase.end(), note.begin(), note.end());
             }
             saveWavArg (argc, argv, "chiff" + juce::String (chiffAmount, 0), phrase, rate);
+        }
+        return 0;
+    }
+
+    if (mode == "replay")  // replay <recording.csv> [from=<s>] [to=<s>] [st=] [outmax=<Pa>] [wav=<prefix>]: a recorded session through the model
+    {
+        if (argc < 3)
+        {
+            std::printf ("replay <recording.csv> [from=<s>] [to=<s>] [wav=<prefix>]\n");
+            return 1;
+        }
+        const juce::File file (juce::File::getCurrentWorkingDirectory().getChildFile (argv[2]));
+        double from = 0.0, to = 1.0e9;
+        for (int i = 3; i < argc; ++i)
+        {
+            const juce::String arg (argv[i]);
+            if (arg.startsWith ("from=")) from = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+            if (arg.startsWith ("to=")) to = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        }
+        float strouhalOverride = 0.0f, outputMaxOverride = 0.0f;  // st=, outmax=<Pa>: try other settings on the same playing
+        for (int i = 3; i < argc; ++i)
+        {
+            const juce::String arg (argv[i]);
+            if (arg.startsWith ("st=")) strouhalOverride = arg.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+            if (arg.startsWith ("outmax=")) outputMaxOverride = arg.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+        }
+
+        // Header: instrument, sensor settings, calibration.
+        juce::StringArray lines;
+        file.readLines (lines);
+        Instrument instrument;
+        response::Breath breath;
+        response::Hole holes;
+        std::array<int, 9> baseline {}, covered {};
+        int ambient = 0;
+        double pascalPerCount = 1.66;
+        struct Frame { double ms; std::array<int, 9> h; int pressure; int flags; };
+        std::vector<Frame> frames;
+        for (const auto& line : lines)
+        {
+            if (line.startsWith ("# instrument "))
+            {
+                juce::String error;
+                if (auto parsed = fromJson (line.fromFirstOccurrenceOf ("# instrument ", false, false), error))
+                    instrument = *parsed;
+                else
+                    std::printf ("instrument: %s\n", error.toRawUTF8());
+            }
+            else if (line.startsWith ("# sensors "))
+            {
+                const auto o = juce::JSON::parse (line.fromFirstOccurrenceOf ("# sensors ", false, false));
+                auto get = [&] (const char* key, float& v) { if (o.hasProperty (key)) v = (float) (double) o[key]; };
+                get ("breathInputMin_Pa", breath.inputMin); get ("breathInputMax_Pa", breath.inputMax);
+                get ("breathCurve", breath.curve); get ("breathOutputMax_Pa", breath.outputMax);
+                get ("holeOpenBelow", holes.openBelow); get ("holeClosedAt", holes.closedAt); get ("holeCurve", holes.curve);
+                get ("holeCentre", holes.centre); get ("holeFingerRange_mm", holes.fingerRange);
+                if (o.hasProperty ("holeSCurve")) holes.sCurve = (bool) o["holeSCurve"];
+                if (o.hasProperty ("holeFingerHeight")) holes.fingerHeight = (bool) o["holeFingerHeight"];
+            }
+            else if (line.startsWith ("# calibration "))
+            {
+                const auto t = juce::StringArray::fromTokens (line, " ", "");
+                for (int i = 0; i < 9; ++i)
+                {
+                    baseline[(size_t) i] = t[3 + i].getIntValue();
+                    covered[(size_t) i] = t[13 + i].getIntValue();
+                }
+                ambient = t[23].getIntValue();
+                pascalPerCount = t[25].getDoubleValue();
+            }
+            else if (! line.startsWith ("#") && ! line.startsWith ("device_ms") && line.isNotEmpty())
+            {
+                const auto t = juce::StringArray::fromTokens (line, ",", "");
+                Frame f;
+                f.ms = t[0].getDoubleValue();
+                for (int i = 0; i < 9; ++i)
+                    f.h[(size_t) i] = t[3 + i].getIntValue();
+                f.pressure = t[12].getIntValue();
+                f.flags = t[13].getIntValue();
+                frames.push_back (f);
+            }
+        }
+        if (frames.empty())
+            return 1;
+        if (strouhalOverride > 0.0f) instrument.voicing.jetStrouhal = strouhalOverride;
+        if (outputMaxOverride > 0.0f) breath.outputMax = outputMaxOverride;
+        const auto& g = instrument.geometry;
+        std::printf ("Jet Strouhal %.3f, breath output max %.0f Pa.\n", instrument.voicing.jetStrouhal, breath.outputMax);
+        std::printf ("%s: %d frames, %.1f s. Hole response: %s; breath %g-%g Pa -> %g Pa (curve %g).\n",
+                     g.name.toRawUTF8(), (int) frames.size(), (frames.back().ms - frames.front().ms) / 1000.0,
+                     holes.fingerHeight ? "finger height" : holes.sCurve ? "S-curve" : "power curve", breath.inputMin, breath.inputMax,
+                     breath.outputMax, breath.curve);
+
+        // The app's mapping (AudioEngine::controlsFromFrame).
+        auto controlsFor = [&] (const Frame& f)
+        {
+            Controls c;
+            for (int hole = 0; hole < kNumHoles; ++hole)
+            {
+                const auto sensor = (size_t) kSensorForHole[(size_t) hole];
+                const float span = (float) std::max (1, covered[sensor] - baseline[sensor]);
+                const float coverage = (float) (f.h[sensor] - baseline[sensor]) / span;
+                const bool used = g.holes[(size_t) hole].enabled;
+                const response::FingerHole fh { used ? (float) (0.5 * g.holes[(size_t) hole].diameter) : 0.0f,
+                                                used ? (float) g.holeEffectiveLength (hole) : 0.0f };
+                c.openness[(size_t) hole] = 1.0f - holes.closedness (coverage, fh);
+            }
+            const float bellSpan = (float) std::max (1, covered[(size_t) kBellSensor] - baseline[(size_t) kBellSensor]);
+            c.footOpenness = 1.0f - holes.closedness ((float) (f.h[(size_t) kBellSensor] - baseline[(size_t) kBellSensor]) / bellSpan);
+            c.mouthPressure = breath.map (std::max (0.0f, (float) ((f.pressure - ambient) * pascalPerCount)));
+            return c;
+        };
+
+        // Render, one frame at a time with its real spacing.
+        constexpr double rate = 48000.0;
+        WhistleModel model;
+        model.setGeometry (g);
+        model.prepare (rate);
+        model.setVoicing (instrument.voicing);
+        std::vector<float> out;
+        std::vector<Controls> controlsAt;  // Per output sample... too big; per frame instead
+        std::vector<size_t> frameStart;
+        for (size_t i = 0; i < frames.size(); ++i)
+        {
+            const double interval = i + 1 < frames.size() ? (frames[i + 1].ms - frames[i].ms) / 1000.0 : 0.002;
+            const auto c = controlsFor (frames[i]);
+            model.setControls (c, std::clamp (interval, 0.0005, 0.004));
+            const int n = std::max (1, (int) std::lround (std::clamp (interval, 0.0, 0.05) * rate));
+            frameStart.push_back (out.size());
+            controlsAt.push_back (c);
+            out.resize (out.size() + (size_t) n, 0.0f);
+            model.render (out.data() + out.size() - (size_t) n, n);
+        }
+        saveWavArg (argc, argv, "replay", out, rate);
+
+        // Pitch every 5 ms (from the last 20 ms), and the fingering, for the frames between from and to: lines where
+        // the fingering changes, plus 40 ms after each change.
+        auto pattern = [&] (const Controls& c)
+        {
+            std::string p;
+            for (int hole = 0; hole < kNumHoles; ++hole)
+                p += ! g.holes[(size_t) hole].enabled ? '-' : c.openness[(size_t) hole] < 0.1f ? 'x' : c.openness[(size_t) hole] > 0.9f ? 'o' : 'h';
+            return p;
+        };
+        auto shortPitch = [&] (size_t end)  // Normalised autocorrelation over the last 15 ms, 250-3000 Hz
+        {
+            const auto window = (size_t) (0.015 * rate);
+            const int minLag = (int) (rate / 3000.0), maxLag = (int) (rate / 250.0);
+            if (end < window + (size_t) maxLag + 2)
+                return 0.0;
+            const size_t start = end - window - (size_t) maxLag - 1;
+            std::vector<double> r ((size_t) maxLag + 2, 0.0);
+            double best = 0.0;
+            for (int lag = minLag; lag <= maxLag + 1; ++lag)
+            {
+                double sum = 0.0, e1 = 0.0, e2 = 0.0;
+                for (size_t i = 0; i < window; ++i)
+                {
+                    const double a = out[start + i], b = out[start + i + (size_t) lag];
+                    sum += a * b;
+                    e1 += a * a;
+                    e2 += b * b;
+                }
+                r[(size_t) lag] = sum / std::sqrt (e1 * e2 + 1e-30);
+                if (lag <= maxLag)
+                    best = std::max (best, r[(size_t) lag]);
+            }
+            if (best < 0.6)
+                return 0.0;
+            for (int lag = minLag + 1; lag <= maxLag; ++lag)
+                if (r[(size_t) lag] >= 0.9 * best && r[(size_t) lag] >= r[(size_t) lag - 1] && r[(size_t) lag] >= r[(size_t) lag + 1])
+                    return rate / lag;
+            return 0.0;
+        };
+        std::printf ("\n    time    breath   holes      pitch           level\n");
+        std::string last;
+        double showUntil = -1.0;
+        for (size_t i = 0; i < frames.size(); ++i)
+        {
+            const double t = (frames[i].ms - frames.front().ms) / 1000.0;
+            if (t < from || t > to)
+                continue;
+            const auto p = pattern (controlsAt[i]);
+            if (p != last)
+                showUntil = t + 0.04;
+            const bool show = t <= showUntil && (p != last || i % 3 == 0);
+            last = p;
+            if (! show)
+                continue;
+            const size_t end = i + 1 < frameStart.size() ? frameStart[i + 1] : out.size();
+            const double f = shortPitch (end);
+            std::printf ("  %7.3f  %6.0f Pa  %s  %s  %+5.1f dB\n", t, controlsAt[i].mouthPressure, p.c_str(),
+                         f > 0.0 ? (juce::String (f, 0) + " Hz " + noteName (f)).paddedRight (' ', 14).toRawUTF8() : "-             ",
+                         levelDb (out, end - std::min<size_t> (end, 480), end));
         }
         return 0;
     }

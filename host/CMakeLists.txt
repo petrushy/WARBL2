@@ -90,7 +90,7 @@ target_link_libraries(ReverbCheck
 # Whistle acoustics and model checks (tuning tables, offline playing tests).
 juce_add_console_app(WhistleCheck PRODUCT_NAME "Whistle Check")
 target_sources(WhistleCheck PRIVATE tools/WhistleCheck.cpp Source/Whistle/WhistleGeometry.cpp Source/Whistle/Acoustics.cpp Source/Whistle/WhistleModel.cpp Source/Whistle/ScalePlan.cpp
-    Source/Whistle/JetStability.cpp)
+    Source/Whistle/JetStability.cpp Source/Whistle/InstrumentFile.cpp)
 target_include_directories(WhistleCheck PRIVATE Source)
 target_compile_definitions(WhistleCheck PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
 target_link_libraries(WhistleCheck
