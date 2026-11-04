@@ -58,6 +58,10 @@ class MonitorPage : public juce::Component, private juce::Timer
 {
 public:
     MonitorPage (StreamReceiver&, AudioEngine&);
+
+    // Lines describing the instrument and settings, for the top of a recording's CSV (set by the main window).
+    std::function<juce::StringArray()> recordingHeader;
+    void startRecording() { if (! audio.recorder.isRecording()) toggleRecording(); }
     ~MonitorPage() override;
 
     void paint (juce::Graphics&) override;
@@ -96,7 +100,10 @@ private:
         reverbStatus;
     juce::ComboBox roomBox;
     juce::Slider wetSlider, preDelaySlider, spreadSlider;
-    juce::TextButton loadIrButton { "Load IR file..." }, playButton { "Play scale" };
+    void toggleRecording();
+    juce::String recordingMessage;  // Shown instead of the streaming status for a few seconds after saving
+    double recordingMessageUntilMs = 0.0;
+    juce::TextButton loadIrButton { "Load IR file..." }, playButton { "Play scale" }, recordButton { "Record" };
     std::unique_ptr<juce::FileChooser> irChooser;
 
     HoleView holeView;

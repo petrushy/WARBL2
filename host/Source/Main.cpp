@@ -36,6 +36,8 @@ public:
                 monitor.setSimulating (true);
             if (args.contains ("--play"))
                 monitor.playTestPhrase();
+            if (args.contains ("--record"))  // Starts recording at once (saved when the app quits)
+                monitor.startRecording();
             if (args.contains ("--monitor"))
                 main->showMonitor();
             if (args.contains ("--instrument"))

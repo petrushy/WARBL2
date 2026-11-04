@@ -281,6 +281,12 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
         out.holeOuterMass[(size_t) i] = kAirDensity * outer / area;
         out.holeRadiationResistance[(size_t) i] = kAirDensity * kSpeedOfSound / area;
         out.holeCompliance[(size_t) i] = area * std::max (g.wallThickness, 0.0003) / (kAirDensity * kSpeedOfSound * kSpeedOfSound);  // As in Acoustics
+        // The finger as in the physical hole response (SensorResponse.h): the gap adds a chimney length
+        // b^2 ln(R / b) / (2 d), R the fingertip's radius; air flows through it radially (Poiseuille between plates:
+        // 12 mu (R - b) / (2 pi b d^3)).
+        const double fingertip = std::max (0.008, 1.5 * b);
+        out.holeGapHeight[(size_t) i] = b * b * std::log (fingertip / b) / (2.0 * g.holeEffectiveLength (i));
+        out.holeGapViscous[(size_t) i] = 12.0 * kAirViscosity * (fingertip - b) / (2.0 * kPi * b);
     }
 
     // Window end: the air in the window (area Aw, effective length tw) is a mass the jet's pressure has to
@@ -526,13 +532,25 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
             const double compliance = cfg.holeCompliance[(size_t) hole] * std::max (1.0 - open, 0.02);
             const double gj = (s1 + s2) / (rho * c);
 
-            // Open branch Y_o = open (r + s mr) / (s (mi mr s + (mi + mr) r)), covered part s C.
-            // p / sum = G (mi mr s^2 + (mi + mr) r s) / D, open-branch flow / sum = G open (r + s mr) / D, with
-            // D = C mi mr s^3 + (G mi mr + C (mi + mr) r) s^2 + (G (mi + mr) r + open mr) s + open r.
+            // A partly open hole lets air out through the thin gap under the finger: a viscous resistance rv in series
+            // with the open part, huge when the gap is a fraction of a millimetre (it damps the resonance of the hole's
+            // air mass with the trapped chimney air, which otherwise "plops" as a finger lifts), negligible once the
+            // hole is more than about a quarter open. Scaled by the openness like the rest of the open branch (orv).
+            double orv = 0.0;
+            if (open > 0.0 && open < 1.0 && testGapResistance)
+            {
+                const double gap = cfg.holeGapHeight[(size_t) hole] / (1.0 / open - 1.0);
+                orv = std::min (1.0e15, open * cfg.holeGapViscous[(size_t) hole] / (gap * gap * gap));
+            }
+
+            // Open branch Y_o = open (r + s mr) / (mi mr s^2 + ((mi + mr) r + orv mr) s + orv r), covered part s C.
+            // p / sum = G Do / D, open-branch flow / sum = G open (r + s mr) / D, with Do the open branch's
+            // denominator above and D = (G + s C) Do + open (r + s mr).
+            const double d0 = orv * r, d1 = (mi + mr) * r + orv * mr, d2 = mi * mr;
             double num[4], flowNum[4], den[4];
-            bilinear (0.0, gj * (mi + mr) * r, gj * mi * mr, 0.0, num);
+            bilinear (gj * d0, gj * d1, gj * d2, 0.0, num);
             bilinear (gj * open * r, gj * open * mr, 0.0, 0.0, flowNum);
-            bilinear (open * r, gj * (mi + mr) * r + open * mr, gj * mi * mr + compliance * (mi + mr) * r, compliance * mi * mr, den);
+            bilinear (gj * d0 + open * r, gj * d1 + compliance * d0 + open * mr, gj * d2 + compliance * d1, compliance * d2, den);
 
             auto& st = holeState[(size_t) jn];  // sum x1 x2 x3, p y1 y2 y3, flow f1 f2 f3
             const double x0 = sum;

@@ -58,6 +58,14 @@ MainComponent::MainComponent()
     const juce::Colour background { 0xff1e1f22 };
     monitor = new MonitorPage (receiver, audio);
     instrument = new InstrumentPage (audio);
+    monitor->recordingHeader = [this]
+    {
+        juce::StringArray lines;
+        lines.add ("WARBL Stream recording " + juce::Time::getCurrentTime().toISO8601 (true));
+        lines.add ("instrument " + juce::JSON::toString (whistle::toVar (instrument->getInstrument()), true));
+        lines.add ("sensors " + juce::JSON::toString (sensorsToVar (audio), true));
+        return lines;
+    };
     tabs.addTab ("Monitor", background, monitor, true);
     tabs.addTab ("Instrument", background, instrument, true);
     tabs.addTab ("Sensors", background, new SensorsPage (audio), true);

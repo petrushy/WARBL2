@@ -187,6 +187,18 @@ void AudioEngine::setCalibration (const warbl::DeviceInfo& info)
     clickModel.ambient12 = info.ambientPressure * 4;
 }
 
+juce::String AudioEngine::calibrationText() const
+{
+    juce::String text ("calibration baseline");
+    for (const auto& b : baseline)
+        text << " " << b.load();
+    text << " covered";
+    for (const auto& c : covered)
+        text << " " << c.load();
+    text << " ambient12 " << ambient12.load() << " pascal_per_count " << juce::String (kPascalPerCount, 6);
+    return text;
+}
+
 response::Breath AudioEngine::breathResponse() const
 {
     return { breathInputMin.load(), breathInputMax.load(), breathCurve.load(), breathOutputMax.load() };
@@ -393,6 +405,8 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     // The click stays dry so latency measurements aren't smeared by the reverb.
     if (clickEnabled)
         clickModel.render (outputs, numOutputs, numSamples);
+
+    recorder.addAudio (outputs, numOutputs, numSamples);
 
     if (silent)
         for (int ch = 0; ch < numOutputs; ++ch)

@@ -6,6 +6,7 @@
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
+#include "Recorder.h"
 #include "RoomReverb.h"
 #include "SensorResponse.h"
 #include "StreamReceiver.h"
@@ -53,6 +54,7 @@ public:
     juce::AudioDeviceManager deviceManager;
     ClickModel clickModel;
     RoomReverb reverb;
+    Recorder recorder;
     whistle::WhistleModel whistleModel;
 
     std::atomic<bool> clickEnabled { false };
@@ -80,6 +82,9 @@ public:
         return { holeRadius[(size_t) hole].load(), holeEffectiveLength[(size_t) hole].load() };
     }
     response::Breath breathResponse() const;
+    // WARBL's calibration as text (for recordings): baseline and covered readings per sensor, ambient pressure.
+    juce::String calibrationText() const;
+    double getSampleRate() const { return sampleRate; }
     response::Hole holeResponse() const;
 
     // Last sensor inputs before the response curves, for display.

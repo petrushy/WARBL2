@@ -74,6 +74,7 @@ public:
     float testSource = 0.0f;
     std::vector<float>* windowFlowLog = nullptr;
     float testWindowRadiation = 1.0f, testBodyRadiation = 1.0f;  // Scale what the window / the holes and foot radiate
+    bool testGapResistance = true;  // The viscous resistance of the gap under a finger (off: as before 2026-11-04)
 
     // For display.
     std::atomic<float> jetVelocity { 0.0f };   // m/s
@@ -119,6 +120,9 @@ private:
         // correction, b / 2) in kg/m^4, the radiation resistance rho c / A in parallel with the outer mass
         // (Pa s/m^3), and the chimney's compliance when covered (m^3/Pa).
         std::array<double, kNumHoles> holeInnerMass {}, holeOuterMass {}, holeRadiationResistance {}, holeCompliance {};
+        // A partly open hole as a finger hovering at height d over it: d = gapHeight / (1 / openness - 1) (m), and
+        // the viscous resistance of the ring-shaped gap, gapViscous / d^3 (Pa s/m^3).
+        std::array<double, kNumHoles> holeGapHeight {}, holeGapViscous {};
 
         float windowArea = 0.0f;
         float windowMass = 0.0f;     // Inertance of the air in the window, as M * 2 * rate / Z0 (trapezoidal rule).

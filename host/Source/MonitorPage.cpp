@@ -187,7 +187,7 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
         addAndMakeVisible (b);
     }
 
-    for (auto* b : { &infoButton, &audioButton, &resetButton, &loadIrButton, &playButton })
+    for (auto* b : { &infoButton, &audioButton, &resetButton, &loadIrButton, &playButton, &recordButton })
     {
         b->setWantsKeyboardFocus (false);
         addAndMakeVisible (b);
@@ -252,6 +252,9 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
     addAndMakeVisible (spreadSlider);
 
     playButton.onClick = [this] { audio.playScale(); };
+    recordButton.setTooltip ("Records what you play: the sound (WAV) and every sensor frame with your settings (CSV), into "
+                             "Downloads/WARBL Stream recordings, so a problem can be replayed and analysed offline.");
+    recordButton.onClick = [this] { toggleRecording(); };
     playButton.setTooltip ("Plays the instrument (Instrument tab) through a scale of its own fingerings, two octaves up, with the breath each note needs (space bar does the same).");
     simulateButton.setTooltip ("Plays a scripted scale as if from WARBL, through the same path as the real stream.");
     simulateButton.onClick = [this]
@@ -336,6 +339,29 @@ void MonitorPage::showAudioSettings()
     options.launchAsync();
 }
 
+void MonitorPage::toggleRecording()
+{
+    auto& recorder = audio.recorder;
+    if (recorder.isRecording())
+    {
+        recorder.stop();
+        recordButton.setButtonText ("Record");
+        recordingMessage = "Saved " + recorder.getBaseName() + ".wav and .csv in Downloads/WARBL Stream recordings";
+        recordingMessageUntilMs = juce::Time::getMillisecondCounterHiRes() + 8000.0;
+        return;
+    }
+    auto header = recordingHeader ? recordingHeader() : juce::StringArray();
+    header.add ("sample_rate " + juce::String (audio.getSampleRate()));
+    header.add (audio.calibrationText());
+    if (recorder.start (audio.getSampleRate(), header))
+        recordButton.setButtonText ("Stop recording");
+    else
+    {
+        recordingMessage = "Couldn't create files in " + recorder.getFolder().getFullPathName();
+        recordingMessageUntilMs = juce::Time::getMillisecondCounterHiRes() + 8000.0;
+    }
+}
+
 void MonitorPage::timerCallback()
 {
     if (isShowing() && ! hasKeyboardFocus (true))
@@ -349,6 +375,7 @@ void MonitorPage::timerCallback()
     ReceivedFrame received;
     while (receiver.uiQueue.pop (received))
     {
+        audio.recorder.addFrame (received);
         history.push_back (received);
         if (history.size() > kHistoryFrames)
             history.pop_front();
@@ -357,6 +384,10 @@ void MonitorPage::timerCallback()
     const auto streamingPort = receiver.getStreamingPortName();
     if (streamingPort.isNotEmpty())
         statusLabel.setText ("Streaming from: " + streamingPort, juce::dontSendNotification);
+    if (audio.recorder.isRecording())
+        statusLabel.setText ("Recording " + juce::String (audio.recorder.getSeconds(), 0) + " s", juce::dontSendNotification);
+    else if (juce::Time::getMillisecondCounterHiRes() < recordingMessageUntilMs)
+        statusLabel.setText (recordingMessage, juce::dontSendNotification);
 
     const auto stats = receiver.getStats();
     timingView.update (stats);
@@ -438,6 +469,7 @@ void MonitorPage::resized()
     infoButton.setBounds (row1.removeFromLeft (110).reduced (2));
     resetButton.setBounds (row1.removeFromLeft (100).reduced (2));
     audioButton.setBounds (row1.removeFromLeft (130).reduced (2));
+    recordButton.setBounds (row1.removeFromLeft (130).reduced (2));
     statusLabel.setBounds (row1);
 
     infoLabel.setBounds (area.removeFromTop (22));

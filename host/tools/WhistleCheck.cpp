@@ -642,6 +642,150 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "plops")  // plops [preset] [p=<Pa>]: bursts at quick hole changes in 0.8-6 kHz, with and without the gap resistance
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        const auto& g = presets()[index];
+        double pressure = 700.0;
+        for (int i = 3; i < argc; ++i)
+            if (juce::String (argv[i]).startsWith ("p="))
+                pressure = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        std::printf ("%s at %.0f Pa, breath noise off. One hole opened or closed over 3 ms along an S-shaped path (as\n"
+                     "fingers do: slow at both ends). Level in 0.8-6 kHz in 1 ms windows, from the change to 15 ms after,\n"
+                     "above the louder of the two notes' steady levels in that band (dB; > 0 is a burst), without and with\n"
+                     "the finger gap's viscous resistance.\n\n", g.name.toRawUTF8(), pressure);
+        constexpr double rate = 48000.0;
+        auto bandpass = [] (const std::vector<float>& x)
+        {
+            juce::dsp::IIR::Filter<float> h1, h2, l1, l2;
+            h1.coefficients = h2.coefficients = juce::dsp::IIR::Coefficients<float>::makeHighPass (rate, 800.0);
+            l1.coefficients = l2.coefficients = juce::dsp::IIR::Coefficients<float>::makeLowPass (rate, 6000.0);
+            std::vector<float> y (x.size());
+            for (size_t i = 0; i < x.size(); ++i)
+                y[i] = l2.processSample (l1.processSample (h2.processSample (h1.processSample (x[i]))));
+            return y;
+        };
+        auto v = presetVoicing (index);
+        v.breathNoise = 0.0f;
+        const auto low = lowRegister (g);
+        for (size_t k = 0; k + 1 < low.size(); ++k)
+            for (int direction = 0; direction < 2; ++direction)
+            {
+                const auto& from = low[k + (size_t) direction];
+                const auto& to = low[k + 1 - (size_t) direction];
+                const auto a = from.openness (g), b = to.openness (g);
+                std::printf ("  %-5s -> %-5s", from.name, to.name);
+                for (bool gapResistance : { false, true })
+                {
+                    WhistleModel model;
+                    model.setGeometry (g);
+                    model.prepare (rate);
+                    model.setVoicing (v);
+                    model.testGapResistance = gapResistance;
+                    std::vector<float> out ((size_t) (0.7 * rate), 0.0f);
+                    const int block = 16;  // Fine control steps, so the S-path is followed closely
+                    for (int start = 0; start < (int) out.size(); start += block)
+                    {
+                        const double t = start / rate;
+                        const double x = std::clamp ((t - 0.4) / 0.003, 0.0, 1.0);
+                        const double share = x * x * (3.0 - 2.0 * x);  // Smoothstep
+                        Controls controls;
+                        for (int i = 0; i < kNumHoles; ++i)
+                            controls.openness[(size_t) i] = (float) (a.holes[(size_t) i] + share * (b.holes[(size_t) i] - a.holes[(size_t) i]));
+                        controls.footOpenness = (float) a.foot;
+                        controls.mouthPressure = (float) (pressure * std::min (1.0, t / 0.04));
+                        model.setControls (controls, block / rate);
+                        model.render (out.data() + start, std::min (block, (int) out.size() - start));
+                    }
+                    const auto band = bandpass (out);
+                    const double before = levelDb (band, (size_t) (0.3 * rate), (size_t) (0.39 * rate));
+                    const double after = levelDb (band, (size_t) (0.6 * rate), (size_t) (0.69 * rate));
+                    double peak = -1.0e9;
+                    for (int t = 0; t < 15; ++t)
+                    {
+                        const auto at = (size_t) ((0.4 + t * 0.001) * rate);
+                        peak = std::max (peak, levelDb (band, at, at + (size_t) (0.001 * rate)) - std::max (before, after));
+                    }
+                    std::printf ("   %s %+5.1f dB", gapResistance ? "with gap:" : "without:", peak);
+                }
+                std::printf ("\n");
+            }
+        return 0;
+    }
+
+    if (mode == "clicks")  // clicks [preset] [p=<Pa>] [ms=<ramp>]: broadband bursts (clicks) at fingering changes
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        windwayArgs (argc, argv, 3, g);
+        double pressure = 700.0, rampMs = 4.0;
+        for (int i = 3; i < argc; ++i)
+        {
+            const juce::String arg (argv[i]);
+            if (arg.startsWith ("p=")) pressure = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+            if (arg.startsWith ("ms=")) rampMs = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        }
+        std::printf ("%s at %.0f Pa, fingering changed over %.0f ms at t = 0: level above 5 kHz in 1 ms windows, dB\n"
+                     "relative to the same band in the steady old note; breath noise off (so it's only the tone).\n\n",
+                     g.name.toRawUTF8(), pressure, rampMs);
+        constexpr double rate = 48000.0;
+        // Two-pole highpass at 5 kHz.
+        auto highpass = [] (const std::vector<float>& x)
+        {
+            juce::dsp::IIR::Filter<float> f1, f2;
+            f1.coefficients = f2.coefficients = juce::dsp::IIR::Coefficients<float>::makeHighPass (rate, 5000.0);
+            std::vector<float> y (x.size());
+            for (size_t i = 0; i < x.size(); ++i)
+                y[i] = f2.processSample (f1.processSample (x[i]));
+            return y;
+        };
+        auto v = presetVoicing (index);
+        v.breathNoise = 0.0f;
+        const auto low = lowRegister (g);
+        std::printf ("                ");
+        for (int t = -2; t <= 12; ++t)
+            std::printf (" %+3dms", t);
+        std::printf ("   peak\n");
+        for (size_t k = 0; k + 1 < low.size(); ++k)
+            for (int direction = 0; direction < 2; ++direction)
+            {
+                const auto& from = low[k + (size_t) direction];
+                const auto& to = low[k + 1 - (size_t) direction];
+                const auto a = from.openness (g), b = to.openness (g);
+                WhistleModel model;
+                model.setGeometry (g);
+                model.prepare (rate);
+                model.setVoicing (v);
+                std::vector<float> out ((size_t) (0.5 * rate), 0.0f);
+                const int block = (int) (rate * 0.002);
+                for (int start = 0; start < (int) out.size(); start += block)
+                {
+                    const double t = start / rate;
+                    const double share = std::clamp ((t - 0.4) / (rampMs * 0.001), 0.0, 1.0);
+                    Controls controls;
+                    for (int i = 0; i < kNumHoles; ++i)
+                        controls.openness[(size_t) i] = (float) (a.holes[(size_t) i] + share * (b.holes[(size_t) i] - a.holes[(size_t) i]));
+                    controls.footOpenness = (float) a.foot;
+                    controls.mouthPressure = (float) (pressure * std::min (1.0, t / 0.04));
+                    model.setControls (controls);
+                    model.render (out.data() + start, std::min (block, (int) out.size() - start));
+                }
+                const auto hp = highpass (out);
+                const double steady = levelDb (hp, (size_t) (0.3 * rate), (size_t) (0.39 * rate));
+                std::printf ("  %-5s -> %-5s", from.name, to.name);
+                double peak = -1.0e9;
+                for (int t = -2; t <= 12; ++t)
+                {
+                    const auto at = (size_t) ((0.4 + t * 0.001) * rate);
+                    const double l = levelDb (hp, at, at + (size_t) (0.001 * rate)) - steady;
+                    peak = std::max (peak, l);
+                    std::printf (" %+5.0f", l);
+                }
+                std::printf ("   %+4.0f\n", peak);
+            }
+        return 0;
+    }
+
     if (mode == "glide")  // glide [preset] [p=<Pa>] [ms=<ramp>] [vortex=]: level and pitch while one hole opens or closes gradually
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
