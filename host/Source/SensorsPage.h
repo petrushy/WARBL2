@@ -15,6 +15,7 @@ public:
     {
         float x;
         juce::String label;
+        float y = std::numeric_limits<float>::quiet_NaN();  // On the curve unless given
     };
 
     CurveView (juce::String xLabel, juce::String yLabel);

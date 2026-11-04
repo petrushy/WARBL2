@@ -15,6 +15,8 @@ juce::var sensorsToVar (const AudioEngine& a)
     d->setProperty ("holeCurve", a.holeCurve.load());
     d->setProperty ("holeSCurve", a.holeSCurve.load());
     d->setProperty ("holeCentre", a.holeCentre.load());
+    d->setProperty ("holeFingerHeight", a.holeFingerHeight.load());
+    d->setProperty ("holeFingerRange_mm", a.holeFingerRange.load());
     return o;
 }
 
@@ -33,6 +35,9 @@ void sensorsFromVar (const juce::var& o, AudioEngine& a)
     read ("holeClosedAt", a.holeClosedAt);
     read ("holeCurve", a.holeCurve);
     read ("holeCentre", a.holeCentre);
+    read ("holeFingerRange_mm", a.holeFingerRange);
+    if (o.hasProperty ("holeFingerHeight"))
+        a.holeFingerHeight = (bool) o["holeFingerHeight"];
     if (o.hasProperty ("holeSCurve"))
         a.holeSCurve = (bool) o["holeSCurve"];
 }

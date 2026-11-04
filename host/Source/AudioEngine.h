@@ -70,6 +70,14 @@ public:
     std::atomic<float> holeOpenBelow { response::Hole().openBelow }, holeClosedAt { response::Hole().closedAt },
         holeCurve { response::Hole().curve }, holeCentre { response::Hole().centre };
     std::atomic<bool> holeSCurve { response::Hole().sCurve };
+    std::atomic<bool> holeFingerHeight { response::Hole().fingerHeight };
+    std::atomic<float> holeFingerRange { response::Hole().fingerRange };
+    // Each hole's size, for the physical (finger height) response; set with the instrument.
+    std::array<std::atomic<float>, whistle::kNumHoles> holeRadius {}, holeEffectiveLength {};
+    response::FingerHole fingerHole (int hole) const
+    {
+        return { holeRadius[(size_t) hole].load(), holeEffectiveLength[(size_t) hole].load() };
+    }
     response::Breath breathResponse() const;
     response::Hole holeResponse() const;
 

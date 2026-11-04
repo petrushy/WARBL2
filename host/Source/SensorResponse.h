@@ -52,6 +52,34 @@ inline float applySCurve (float x, float steepness, float centre)
     return a + b > 0.0f ? a / (a + b) : 0.0f;
 }
 
+// A finger hovering over a tone hole, from WARBL's infrared reading. The reflected light falls off with distance
+// roughly as (d0 / (d + d0))^2, so the coverage x (0..1 between "open below" and "closed at") gives the finger's
+// height d = d0 (1 / sqrt(x) - 1). Air leaving the hole squeezes out through the ring between the finger and the
+// rim (area 2 pi b d, flowing out to the fingertip's edge R): an extra air mass, the same as a longer chimney by
+// b^2 ln(R / b) / (2 d). The hole's openness is its own effective length over the total, so a hovering finger
+// still flattens the note, and a big hole needs the finger higher than a small one.
+struct FingerHole
+{
+    float radius = 0.0f;           // m (0: not known, use the curve)
+    float effectiveLength = 0.0f;  // m, open hole with no finger (chimney and end corrections)
+};
+
+inline float fingerOpenness (float x, float rangeMm, const FingerHole& hole)
+{
+    if (x >= 1.0f)
+        return 0.0f;
+    if (x <= 0.0f)
+        return 1.0f;
+    constexpr float seal = 0.0001f;  // m: a finger this close seals the hole (skin gives a little)
+    const float height = rangeMm * 0.001f * (1.0f / std::sqrt (x) - 1.0f) - seal;
+    if (height <= 0.0f)
+        return 0.0f;
+    const float b = hole.radius;
+    const float fingertip = std::max (0.008f, 1.5f * b);  // Radius of the finger pad over the hole
+    const float gap = b * b * std::log (fingertip / b) / (2.0f * height);
+    return hole.effectiveLength / (hole.effectiveLength + gap);
+}
+
 struct Hole
 {
     float openBelow = 0.05f;  // Coverage (0 = open, 1 = covered at calibration) below which the hole is fully open.
@@ -60,11 +88,15 @@ struct Hole
     bool sCurve = true;       // S-curve (flat at both ends) instead of a power curve
     float centre = 0.51f;     // S-curve: where between "open below" and "closed at" the steep part is
     // (Steepness and centre chosen by playing WARBL, 2026-11-04.)
+    bool fingerHeight = false;  // Physical: from the finger's height over each hole (see fingerOpenness), not a curve
+    float fingerRange = 2.5f;   // mm: d0, the infrared sensor's distance scale
 
-    // 0 = open, 1 = closed.
-    float closedness (float coverage) const
+    // 0 = open, 1 = closed. The physical shape needs the hole's size; without it the curve is used.
+    float closedness (float coverage, const FingerHole& hole = {}) const
     {
         const float x = (coverage - openBelow) / std::max (0.01f, closedAt - openBelow);
+        if (fingerHeight && hole.radius > 0.0f)
+            return 1.0f - fingerOpenness (x, fingerRange, hole);
         return sCurve ? applySCurve (x, curveExponent (curve), centre) : applyCurve (x, curve);
     }
 };

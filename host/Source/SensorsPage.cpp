@@ -67,7 +67,7 @@ void CurveView::paint (juce::Graphics& g)
         for (const auto& point : points())
         {
             const float x = std::clamp (point.x, 0.0f, xRange);
-            const auto p = toScreen (x, curve (x));
+            const auto p = toScreen (x, std::isnan (point.y) ? curve (x) : point.y);
             g.setColour (live);
             g.fillEllipse (juce::Rectangle<float> (9.0f, 9.0f).withCentre (p));
             if (point.label.isNotEmpty())
@@ -121,20 +121,42 @@ SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
                      "is nearly down. S-curve: how steep the S is (above 64 flat at both ends, below 64 an inverted S).");
     addRow (holeRows, "Centre (S-curve)", 0.1, 0.9, 0.01, "", audio.holeCentre)
         .setTooltip ("Where between 'open below' and 'closed at' the S-curve is steepest: lower moves it towards the open end.");
+    addRow (holeRows, "Finger range (physical)", 0.5, 8.0, 0.1, "mm", audio.holeFingerRange)
+        .setTooltip ("The infrared sensor's distance scale: how far above the hole a finger still shows on it. Larger = the finger "
+                     "reads as higher, so holes open sooner as the finger lifts.");
 
     holeShape.addItem ("Power curve", 1);
     holeShape.addItem ("S-curve", 2);
-    holeShape.setSelectedId (audio.holeSCurve.load() ? 2 : 1, juce::dontSendNotification);
-    holeShape.setTooltip ("S-curve: little change while the finger is far away and in the last bit before it's down, steep in between.");
-    holeShape.onChange = [this] { audio.holeSCurve = holeShape.getSelectedId() == 2; };
+    holeShape.addItem ("Finger height (physical)", 3);
+    holeShape.setSelectedId (audio.holeFingerHeight.load() ? 3 : audio.holeSCurve.load() ? 2 : 1, juce::dontSendNotification);
+    holeShape.setTooltip ("S-curve: little change while the finger is far away and in the last bit before it's down, steep in between. "
+                          "Finger height: each hole opens as the air escaping under a hovering finger would let it, from the "
+                          "finger's height (estimated from the sensor) and the hole's size; a hovering finger still flattens the note.");
+    holeShape.onChange = [this]
+    {
+        audio.holeSCurve = holeShape.getSelectedId() == 2;
+        audio.holeFingerHeight = holeShape.getSelectedId() == 3;
+    };
     addAndMakeVisible (holeShape);
 
-    holeCurve.curve = [this] (float x) { return audio.holeResponse().closedness (x); };
+    // The curve drawn: the first hole in use (with the physical shape, each hole has its own; dots show each).
+    auto shownHole = [this]
+    {
+        for (int i = 1; i < whistle::kNumHoles; ++i)
+            if (audio.holeRadius[(size_t) i].load() > 0.0f)
+                return i;
+        return 0;
+    };
+    holeCurve.curve = [this, shownHole] (float x) { return audio.holeResponse().closedness (x, audio.fingerHole (shownHole())); };
     holeCurve.points = [this]
     {
+        const auto response = audio.holeResponse();
         std::vector<CurveView::Point> p;
         for (int i = 0; i < whistle::kNumHoles; ++i)
-            p.push_back ({ audio.measuredCoverage[(size_t) i].load(), kHoleNames[(size_t) i] });
+        {
+            const float x = audio.measuredCoverage[(size_t) i].load();
+            p.push_back ({ x, kHoleNames[(size_t) i], std::clamp (response.closedness (x, audio.fingerHole (i)), 0.0f, 1.0f) });
+        }
         p.push_back ({ audio.measuredBellCoverage.load(), "Bell" });
         return p;
     };
@@ -155,7 +177,7 @@ SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
     holeDefaults.onClick = [this, resetRows]
     {
         const response::Hole d;
-        resetRows (holeRows, { d.openBelow, d.closedAt, d.curve, d.centre });
+        resetRows (holeRows, { d.openBelow, d.closedAt, d.curve, d.centre, d.fingerRange });
         holeShape.setSelectedId (2, juce::sendNotificationSync);  // The default shape is the S-curve
     };
     addAndMakeVisible (breathDefaults);
@@ -194,9 +216,15 @@ void SensorsPage::timerCallback()
                             + "Now: measured " + juce::String (juce::roundToInt (measured)) + " Pa -> model "
                             + juce::String (juce::roundToInt (b.map (measured))) + " Pa",
                         juce::dontSendNotification);
-    holeInfo.setText ("Coverage comes from WARBL's hole calibration (0 = open, 1 = covered). "
-                      "Dots show each hole now; playing from the screen bypasses this.",
+    const bool physical = audio.holeFingerHeight.load();
+    holeInfo.setText (physical ? "Coverage comes from WARBL's hole calibration. Each hole opens by the finger's height and the hole's "
+                                 "size; the line is the first hole in use, dots show each hole now."
+                               : "Coverage comes from WARBL's hole calibration (0 = open, 1 = covered). "
+                                 "Dots show each hole now; playing from the screen bypasses this.",
                       juce::dontSendNotification);
+    holeRows[2].slider->setEnabled (! physical);  // Curve
+    holeRows[3].slider->setEnabled (! physical);  // Centre
+    holeRows[4].slider->setEnabled (physical);    // Finger range
 
     breathCurve.repaint();
     holeCurve.repaint();

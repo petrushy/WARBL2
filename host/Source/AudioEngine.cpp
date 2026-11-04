@@ -60,6 +60,13 @@ AudioEngine::~AudioEngine()
 
 void AudioEngine::setScaleInstrument (const whistle::Geometry& g, double lowestHz)
 {
+    for (int i = 0; i < whistle::kNumHoles; ++i)
+    {
+        const bool used = g.holes[(size_t) i].enabled;
+        holeRadius[(size_t) i] = used ? (float) (0.5 * g.holes[(size_t) i].diameter) : 0.0f;
+        holeEffectiveLength[(size_t) i] = used ? (float) g.holeEffectiveLength (i) : 0.0f;
+    }
+
     const juce::ScopedLock lock (scaleLock);
     scaleGeometry = g;
     scaleLowestHz = lowestHz;
@@ -186,7 +193,8 @@ response::Breath AudioEngine::breathResponse() const
 
 response::Hole AudioEngine::holeResponse() const
 {
-    return { holeOpenBelow.load(), holeClosedAt.load(), holeCurve.load(), holeSCurve.load(), holeCentre.load() };
+    return { holeOpenBelow.load(), holeClosedAt.load(), holeCurve.load(), holeSCurve.load(), holeCentre.load(),
+             holeFingerHeight.load(), holeFingerRange.load() };
 }
 
 whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& frame)
@@ -199,7 +207,7 @@ whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& fram
         const float span = (float) std::max (1, covered[sensor].load() - baseline[sensor].load());
         const float coverage = ((float) frame.holes[sensor] - (float) baseline[sensor].load()) / span;
         measuredCoverage[(size_t) hole] = coverage;
-        c.openness[(size_t) hole] = 1.0f - holes.closedness (coverage);
+        c.openness[(size_t) hole] = 1.0f - holes.closedness (coverage, fingerHole (hole));
     }
 
     // The bell sensor; the model only uses it if the instrument lets it close the foot.
