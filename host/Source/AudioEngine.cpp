@@ -85,7 +85,8 @@ void AudioEngine::playScale()
         auto same = [] (float a, float b) { return std::abs (a - b) < 1.0e-6f; };
         const bool sameVoicing = same (voicing.jetStrouhal, scaleVoicing.jetStrouhal) && same (voicing.jetConvection, scaleVoicing.jetConvection)
                                  && same (voicing.breathNoise, scaleVoicing.breathNoise) && same (voicing.windwayMass, scaleVoicing.windwayMass)
-                                 && same (voicing.windwayFriction, scaleVoicing.windwayFriction);
+                                 && same (voicing.windwayFriction, scaleVoicing.windwayFriction)
+                                 && same (voicing.vortexLoss, scaleVoicing.vortexLoss);
         if (scaleCacheValid && sameVoicing)
         {
             startScale (scaleCache);

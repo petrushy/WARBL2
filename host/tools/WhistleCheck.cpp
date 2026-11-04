@@ -87,6 +87,8 @@ Controls controlsFor (const Openness& open)
 
 // Plays a breath gesture through one fingering: the pressure is sent every 2 ms, like WARBL's frames.
 // Returns the sound at `rate`.
+static float vortexArg = 1.0f;  // vortex=: the edge vortex loss (playGesture, radiation)
+
 static std::vector<float> playGesture (const Geometry& g, const Voicing& v, const Openness& open,
                                        const std::function<double (double)>& pressureAt, double seconds, double rate)
 {
@@ -94,6 +96,7 @@ static std::vector<float> playGesture (const Geometry& g, const Voicing& v, cons
     model.setGeometry (g);
     model.prepare (rate);
     model.setVoicing (v);
+    model.vortexLoss = vortexArg;
     auto controls = controlsFor (open);
     std::vector<float> out ((size_t) (seconds * rate), 0.0f);
     const int block = (int) (rate * 0.002);
@@ -161,7 +164,8 @@ static void windwayNoiseArg (int argc, char* argv[], Voicing& v)
             v.breathNoise = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getFloatValue();
 }
 
-// mass=<0-1> friction=<0-1> windway=<length mm>: try the windway's physics.
+// mass=<0-1> friction=<0-1> windway=<length mm>: try the windway's physics; edge=<mm>: the edge offset;
+// vortex=<0-1.5>: the edge vortex loss.
 static void windwayArgs (int argc, char* argv[], int from, Geometry& g)
 {
     for (int i = from; i < argc; ++i)
@@ -171,6 +175,8 @@ static void windwayArgs (int argc, char* argv[], int from, Geometry& g)
         if (arg.startsWith ("mass=")) windwayMass = (float) value;
         if (arg.startsWith ("friction=")) windwayFriction = (float) value;
         if (arg.startsWith ("windway=")) g.windwayLength = value * 0.001;
+        if (arg.startsWith ("edge=")) g.edgeOffset = value * 0.001;
+        if (arg.startsWith ("vortex=")) vortexArg = (float) value;
     }
 }
 
@@ -387,6 +393,168 @@ int main (int argc, char* argv[])
                          g.holes[0].diameter * 1000.0, g.holes[0].position * 1000.0);
         }
         chart (g);
+        return 0;
+    }
+
+    if (mode == "transition")  // transition [preset] [p=<Pa>]: how fast the pitch moves when one hole opens or closes at once
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        windwayArgs (argc, argv, 3, g);
+        auto voicing = presetVoicing (index);
+        voicing.breathNoise = 0.0f;
+        double pressure = 600.0;
+        for (int i = 3; i < argc; ++i)
+            if (juce::String (argv[i]).startsWith ("p="))
+                pressure = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        std::printf ("%s at %.0f Pa: one hole switched within one 2 ms sensor frame. Pitch (from zero crossings, cents\n"
+                     "relative to the new note) in the 5 ms steps after the change, and when it stays within 10 cents.\n\n",
+                     g.name.toRawUTF8(), pressure);
+        constexpr double rate = 48000.0;
+        const auto low = lowRegister (g);
+        for (size_t k = 0; k + 1 < low.size(); ++k)
+        {
+            for (int direction = 0; direction < 2; ++direction)
+            {
+                const auto& from = low[k + (size_t) direction];
+                const auto& to = low[k + 1 - (size_t) direction];
+                const auto a = from.openness (g), b = to.openness (g);
+                auto pressureAt = [=] (double) { return pressure; };
+                // Fingering changes at 0.4 s.
+                WhistleModel model;
+                model.setGeometry (g);
+                model.prepare (rate);
+                model.setVoicing (voicing);
+                std::vector<float> out ((size_t) (0.6 * rate), 0.0f);
+                const int block = (int) (rate * 0.002);
+                for (int start = 0; start < (int) out.size(); start += block)
+                {
+                    auto controls = controlsFor (start / rate < 0.4 ? a : b);
+                    controls.mouthPressure = (float) pressureAt (start / rate);
+                    model.setControls (controls);
+                    model.render (out.data() + start, std::min (block, (int) out.size() - start));
+                }
+                // Final pitch from the last 0.1 s; then periods between upward zero crossings after the change.
+                double clarity = 0.0;
+                const double final = measurePitch (out, rate, clarity);
+                if (final <= 0.0)
+                {
+                    std::printf ("  %-5s -> %-5s  (no clear note)\n", from.name, to.name);
+                    continue;
+                }
+                std::vector<std::pair<double, double>> crossings;  // time, period
+                double last = -1.0;
+                for (size_t i = (size_t) (0.39 * rate); i + 1 < out.size(); ++i)
+                    if (out[i] < 0.0f && out[i + 1] >= 0.0f)
+                    {
+                        const double t = (double) i / rate + out[i] / (out[i] - out[i + 1]) / rate;
+                        if (last > 0.0)
+                            crossings.push_back ({ t, t - last });
+                        last = t;
+                    }
+                std::printf ("  %-5s -> %-5s ", from.name, to.name);
+                double settled = 0.0;
+                for (auto it = crossings.rbegin(); it != crossings.rend(); ++it)
+                    if (std::abs (1200.0 * std::log2 (1.0 / it->second / final)) > 10.0)
+                    {
+                        settled = it->first - 0.4;
+                        break;
+                    }
+                for (double t = 0.0; t <= 0.04; t += 0.005)
+                {
+                    double sum = 0.0;
+                    int count = 0;
+                    for (const auto& c : crossings)
+                        if (c.first >= 0.4 + t && c.first < 0.4 + t + 0.005)
+                        {
+                            sum += c.second;
+                            ++count;
+                        }
+                    if (count > 0)
+                        std::printf (" %+5.0f", 1200.0 * std::log2 (count / sum / final));
+                    else
+                        std::printf ("     .");
+                }
+                std::printf ("   settled after %.0f ms\n", settled * 1000.0);
+            }
+        }
+        return 0;
+    }
+
+    if (mode == "radiation")  // radiation [preset] [p=<Pa>]: harmonics from the window and from the holes and foot
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        windwayArgs (argc, argv, 3, g);
+        auto voicing = presetVoicing (index);
+        voicing.breathNoise = 0.0f;
+        float vortex = 1.0f;
+        for (int i = 3; i < argc; ++i)
+            if (juce::String (argv[i]).startsWith ("vortex="))
+                vortex = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+        double pressure = 700.0;
+        for (int i = 3; i < argc; ++i)
+            if (juce::String (argv[i]).startsWith ("p="))
+                pressure = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        std::printf ("%s at %.0f Pa: harmonic levels (dBFS) at the listener 0.5 m in front of the window, from everything,\n"
+                     "from the window alone, and from the holes and foot alone; 'power' adds the two parts' powers (as a room\n"
+                     "would, roughly) instead of their pressures.\n\n  fingering        H1: all  window  body  power    H2: all  window  body  power    H3: all  power\n",
+                     g.name.toRawUTF8(), pressure);
+        constexpr double rate = 48000.0;
+        for (const auto& c : lowRegister (g))
+        {
+            auto render = [&] (float window, float body)
+            {
+                WhistleModel model;
+                model.setGeometry (g);
+                model.prepare (rate);
+                model.setVoicing (voicing);
+                model.testWindowRadiation = window;
+                model.testBodyRadiation = body;
+                model.vortexLoss = vortex * vortexArg;
+                auto controls = controlsFor (c.openness (g));
+                std::vector<float> out ((size_t) (0.6 * rate), 0.0f);
+                const int block = (int) (rate * 0.002);
+                for (int start = 0; start < (int) out.size(); start += block)
+                {
+                    controls.mouthPressure = (float) (pressure * std::min (1.0, start / (rate * 0.04)));
+                    model.setControls (controls);
+                    model.render (out.data() + start, std::min (block, (int) out.size() - start));
+                }
+                return out;
+            };
+            const auto all = render (1.0f, 1.0f), window = render (1.0f, 0.0f), body = render (0.0f, 1.0f);
+            double clarity = 0.0;
+            const double f0 = measurePitch (all, rate, clarity);
+            if (f0 <= 0.0)
+            {
+                std::printf ("  %s   (no clear note)\n", c.holePattern (g).c_str());
+                continue;
+            }
+            auto harmonic = [&] (const std::vector<float>& x, int k)  // Amplitude at k f0 over the last 0.2 s
+            {
+                const size_t n = (size_t) (0.2 * rate), from = x.size() - n;
+                double re = 0.0, im = 0.0;
+                for (size_t i = 0; i < n; ++i)
+                {
+                    const double ph = 2.0 * juce::MathConstants<double>::pi * k * f0 * (double) i / rate;
+                    re += x[from + i] * std::cos (ph);
+                    im += x[from + i] * std::sin (ph);
+                }
+                return 2.0 * std::hypot (re, im) / (double) n;
+            };
+            auto db = [] (double a) { return 20.0 * std::log10 (a + 1.0e-9); };
+            std::printf ("  %s  ", c.holePattern (g).c_str());
+            for (int k = 1; k <= 3; ++k)
+            {
+                const double a = harmonic (all, k), w = harmonic (window, k), b = harmonic (body, k);
+                if (k < 3)
+                    std::printf ("      %6.1f %6.1f %6.1f %6.1f", db (a), db (w), db (b), db (std::hypot (w, b)));
+                else
+                    std::printf ("      %6.1f %6.1f", db (a), db (std::hypot (w, b)));
+            }
+            std::printf ("\n");
+        }
         return 0;
     }
 

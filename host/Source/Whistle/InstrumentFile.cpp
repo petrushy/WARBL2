@@ -83,6 +83,7 @@ juce::var toVar (const Instrument& instrument)
     set (voicing, "directNoise", v.directNoise);
     set (voicing, "windwayMass", v.windwayMass);
     set (voicing, "windwayFriction", v.windwayFriction);
+    set (voicing, "vortexLoss", v.vortexLoss);
     root.getDynamicObject()->setProperty ("voicing", voicing);
 
     return root;
@@ -155,6 +156,7 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     read (voicing, "directNoise", instrument.voicing.directNoise);
     read (voicing, "windwayMass", instrument.voicing.windwayMass);
     read (voicing, "windwayFriction", instrument.voicing.windwayFriction);
+    read (voicing, "vortexLoss", instrument.voicing.vortexLoss);
 
     // Sanity checks: anything that would make the model meaningless.
     auto bad = [&] (bool condition, const char* message)

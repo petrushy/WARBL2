@@ -170,6 +170,7 @@ void WhistleModel::setVoicing (const Voicing& v)
     directNoise = v.directNoise;
     windwayMass = v.windwayMass;
     windwayFriction = v.windwayFriction;
+    vortexLoss = v.vortexLoss;
 }
 
 Voicing WhistleModel::getVoicing() const
@@ -182,6 +183,7 @@ Voicing WhistleModel::getVoicing() const
     v.directNoise = directNoise.load();
     v.windwayMass = windwayMass.load();
     v.windwayFriction = windwayFriction.load();
+    v.vortexLoss = vortexLoss.load();
     return v;
 }
 
@@ -440,8 +442,8 @@ float WhistleModel::tick()
 
     // Pressure the jet produces across the window (jet drive), minus losses from vortices shed at the edge.
     const float jetDrive = rho * cfg.dipoleLength / cfg.windowArea * jetFlowRate;
-    const float vortexLoss = -0.5f * rho * (windowVelocity / 0.6f) * std::abs (windowVelocity / 0.6f);
-    const float source = jetDrive + vortexLoss + edgeNoise + testSource;
+    const float vortexDrop = -vortexLoss.load (std::memory_order_relaxed) * 0.5f * rho * (windowVelocity / 0.6f) * std::abs (windowVelocity / 0.6f);
+    const float source = jetDrive + vortexDrop + edgeNoise + testSource;
 
     // 3. Window end. The jet's pressure pushes the air in the window (mass M) into the bore:
     //    p_top = source - M dU/dt, with p_top = p+ + p- and U = (p+ - p-) / Z0, solved for the outgoing p+
@@ -466,7 +468,7 @@ float WhistleModel::tick()
         radiation[(size_t) ((radiationRead + i + 1) & (kRadiationSize - 1))] += flow * f;
     };
     // Out of the window: the air the bore pushes out, plus the edge noise that escapes directly.
-    radiate (0, -flowIntoBore + directNoise.load (std::memory_order_relaxed) * kDirectNoise * edgeNoise * cfg.windowArea / (rho * c));
+    radiate (0, testWindowRadiation * -flowIntoBore + directNoise.load (std::memory_order_relaxed) * kDirectNoise * edgeNoise * cfg.windowArea / (rho * c));
 
     // 4. Junctions inside the bore. Pressure there is the area-weighted sum of the arriving waves, filtered by
     //    the hole's shunt: its open part is a short tube to the outside that lets low frequencies escape (an
@@ -518,7 +520,7 @@ float WhistleModel::tick()
             st = { x0, st[0], st[1], pNew, st[3], st[4], flow, st[6], st[7] };
             p = (float) pNew;
 
-            radiate (jn, (float) flow);
+            radiate (jn, testBodyRadiation * (float) flow);
         }
 
         sendRight[(size_t) jn] = p - b;
@@ -534,7 +536,7 @@ float WhistleModel::tick()
     const float footOpen = cfg.bellClosesFoot ? juce::jlimit (0.0f, 1.0f, current.footOpenness) : 1.0f;
     const float reflectedFoot = -footOpen * lowpassed + (1.0f - footOpen) * arrivingFoot;
     sendLeft[(size_t) n - 1] = reflectedFoot;
-    radiate (n, cfg.area[(size_t) n - 1] / (rho * c) * (arrivingFoot - reflectedFoot));
+    radiate (n, testBodyRadiation * cfg.area[(size_t) n - 1] / (rho * c) * (arrivingFoot - reflectedFoot));
 
     // 6. Send the new waves into the sections.
     for (int k = 0; k < n; ++k)

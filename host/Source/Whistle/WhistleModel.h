@@ -59,6 +59,7 @@ public:
     // Windway physics, 0..1 (see Voicing).
     std::atomic<float> windwayMass { 1.0f };
     std::atomic<float> windwayFriction { 1.0f };
+    std::atomic<float> vortexLoss { 1.0f };  // See Voicing
 
     // Sets all of the above that a Voicing holds, or reads them back.
     void setVoicing (const Voicing&);
@@ -68,6 +69,7 @@ public:
     // the window (Pa), and a log of the flow into the bore (m^3/s), both per internal sample.
     float testSource = 0.0f;
     std::vector<float>* windowFlowLog = nullptr;
+    float testWindowRadiation = 1.0f, testBodyRadiation = 1.0f;  // Scale what the window / the holes and foot radiate
 
     // For display.
     std::atomic<float> jetVelocity { 0.0f };   // m/s

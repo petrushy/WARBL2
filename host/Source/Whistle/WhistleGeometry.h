@@ -122,6 +122,9 @@ struct Voicing
     // no friction): kept adjustable because WARBL's own mouthpiece already smooths the breath a little.
     float windwayMass = 1.0f;      // The air in the windway has to be accelerated (~1 ms)
     float windwayFriction = 1.0f;  // Boundary layers on the windway walls carry less flow than the jet core
+    // Loss from vortices shed where the sound flows round the edge, as a multiple of Verge's 1/2 rho (v / 0.6)^2.
+    // It is what limits the low notes' loudness: lower = fuller, louder low notes (with more odd harmonics).
+    float vortexLoss = 1.0f;
 };
 
 // Starting points, tuned (see WhistleGeometry.cpp).

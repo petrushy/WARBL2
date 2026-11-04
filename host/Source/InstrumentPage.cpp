@@ -344,6 +344,10 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
             [&model] (double v) { model.windwayFriction = (float) v; }, false)
         .setTooltip ("Boundary layers on the windway walls carry less air than the jet's core, most of all when blowing softly "
                      "(a long, narrow windway loses more). 1 = as computed, 0 = off.");
+    addRow ("Edge vortex loss", 0.0, 1.5, 0.01, "", [&model] { return (double) model.vortexLoss.load(); },
+            [&model] (double v) { model.vortexLoss = (float) v; }, false)
+        .setTooltip ("Energy lost in the vortices shed where the sound flows round the edge (1 = the textbook value). It is what "
+                     "limits how loud the low notes get: lower gives fuller, louder low notes with more harmonics.");
 
     addHeading ("Output (breath and hole response: Sensors tab)");
     addRow ("Output level", -30.0, 12.0, 0.5, "dB", [&model] { return (double) model.outputGainDb.load(); },
