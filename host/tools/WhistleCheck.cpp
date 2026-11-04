@@ -405,6 +405,21 @@ int main (int argc, char* argv[])
             std::printf ("  omega h/U %.2f: vortex sheet %.4f%+.4fi   Rayleigh %.4f%+.4fi\n", om, vs.real(), vs.imag(), ry.real(), ry.imag());
         }
 
+        {
+            const double u = std::sqrt (2.0 * 1000.0 / kAirDensity);
+            const double theta = std::min (0.067 * h, 0.664 * std::sqrt (nu * g.windwayLength / u));
+            std::printf ("\nFull jet response (receptivity v/(i omega) and growth) at 1000 Pa (theta/h %.3f), in units of v h/U.\n"
+                         "It keeps rising up to the jet's cutoff (omega h/U ~1.3, Strouhal f h/U ~0.2); the model's band-pass is centred\n"
+                         "at Strouhal %.3f. With the theory's band (WhistleCheck chart st=0.16 conv=0.49) most notes stop speaking:\n"
+                         "the jet favours high resonances, as Adachi and Qian (2025) found with a measured jet response.\n"
+                         "  omega h/U   theory\n", theta / h, v.jetStrouhal);
+            for (double om : { 0.03, 0.06, 0.1, 0.15, 0.25, 0.4, 0.6, 0.9, 1.2 })
+            {
+                const auto r = jetResponse (om, w / h, theta / h);
+                std::printf ("    %5.2f    %+6.1f dB %+5.0f deg\n", om, 20.0 * std::log10 (std::abs (r)), std::arg (r) * 180.0 / juce::MathConstants<double>::pi);
+            }
+        }
+
         std::printf ("\n%s: windway %.1f mm long, %.2f mm high; window %.1f mm (W/h %.1f).\n"
                      "Per frequency: phase speed c/U and growth over the window (dB) from the profile theory, then\n"
                      "the model's current jet (delay at %.2f U, band-pass at Strouhal %.3f, growth e^(0.38 W/h)).\n",

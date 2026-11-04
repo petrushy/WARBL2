@@ -85,6 +85,16 @@ std::complex<double> vortexSheetJetWavenumber (double omega)
     return k;
 }
 
+std::complex<double> jetResponse (double omega, double windowOverH, double thetaOverH)
+{
+    const Complex alpha = jetWavenumber (omega, thetaOverH);
+    if (! std::isfinite (alpha.real()))
+        return nan;
+    const Complex i (0.0, 1.0);
+    const Complex eta = i / omega * (1.0 - std::exp (i * alpha * windowOverH));
+    return std::conj (eta);
+}
+
 std::complex<double> jetWavenumber (double omega, double thetaOverH, std::complex<double> guess)
 {
     const double t = std::clamp (thetaOverH, 0.002, 0.07);

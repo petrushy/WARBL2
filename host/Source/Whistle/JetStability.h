@@ -22,4 +22,11 @@ std::complex<double> jetWavenumber (double omegaH, double thetaOverH, std::compl
 // from its dispersion relation (omega - alpha U)^2 tanh(alpha h / 2) + omega^2 = 0. For checking.
 std::complex<double> vortexSheetJetWavenumber (double omegaH);
 
+// The jet's deflection at the edge for a sound velocity v across the window (Fletcher; de la Cuadra): the
+// sound moves the jet sideways by v / (i omega), and the instability wave that keeps it attached at the flue
+// grows on the way: eta = (v / (i omega)) (1 - exp(i alpha W)) (exp(-i omega t) convention). In units of
+// v h / U, as a function of Omega = omega h / U, for the e^(+i omega t) convention used for filters.
+std::complex<double> jetResponse (double omegaH, double windowOverH, double thetaOverH);
+
+
 } // namespace whistle
