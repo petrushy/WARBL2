@@ -185,11 +185,18 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
 {
     geometry = whistle::presets().front();
 
-    // Instrument choice
-    for (size_t i = 0; i < whistle::presets().size(); ++i)
-        presetBox.addItem (whistle::presets()[i].name, (int) i + 1);
+    // Instrument choice: built-in presets, then the player's own.
+    refreshPresetList();
     presetBox.setSelectedId (1, juce::dontSendNotification);
-    presetBox.onChange = [this] { loadPreset (presetBox.getSelectedId() - 1); };
+    presetBox.onChange = [this]
+    {
+        const int id = presetBox.getSelectedId();
+        if (id >= kUserPresetId)
+            loadUserPreset (id - kUserPresetId);
+        else if (id > 0)
+            loadPreset (id - 1);
+        deleteButton.setEnabled (id >= kUserPresetId);
+    };
 
     for (size_t i = 0; i < whistle::materials().size(); ++i)
         materialBox.addItem (whistle::materials()[i].name, (int) i + 1);
@@ -257,13 +264,18 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
         }
     };
 
-    saveButton.onClick = [this] { saveToFile(); };
-    loadButton.onClick = [this] { loadFromFile(); };
-    saveButton.setTooltip ("Save this whistle (geometry and voicing) to a file");
-    loadButton.setTooltip ("Load a whistle saved earlier");
+    savePresetButton.onClick = [this] { savePreset(); };
+    deleteButton.onClick = [this] { deletePreset(); };
+    exportButton.onClick = [this] { saveToFile(); };
+    importButton.onClick = [this] { loadFromFile(); };
+    savePresetButton.setTooltip ("Save this whistle (geometry and voicing) as one of your presets, in the list above");
+    deleteButton.setTooltip ("Delete the selected preset of yours");
+    exportButton.setTooltip ("Save this whistle to a .whistle file anywhere, e.g. to share it");
+    importButton.setTooltip ("Load a .whistle file");
+    deleteButton.setEnabled (false);
 
     for (auto* c : std::initializer_list<juce::Component*> { &presetBox, &materialBox, &keyBox, &octaveBox, &tuneButton, &tuneStatus, &crossButton,
-                                                             &saveButton, &loadButton, &chartBox, &bellButton })
+                                                             &savePresetButton, &deleteButton, &exportButton, &importButton, &chartBox, &bellButton })
         addAndMakeVisible (c);
     tuneStatus.setColour (juce::Label::textColourId, text);
 
@@ -554,7 +566,7 @@ void InstrumentPage::setInstrument (const whistle::Instrument& instrument)
     geometry = instrument.geometry;
     audio.whistleModel.setVoicing (instrument.voicing);
 
-    presetBox.setText (geometry.name, juce::dontSendNotification);
+    selectPresetNamed (geometry.name);
     materialBox.setSelectedId (0, juce::dontSendNotification);
     for (size_t i = 0; i < whistle::materials().size(); ++i)
         if (std::abs (whistle::materials()[i].wallThickness - geometry.wallThickness) < 1e-6
@@ -566,6 +578,138 @@ void InstrumentPage::setInstrument (const whistle::Instrument& instrument)
     tuneStatus.setText ({}, juce::dontSendNotification);
     refreshSliders();
     geometryChanged();
+}
+
+juce::File InstrumentPage::userPresetFolder()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+        .getChildFile ("Application Support").getChildFile ("WARBL Stream").getChildFile ("Presets");
+}
+
+void InstrumentPage::refreshPresetList()
+{
+    presetBox.clear (juce::dontSendNotification);
+    for (size_t i = 0; i < whistle::presets().size(); ++i)
+        presetBox.addItem (whistle::presets()[i].name, (int) i + 1);
+
+    userPresets.clear();
+    for (const auto& file : userPresetFolder().findChildFiles (juce::File::findFiles, false, "*.whistle"))
+        userPresets.push_back (file);
+    std::sort (userPresets.begin(), userPresets.end(), [] (const juce::File& a, const juce::File& b)
+               { return a.getFileName().compareNatural (b.getFileName()) < 0; });
+    if (! userPresets.empty())
+    {
+        presetBox.addSeparator();
+        presetBox.addSectionHeading ("My presets");
+        for (size_t i = 0; i < userPresets.size(); ++i)
+            presetBox.addItem (userPresets[i].getFileNameWithoutExtension(), kUserPresetId + (int) i);
+    }
+}
+
+void InstrumentPage::selectPresetNamed (const juce::String& name)
+{
+    // A preset of the player's with this name, else a built-in one, else just show the name.
+    for (size_t i = 0; i < userPresets.size(); ++i)
+        if (userPresets[i].getFileNameWithoutExtension() == juce::File::createLegalFileName (name))
+        {
+            presetBox.setSelectedId (kUserPresetId + (int) i, juce::dontSendNotification);
+            deleteButton.setEnabled (true);
+            return;
+        }
+    for (size_t i = 0; i < whistle::presets().size(); ++i)
+        if (whistle::presets()[i].name == name)
+        {
+            presetBox.setSelectedId ((int) i + 1, juce::dontSendNotification);
+            deleteButton.setEnabled (false);
+            return;
+        }
+    presetBox.setText (name, juce::dontSendNotification);
+    deleteButton.setEnabled (false);
+}
+
+void InstrumentPage::loadUserPreset (int index)
+{
+    if (index < 0 || index >= (int) userPresets.size())
+        return;
+    const auto file = userPresets[(size_t) index];
+    juce::String error;
+    if (auto instrument = whistle::fromJson (file.loadFileAsString(), error))
+    {
+        instrument->geometry.name = file.getFileNameWithoutExtension();
+        setInstrument (*instrument);
+    }
+    else
+    {
+        tuneStatus.setText (file.getFileName() + ": " + error, juce::dontSendNotification);
+    }
+}
+
+void InstrumentPage::savePreset()
+{
+    auto* window = new juce::AlertWindow ("Save preset", "Name for this whistle (an existing preset of yours with the same name is "
+                                                         "replaced):", juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor ("name", geometry.name);
+    window->addButton ("Save", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    window->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+    juce::Component::SafePointer<juce::AlertWindow> safeWindow (window);
+    juce::Component::SafePointer<InstrumentPage> safeThis (this);
+    window->enterModalState (true, juce::ModalCallbackFunction::create ([safeThis, safeWindow] (int result)
+    {
+        if (result != 1 || safeThis == nullptr || safeWindow == nullptr)
+            return;
+        auto& page = *safeThis;
+        const auto name = juce::File::createLegalFileName (safeWindow->getTextEditorContents ("name").trim());
+        if (name.isEmpty())
+            return;
+        const auto folder = userPresetFolder();
+        folder.createDirectory();
+        const auto file = folder.getChildFile (name + ".whistle");
+        page.geometry.name = name;
+        if (file.replaceWithText (whistle::toJson (page.getInstrument())))
+        {
+            page.refreshPresetList();
+            page.selectPresetNamed (name);
+            page.tuneStatus.setText ("Saved preset " + name, juce::dontSendNotification);
+        }
+        else
+        {
+            page.tuneStatus.setText ("Couldn't write " + file.getFullPathName(), juce::dontSendNotification);
+        }
+    }), true);
+}
+
+void InstrumentPage::deletePreset()
+{
+    const int index = presetBox.getSelectedId() - kUserPresetId;
+    if (index < 0 || index >= (int) userPresets.size())
+        return;
+    const auto file = userPresets[(size_t) index];
+    juce::Component::SafePointer<InstrumentPage> safeThis (this);
+    juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                      .withIconType (juce::MessageBoxIconType::QuestionIcon)
+                                      .withTitle ("Delete preset")
+                                      .withMessage ("Delete your preset \"" + file.getFileNameWithoutExtension() + "\"? The whistle "
+                                                    "stays as it is on screen.")
+                                      .withButton ("Delete", 1)
+                                      .withButton ("Cancel", 0)
+                                      .withAssociatedComponent (this),
+                                  [safeThis, file] (int result)
+    {
+        if (result != 1 || safeThis == nullptr)
+            return;
+        auto& page = *safeThis;
+        if (file.moveToTrash() || file.deleteFile())
+        {
+            page.refreshPresetList();
+            page.presetBox.setText (page.geometry.name, juce::dontSendNotification);
+            page.deleteButton.setEnabled (false);
+            page.tuneStatus.setText ("Deleted preset " + file.getFileNameWithoutExtension(), juce::dontSendNotification);
+        }
+        else
+        {
+            page.tuneStatus.setText ("Couldn't delete " + file.getFullPathName(), juce::dontSendNotification);
+        }
+    });
 }
 
 void InstrumentPage::saveToFile()
@@ -637,10 +781,11 @@ void InstrumentPage::resized()
     area.removeFromLeft (10);
 
     auto choose = left.removeFromTop (28);
-    presetBox.setBounds (choose.removeFromLeft (230).reduced (2));
-    materialBox.setBounds (choose.removeFromLeft (190).reduced (2));
-    saveButton.setBounds (choose.removeFromLeft (70).reduced (2));
-    loadButton.setBounds (choose.reduced (2));
+    presetBox.setBounds (choose.removeFromLeft (250).reduced (2));
+    savePresetButton.setBounds (choose.removeFromLeft (110).reduced (2));
+    deleteButton.setBounds (choose.removeFromLeft (64).reduced (2));
+    exportButton.setBounds (choose.removeFromLeft (68).reduced (2));
+    importButton.setBounds (choose.reduced (2));
     auto tuneRow = left.removeFromTop (28);
     tuneButton.setBounds (tuneRow.removeFromLeft (100).reduced (2));
     keyBox.setBounds (tuneRow.removeFromLeft (70).reduced (2));
@@ -649,6 +794,7 @@ void InstrumentPage::resized()
     crossButton.setBounds (left.removeFromTop (24));
     auto chartRow = left.removeFromTop (28);
     chartBox.setBounds (chartRow.removeFromLeft (260).reduced (2));
+    materialBox.setBounds (chartRow.removeFromLeft (220).reduced (2));
     left.removeFromTop (4);
 
     // Rows: holes get two sliders side by side to save space.

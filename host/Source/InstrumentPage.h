@@ -85,10 +85,21 @@ private:
     whistle::Geometry geometry;
 
     juce::ComboBox presetBox, materialBox, keyBox, octaveBox;
-    juce::TextButton tuneButton { "Tune holes" }, saveButton { "Save..." }, loadButton { "Load..." };
+    juce::TextButton tuneButton { "Tune holes" }, savePresetButton { "Save preset..." }, deleteButton { "Delete" },
+        exportButton { "Export..." }, importButton { "Import..." };
     std::unique_ptr<juce::FileChooser> fileChooser;
     void saveToFile();
     void loadFromFile();
+
+    // The player's own presets: .whistle files in the app's Presets folder, listed after the built-in ones.
+    static constexpr int kUserPresetId = 1000;  // presetBox id of the first user preset
+    std::vector<juce::File> userPresets;
+    static juce::File userPresetFolder();
+    void refreshPresetList();
+    void selectPresetNamed (const juce::String&);
+    void loadUserPreset (int index);
+    void savePreset();
+    void deletePreset();
     juce::ToggleButton crossButton { "Also tune cross-fingerings with hole size (whistle: C natural sets L1)" };
     juce::ToggleButton bellButton { "Bell   (the bell sensor closes the open foot)" };
     juce::ComboBox chartBox;

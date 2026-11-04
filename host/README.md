@@ -71,7 +71,8 @@ The presets store their tuned dimensions: the tuner is too slow to run at startu
 ## Saving
 
 - **The app remembers its state between runs.** It saves the current instrument, the sensor response, the reverb (room or IR file, level, pre-delay), the audio device and buffer size, and the open tab to `~/Library/Application Support/WARBL Stream/WARBL Stream.settings`.
-- **Instrument files:** **Save...** and **Load...** on the Instrument tab write and read whistle designs as `.whistle` files. These are JSON, with lengths in millimetres, so you can read and edit them by hand. Fields left out get the default whistle's values. A loaded design shows its tuning in the key it is in.
+- **Your presets:** **Save preset...** on the Instrument tab stores the current whistle (geometry and voicing, not the Sensors settings) under a name; it then appears in the preset list under **My presets**, after the built-in ones. Saving under an existing name of yours updates it; **Delete** (with confirmation) moves the selected preset of yours to the Trash. They are `.whistle` files in `~/Library/Application Support/WARBL Stream/Presets/`.
+- **Instrument files:** **Export...** and **Import...** write and read whistle designs as `.whistle` files anywhere. These are JSON, with lengths in millimetres, so you can read and edit them by hand. Fields left out get the default whistle's values. A loaded design shows its tuning in the key it is in.
 - **Sensor curves aren't in instrument files.** They describe the player and their WARBL rather than the instrument.
 
 ## Sensor response (Sensors tab)
