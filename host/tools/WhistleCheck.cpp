@@ -19,6 +19,7 @@
 #include "Whistle/WhistleModel.h"
 
 #include <cmath>
+#include <functional>
 #include <cstdio>
 #include <string>
 
@@ -82,6 +83,56 @@ Controls controlsFor (const Openness& open)
     return controls;
 }
 } // namespace
+
+// Plays a breath gesture through one fingering: the pressure is sent every 2 ms, like WARBL's frames.
+// Returns the sound at `rate`.
+static std::vector<float> playGesture (const Geometry& g, const Voicing& v, const Openness& open,
+                                       const std::function<double (double)>& pressureAt, double seconds, double rate)
+{
+    WhistleModel model;
+    model.setGeometry (g);
+    model.prepare (rate);
+    model.setVoicing (v);
+    auto controls = controlsFor (open);
+    std::vector<float> out ((size_t) (seconds * rate), 0.0f);
+    const int block = (int) (rate * 0.002);
+    for (int start = 0; start < (int) out.size(); start += block)
+    {
+        controls.mouthPressure = (float) pressureAt (start / rate);
+        model.setControls (controls);
+        model.render (out.data() + start, std::min (block, (int) out.size() - start));
+    }
+    return out;
+}
+
+// RMS level (dBFS) of out[from, to).
+static double levelDb (const std::vector<float>& out, size_t from, size_t to)
+{
+    double sum = 0.0;
+    for (size_t i = from; i < to; ++i)
+        sum += (double) out[i] * out[i];
+    return 10.0 * std::log10 (sum / (double) std::max<size_t> (1, to - from) + 1.0e-20);
+}
+
+// wav=<prefix>: saves out as <prefix>-<name>.wav (spaces in name become underscores).
+static void saveWavArg (int argc, char* argv[], const juce::String& name, const std::vector<float>& out, double rate)
+{
+    for (int i = 3; i < argc; ++i)
+    {
+        const juce::String arg (argv[i]);
+        if (! arg.startsWith ("wav="))
+            continue;
+        const auto file = juce::File::getCurrentWorkingDirectory().getChildFile (arg.fromFirstOccurrenceOf ("=", false, false) + "-"
+                                                                                  + name.replaceCharacter (' ', '_') + ".wav");
+        juce::AudioBuffer<float> buffer (1, (int) out.size());
+        buffer.copyFrom (0, 0, out.data(), (int) out.size());
+        file.deleteFile();
+        std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::FileOutputStream> (file);
+        juce::WavAudioFormat wav;
+        if (auto writer = wav.createWriterFor (stream, juce::AudioFormatWriterOptions().withSampleRate (rate).withNumChannels (1).withBitsPerSample (24)))
+            writer->writeFromAudioSampleBuffer (buffer, 0, buffer.getNumSamples());
+    }
+}
 
 // A preset by number or by part of its name (e.g. "recorder", "narrow head").
 static int presetArg (const char* arg)
@@ -334,6 +385,153 @@ int main (int argc, char* argv[])
                          g.holes[0].diameter * 1000.0, g.holes[0].position * 1000.0);
         }
         chart (g);
+        return 0;
+    }
+
+    if (mode == "breath")  // breath [preset] [wav=<prefix>]: register thresholds in slow and fast pressure sweeps, up and back down
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        windwayArgs (argc, argv, 3, g);
+        auto voicing = presetVoicing (index);
+        windwayNoiseArg (argc, argv, voicing);
+        voicing.windwayMass = windwayMass;
+        voicing.windwayFriction = windwayFriction;
+        std::printf ("%s: breath swept from 100 to 5000 Pa and back (exponentially), slowly (4 s each way) and fast (1 s).\n"
+                     "Which register sounds over which pressures, in the order heard (1 = low register, - = no clear note,\n"
+                     "below -40 dBFS or not on a resonance). Going up and coming down differ: flutes have hysteresis. A brief 1\n"
+                     "between registers 2 and 3 is the crossover: both sound at once, and together they repeat at the low note.\n",
+                     g.name.toRawUTF8());
+
+        constexpr double rate = 48000.0, lo = 100.0, hi = 5000.0;
+        for (const auto& c : lowRegister (g))
+        {
+            const auto open = c.openness (g);
+            const auto res = resonances (g, open, lowestNote (g) * 0.6, 8000.0);
+            std::printf ("\n  %-6s %s  resonances", c.name, c.holePattern (g).c_str());
+            for (size_t r = 0; r < std::min<size_t> (3, res.size()); ++r)
+                std::printf (" %.0f", res[r]);
+            std::printf (" Hz\n");
+
+            for (double sweep : { 4.0, 1.0 })
+            {
+                // Up, hold the top for 0.2 s, back down, then a short silence.
+                auto pressureAt = [sweep] (double t)
+                {
+                    if (t < sweep) return lo * std::pow (hi / lo, t / sweep);
+                    if (t < sweep + 0.2) return hi;
+                    if (t < 2.0 * sweep + 0.2) return hi * std::pow (lo / hi, (t - sweep - 0.2) / sweep);
+                    return 0.0;
+                };
+                const double seconds = 2.0 * sweep + 0.4;
+                const auto out = playGesture (g, voicing, open, pressureAt, seconds, rate);
+                if (sweep > 2.0)
+                    saveWavArg (argc, argv, c.name, out, rate);
+
+                // Analyse 100 ms windows every 10 ms; each is labelled with the pressure at its centre.
+                struct Segment { int reg; double from, to; int windows; };
+                std::vector<Segment> segments;
+                const auto window = (size_t) (0.1 * rate);
+                for (double t = 0.12; t < 2.0 * sweep + 0.2; t += 0.01)
+                {
+                    const auto end = (size_t) (t * rate);
+                    int reg = 0;
+                    if (levelDb (out, end - window / 2, end) > -40.0)
+                    {
+                        const std::vector<float> chunk (out.begin() + (long) (end - window - (size_t) (rate / 120.0) - 4), out.begin() + (long) end);
+                        double clarity = 0.0;
+                        const double f = measurePitch (chunk, rate, clarity);
+                        for (size_t r = 0; f > 0.0 && clarity > 0.8 && r < res.size(); ++r)
+                            if (std::abs (1200.0 * std::log2 (f / res[r])) < 80.0)
+                                reg = (int) r + 1;
+                    }
+                    const double p = pressureAt (t - 0.05);
+                    if (segments.empty() || segments.back().reg != reg)
+                        segments.push_back ({ reg, p, p, 1 });
+                    else
+                    {
+                        segments.back().to = p;
+                        ++segments.back().windows;
+                    }
+                }
+                // Drop blips shorter than 30 ms, then merge neighbours that became equal.
+                std::vector<Segment> clean;
+                for (const auto& sgm : segments)
+                {
+                    if (sgm.windows < 3 && ! clean.empty())
+                    {
+                        clean.back().to = sgm.to;
+                        continue;
+                    }
+                    if (! clean.empty() && clean.back().reg == sgm.reg)
+                        clean.back().to = sgm.to;
+                    else
+                        clean.push_back (sgm);
+                }
+                std::printf ("    %s:", sweep > 2.0 ? "slow" : "fast");
+                for (const auto& sgm : clean)
+                    std::printf ("  %s %.0f-%.0f", sgm.reg == 0 ? "-" : std::to_string (sgm.reg).c_str(), sgm.from, sgm.to);
+                std::printf ("\n");
+            }
+        }
+        return 0;
+    }
+
+    if (mode == "tongue")  // tongue [preset] [p=<Pa>]: repeated tonguing with 10, 20 and 40 ms gaps
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        windwayArgs (argc, argv, 3, g);
+        auto voicing = presetVoicing (index);
+        windwayNoiseArg (argc, argv, voicing);
+        voicing.windwayMass = windwayMass;
+        voicing.windwayFriction = windwayFriction;
+        double pressure = 700.0;
+        for (int i = 3; i < argc; ++i)
+            if (juce::String (argv[i]).startsWith ("p="))
+                pressure = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        std::printf ("%s at %.0f Pa: a note, then four more tongued after a gap with no breath (hard tongue: 2 ms\n"
+                     "steps). Per gap length: how far the sound falls in the gap, and how long each re-attack takes to\n"
+                     "reach 90 %% of the steady level (2 ms windows). The first note is a fresh start.\n\n", g.name.toRawUTF8(), pressure);
+        std::printf ("  fingering   fresh   gap 10 ms: dip / re-attack   gap 20 ms           gap 40 ms\n");
+
+        constexpr double rate = 48000.0, noteLength = 0.25;
+        for (const auto& c : lowRegister (g))
+        {
+            std::printf ("  %s  ", c.holePattern (g).c_str());
+            bool first = true;
+            for (double gap : { 0.010, 0.020, 0.040 })
+            {
+                const double period = noteLength + gap;
+                auto pressureAt = [=] (double t) { return std::fmod (t, period) < noteLength && t < 5.0 * period ? pressure : 0.0; };
+                const auto out = playGesture (g, voicing, c.openness (g), pressureAt, 5.0 * period + 0.05, rate);
+
+                const auto window = (size_t) (0.002 * rate);
+                const auto noteEnd = (size_t) (noteLength * rate);
+                const double steady = levelDb (out, noteEnd - (size_t) (0.05 * rate), noteEnd);
+                auto attack = [&] (double start)
+                {
+                    for (auto i = (size_t) (start * rate); i + window < out.size(); i += window)
+                        if (levelDb (out, i, i + window) >= steady + 20.0 * std::log10 (0.9))
+                            return ((double) i + (double) window) / rate - start;
+                    return 9.999;
+                };
+                if (first)
+                {
+                    std::printf ("%5.0f ms   ", attack (0.0) * 1000.0);
+                    first = false;
+                }
+                double dip = 0.0, reattack = 0.0;
+                for (int k = 1; k < 5; ++k)
+                {
+                    const double start = k * period;
+                    dip += levelDb (out, (size_t) ((start - 0.004) * rate), (size_t) (start * rate)) - steady;
+                    reattack += attack (start);
+                }
+                std::printf ("%+5.0f dB / %3.0f ms     ", dip / 4.0, reattack / 4.0 * 1000.0);
+            }
+            std::printf ("\n");
+        }
         return 0;
     }
 
