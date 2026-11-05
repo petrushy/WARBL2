@@ -2,7 +2,7 @@
 
 Computer-side tools for the WARBL2 sensor stream, where WARBL sends its sensor readings over USB MIDI SysEx instead of notes (see `warbl2_firmware/Sensor_stream.ino`). The plan is for a physical model on the computer to make the sound.
 
-- **WARBL Stream** (`Source/`): the app (built and tested on macOS; see Building for Linux and Windows). It finds WARBL, turns the stream on, and shows the tone holes, pressure, accelerometer and gyro. It also measures frame rate, lost frames and arrival jitter. "Click on breath" (off by default) plays a 1 ms click when the pressure crosses the threshold, for measuring the delay from breath to sound (see below). It has a room reverb (see below).
+- **WARBL Stream** (`Source/`): the app (built and tested on macOS; see Building for Linux and Windows). It finds WARBL, turns the stream on, and shows the tone holes, pressure, accelerometer and gyro. It also measures frame rate, lost frames and arrival jitter. It has a room reverb (see below).
 - **WARBL Simulator** (`tools/`): a virtual WARBL that plays a scale, as a separate MIDI device. The app also has this built in.
 - **ReverbCheck** (`tools/`): measures the generated rooms and renders WAV files for listening.
 - **WhistleCheck** (`tools/`): tunes and tabulates the whistle presets, and plays the model offline to measure what it sounds (see below).
@@ -91,7 +91,7 @@ The tone-hole co-processor (`ATmega_firmware/`) is unchanged in this fork: WARBL
 
 ## Without a WARBL
 
-- **Simulate WARBL** (switch in the app) plays a scripted D-whistle scale with breath swells. It goes through the same path as the real stream, so the plots, click and (later) the instrument model all respond.
+- **Simulate WARBL** (switch in the app) plays a scripted D-whistle scale with breath swells. It goes through the same path as the real stream, so the plots and the instrument model respond as to WARBL.
 - **Play scale** (Monitor or Instrument tab, or the space bar) plays the current instrument through its own fingerings from the lowest note up two octaves. There's no synthesizer: the physical model is fingered and blown like a player would. The breath pressure for each note is the one at which the model plays it closest to its pitch, found by playing the model first (a few seconds; cached until the instrument changes), with its breath noise on as when the scale is played. A pressure is only chosen if the note sounds clearly (at least −40 dBFS) and also one step softer. The planner then plays the whole scale and gives any note that does not sound there 15 % more breath: near its threshold a flute note can start on its own but not after the previous note (hysteresis). Notes are tongued, about 0.5 s each. `WhistleCheck scale [preset] [file.wav]` plays the same scale offline, measures every note and can save it.
 - `build/WarblSimulator_artefacts/Release/WarblSimulator` is the same simulated player as a virtual MIDI device, for testing the MIDI path or other programs.
 
@@ -205,7 +205,3 @@ The transport adds about one connection interval, as for any Bluetooth MIDI. Fra
 - **Arrival jitter**: how much later than the fastest recent frame each frame reached the app. This is the part of the transport delay that varies. The constant part can't be measured from the stream alone, because the WARBL and Mac clocks aren't synchronised.
 - **output latency**: audio buffer plus the delay the output device reports. On the Mac's built-in headphone output this is ~6 ms even with a 64-sample buffer. A good USB audio interface is usually lower. Use **Audio settings...** to choose the device and buffer size.
 - **max frames/block**: the most frames handled in one audio block. A large number means frames are bunching up.
-
-## Measuring breath-to-sound delay
-
-Record two channels at once: a microphone at the mouthpiece and the app's click output (for example looped into an audio interface input). Blow sharply. The time between the start of the breath noise and the click is the full delay: sensor, firmware, USB, app and audio output.

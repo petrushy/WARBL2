@@ -174,13 +174,13 @@ void TimingView::paint (juce::Graphics& g)
 //==============================================================================
 MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), audio (a)
 {
-    for (auto* l : { &statusLabel, &infoLabel, &statsLabel, &audioLabel, &thresholdLabel, &reverbLabel, &wetLabel, &preDelayLabel, &spreadLabel, &reverbStatus })
+    for (auto* l : { &statusLabel, &infoLabel, &statsLabel, &audioLabel, &reverbLabel, &wetLabel, &preDelayLabel, &spreadLabel, &reverbStatus })
     {
         l->setColour (juce::Label::textColourId, text);
         addAndMakeVisible (l);
     }
 
-    for (auto* b : { &streamButton, &suppressButton, &clickButton, &simulateButton, &bluetoothSimButton, &smoothBluetoothButton })
+    for (auto* b : { &streamButton, &suppressButton, &simulateButton, &bluetoothSimButton, &smoothBluetoothButton })
     {
         b->setColour (juce::ToggleButton::textColourId, text);
         b->setWantsKeyboardFocus (false);  // Keep the space bar for the test phrase.
@@ -199,8 +199,6 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
     streamButton.setToggleState (true, juce::dontSendNotification);  // Streaming is what the app is for.
     streamButton.onClick = [this] { applyStreamSettings(); };
     suppressButton.onClick = [this] { applyStreamSettings(); };
-    clickButton.setToggleState (false, juce::dontSendNotification);  // For latency measurements only
-    clickButton.onClick = [this] { audio.clickEnabled = clickButton.getToggleState(); };
     infoButton.onClick = [this] { receiver.requestInfo(); };
     audioButton.onClick = [this] { showAudioSettings(); };
     resetButton.onClick = [this]
@@ -208,12 +206,6 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
         receiver.resetStats();
         audio.maxFramesPerBlock = 0;
     };
-
-    thresholdSlider.setRange (5, 1000, 1);
-    thresholdSlider.setValue (audio.clickModel.threshold.load(), juce::dontSendNotification);
-    thresholdSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 50, 20);
-    thresholdSlider.onValueChange = [this] { audio.clickModel.threshold = (int) thresholdSlider.getValue(); };
-    addAndMakeVisible (thresholdSlider);
 
     const auto& rooms = reverb::presets();
     for (size_t i = 0; i < rooms.size(); ++i)
@@ -449,7 +441,6 @@ void MonitorPage::timerCallback()
         gz.values.push_back (units.gyroToDps (f.gyro[2]));
     }
 
-    pressureScope.setMarker (clickButton.getToggleState() ? std::optional<float> ((float) thresholdSlider.getValue()) : std::nullopt);
     pressureScope.setTraces ({ pressure });
     accelScope.setTraces ({ ax, ay, az });
     gyroScope.setTraces ({ gx, gy, gz });
@@ -491,9 +482,6 @@ void MonitorPage::resized()
     simulateButton.setBounds (clickRow.removeFromRight (150));
     bluetoothSimButton.setBounds (clickRow.removeFromRight (120));
     smoothBluetoothButton.setBounds (clickRow.removeFromRight (160));
-    clickButton.setBounds (clickRow.removeFromLeft (140));
-    thresholdLabel.setBounds (clickRow.removeFromLeft (110));
-    thresholdSlider.setBounds (clickRow.removeFromLeft (360));
 
     auto reverbRow = area.removeFromTop (28);
     reverbLabel.setBounds (reverbRow.removeFromLeft (60));

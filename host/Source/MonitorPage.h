@@ -53,7 +53,7 @@ private:
     StreamReceiver::Stats stats;
 };
 
-// The "Monitor" tab: connection, stream statistics, sensor plots, latency click and reverb.
+// The "Monitor" tab: connection, stream statistics, sensor plots and reverb.
 class MonitorPage : public juce::Component, private juce::Timer
 {
 public:
@@ -92,11 +92,8 @@ private:
 
     juce::Label statusLabel, infoLabel, statsLabel, audioLabel;
     juce::ToggleButton bluetoothSimButton { "as Bluetooth" }, smoothBluetoothButton { "Smooth Bluetooth" };
-    juce::ToggleButton streamButton { "Stream" }, suppressButton { "Suppress notes" }, clickButton { "Click on breath" },
-        simulateButton { "Simulate WARBL" };
+    juce::ToggleButton streamButton { "Stream" }, suppressButton { "Suppress notes" }, simulateButton { "Simulate WARBL" };
     juce::TextButton infoButton { "Request info" }, audioButton { "Audio settings..." }, resetButton { "Reset stats" };
-    juce::Slider thresholdSlider;
-    juce::Label thresholdLabel { {}, "Click threshold" };
 
     juce::Label reverbLabel { {}, "Reverb" }, wetLabel { {}, "Level" }, preDelayLabel { {}, "Pre-delay" }, spreadLabel { {}, "Spread" },
         reverbStatus;

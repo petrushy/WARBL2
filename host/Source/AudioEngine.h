@@ -1,6 +1,6 @@
 // Audio output. Each block it takes the newest sensor frames from the receiver and turns them into the
 // whistle model's controls (hole openness from calibrated sensor readings, breath pressure in Pa). The model's
-// sound and the test phrase go through the room reverb; the latency-test click stays dry.
+// sound goes through the room reverb.
 
 #pragma once
 
@@ -15,36 +15,6 @@
 
 #include <atomic>
 
-// Something that turns sensor frames into sound. Called on the audio thread only: no locks or allocation.
-class SoundModel
-{
-public:
-    virtual ~SoundModel() = default;
-    virtual void prepare (double sampleRate, int maxBlockSize) = 0;
-    // Called for each new frame, in order, before render() for the block.
-    virtual void handleFrame (const warbl::SensorFrame& frame) = 0;
-    virtual void render (float* const* outputs, int numChannels, int numSamples) = 0;
-};
-
-// Outputs a short full-scale click when the pressure rises through a threshold, so a recording of
-// microphone-at-mouthpiece + this output shows the full breath-to-sound delay.
-class ClickModel : public SoundModel
-{
-public:
-    std::atomic<int> threshold { 40 };   // 12-bit pressure counts above ambient.
-    std::atomic<int> ambient12 { 0 };    // Ambient pressure, 12-bit (set from the device info).
-    std::atomic<float> gain { 0.5f };
-
-    void prepare (double sampleRate, int) override;
-    void handleFrame (const warbl::SensorFrame& frame) override;
-    void render (float* const* outputs, int numChannels, int numSamples) override;
-
-private:
-    int clickLength = 48;
-    int clickRemaining = 0;
-    bool above = false;
-};
-
 class AudioEngine : private juce::AudioIODeviceCallback
 {
 public:
@@ -52,12 +22,10 @@ public:
     ~AudioEngine() override;
 
     juce::AudioDeviceManager deviceManager;
-    ClickModel clickModel;
     RoomReverb reverb;
     Recorder recorder;
     whistle::WhistleModel whistleModel;
 
-    std::atomic<bool> clickEnabled { false };
     std::atomic<bool> whistleEnabled { true };
     std::atomic<bool> silent { false };
     // Bluetooth frames arrive in bursts (one batch per connection interval): play them with their own spacing,

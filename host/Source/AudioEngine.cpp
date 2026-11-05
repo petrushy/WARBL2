@@ -1,36 +1,5 @@
 #include "AudioEngine.h"
 
-void ClickModel::prepare (double sampleRate, int)
-{
-    clickLength = juce::roundToInt (sampleRate * 0.001);  // 1 ms
-    clickRemaining = 0;
-}
-
-void ClickModel::handleFrame (const warbl::SensorFrame& frame)
-{
-    const int pressure = (int) frame.pressure - ambient12.load();
-    const int t = threshold.load();
-
-    if (! above && pressure > t)
-    {
-        above = true;
-        clickRemaining = clickLength;
-    }
-    else if (above && pressure < t - 10)  // Hysteresis, so noise around the threshold doesn't retrigger.
-    {
-        above = false;
-    }
-}
-
-void ClickModel::render (float* const* outputs, int numChannels, int numSamples)
-{
-    const float g = gain.load();
-    for (int i = 0; i < numSamples && clickRemaining > 0; ++i, --clickRemaining)
-        for (int ch = 0; ch < numChannels; ++ch)
-            if (outputs[ch] != nullptr)
-                outputs[ch][i] += g;
-}
-
 AudioEngine::AudioEngine (StreamReceiver& r) : receiver (r)
 {
     // Until WARBL reports its calibration, assume typical values.
@@ -185,7 +154,6 @@ void AudioEngine::setCalibration (const warbl::DeviceInfo& info)
         covered[(size_t) i] = info.covered[(size_t) i];
     }
     ambient12 = info.ambientPressure * 4;
-    clickModel.ambient12 = info.ambientPressure * 4;
 }
 
 juce::String AudioEngine::calibrationText() const
@@ -301,7 +269,6 @@ void AudioEngine::audioDeviceAboutToStart (juce::AudioIODevice* device)
         e.allocate ((size_t) maxBlock, true);
     dryCapacity = maxBlock;
 
-    clickModel.prepare (rate, maxBlock);
     reverb.prepare (rate, maxBlock);
     whistleModel.prepare (rate);
 }
@@ -326,7 +293,6 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     bool haveControls = false;
     while (receiver.audioQueue.pop (received))
     {
-        clickModel.handleFrame (received.frame);
         controls = controlsFromFrame (received.frame);
         // WARBL's frame interval (2 ms, or 1 ms with the 1 kHz stream loop), from its own timestamps: each frame's
         // controls are reached over that time, so the model follows the sensors without steps or extra lag.
@@ -473,10 +439,6 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     juce::FloatVectorOperations::add (outputs[0], ears[0].get(), ears[2].get(), numSamples);
     juce::FloatVectorOperations::add (outputs[1], ears[1].get(), ears[3].get(), numSamples);
     reverb.process (ears[0].get(), ears[1].get(), ears[2].get(), ears[3].get(), outputs[0], outputs[1], numSamples);
-
-    // The click stays dry so latency measurements aren't smeared by the reverb.
-    if (clickEnabled)
-        clickModel.render (outputs, numOutputs, numSamples);
 
     recorder.addAudio (outputs, numOutputs, numSamples);
 
