@@ -82,13 +82,13 @@ void CurveView::paint (juce::Graphics& g)
 //==============================================================================
 SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
 {
-    for (auto* l : { &breathTitle, &holeTitle })
+    for (auto* l : { &breathTitle, &holeTitle, &tiltTitle })
     {
         l->setColour (juce::Label::textColourId, accent);
         l->setFont (juce::FontOptions (16.0f, juce::Font::bold));
         addAndMakeVisible (l);
     }
-    for (auto* l : { &breathInfo, &holeInfo })
+    for (auto* l : { &breathInfo, &holeInfo, &tiltInfo })
     {
         l->setColour (juce::Label::textColourId, text);
         l->setJustificationType (juce::Justification::topLeft);
@@ -183,6 +183,32 @@ SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
     addAndMakeVisible (breathDefaults);
     addAndMakeVisible (holeDefaults);
 
+    // Tilt
+    tiltTitle.setTooltip ("WARBL's elevation shifts where the jet meets the edge, as if the whistle's voicing were slightly "
+                          "flexible: mostly the balance of even and odd harmonics (fuller or hollower), a little pitch and "
+                          "register. A real whistle is rigid; this is an extra control. Hold WARBL as you play and press "
+                          "\"Set zero now\", so your normal angle leaves the voicing as it is.");
+    for (auto* t : { &tiltToggle, &tiltInvertToggle })
+    {
+        t->setColour (juce::ToggleButton::textColourId, text);
+        addAndMakeVisible (t);
+    }
+    tiltToggle.setToggleState (audio.tiltEnabled.load(), juce::dontSendNotification);
+    tiltToggle.onClick = [this] { audio.tiltEnabled = tiltToggle.getToggleState(); };
+    tiltInvertToggle.setToggleState (audio.tiltInvert.load(), juce::dontSendNotification);
+    tiltInvertToggle.setTooltip ("Swap which way of tilting moves the jet into the pipe.");
+    tiltInvertToggle.onClick = [this] { audio.tiltInvert = tiltInvertToggle.getToggleState(); };
+    tiltZeroButton.setTooltip ("Takes WARBL's angle right now as the neutral one (hold it as you normally play).");
+    tiltZeroButton.onClick = [this] { audio.tiltZero = audio.measuredTilt.load(); };
+    addAndMakeVisible (tiltZeroButton);
+    addRow (tiltRows, "Dead zone", 0.0, 15.0, 0.5, juce::String::fromUTF8 ("°"), audio.tiltDeadZone)
+        .setTooltip ("Degrees either side of the zero angle that do nothing, so small movements don't change the tone.");
+    addRow (tiltRows, "Range (full shift at)", 5.0, 60.0, 1.0, juce::String::fromUTF8 ("°"), audio.tiltRange)
+        .setTooltip ("How far from the zero angle you tilt for the full shift.");
+    addRow (tiltRows, "Maximum edge shift", 0.0, 0.4, 0.01, "mm", audio.tiltMaxShift)
+        .setTooltip ("How far the jet's aim moves at full tilt. Into the pipe the tone gets fuller (stronger even harmonics), "
+                     "out of it hollower; beyond about 0.1-0.15 mm into the pipe some notes stop speaking.");
+
     startTimerHz (30);
 }
 
@@ -222,6 +248,14 @@ void SensorsPage::timerCallback()
                                : "Coverage comes from WARBL's hole calibration (0 = open, 1 = covered). "
                                  "Dots show each hole now; playing from the screen bypasses this.",
                       juce::dontSendNotification);
+    const auto tilt = audio.tiltResponse();
+    const float tiltNow = audio.measuredTilt.load();
+    tiltInfo.setText ("Now " + juce::String (tiltNow, 1) + juce::String::fromUTF8 ("°") + " (zero "
+                          + juce::String (tilt.zero, 1) + juce::String::fromUTF8 ("°") + "): edge offset "
+                          + (tilt.enabled ? juce::String (tilt.edgeShiftMm (tiltNow) >= 0.0f ? "+" : "") + juce::String (tilt.edgeShiftMm (tiltNow), 3) + " mm"
+                                          : juce::String ("unchanged (off)")),
+                      juce::dontSendNotification);
+
     holeRows[2].slider->setEnabled (! physical);  // Curve
     holeRows[3].slider->setEnabled (! physical);  // Centre
     holeRows[4].slider->setEnabled (physical);    // Finger range
@@ -240,6 +274,22 @@ void SensorsPage::resized()
     auto area = getLocalBounds().reduced (10);
     auto left = area.removeFromLeft (area.getWidth() / 2).withTrimmedRight (8);
     auto right = area.withTrimmedLeft (8);
+
+    // Tilt, at the bottom of the breath column.
+    auto tiltArea = left.removeFromBottom (28 + 28 + 26 * (int) tiltRows.size() + 24);
+    left.removeFromBottom (8);
+    tiltTitle.setBounds (tiltArea.removeFromTop (28));
+    auto toggles = tiltArea.removeFromTop (28);
+    tiltToggle.setBounds (toggles.removeFromLeft (60));
+    tiltInvertToggle.setBounds (toggles.removeFromLeft (80));
+    tiltZeroButton.setBounds (toggles.removeFromLeft (130).reduced (2));
+    for (auto& row : tiltRows)
+    {
+        auto line = tiltArea.removeFromTop (26);
+        row.label->setBounds (line.removeFromLeft (190));
+        row.slider->setBounds (line);
+    }
+    tiltInfo.setBounds (tiltArea.removeFromTop (24));
 
     auto layout = [] (juce::Rectangle<int> column, juce::Label& title, juce::TextButton& defaults, std::vector<Row>& rows,
                       juce::Label& info, CurveView& view, juce::Component* shape)

@@ -29,6 +29,7 @@ struct Controls
     std::array<float, kNumHoles> openness {};  // 0 = covered, 1 = open (disabled holes are ignored)
     float footOpenness = 1.0f;                  // Bell sensor; used only if the geometry lets it close the foot
     float mouthPressure = 0.0f;                 // Pa above ambient
+    float edgeShift = 0.0f;                     // m, added to the geometry's edge offset (e.g. from WARBL's tilt)
 };
 
 class WhistleModel
@@ -185,7 +186,7 @@ private:
     // Controls, ramped per internal sample
     Controls current, target;
     std::array<float, kNumHoles> opennessStep {};
-    float footStep = 0.0f, pressureStep = 0.0f;
+    float footStep = 0.0f, pressureStep = 0.0f, edgeStep = 0.0f;
     int rampRemaining = 0;
 };
 

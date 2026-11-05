@@ -101,4 +101,30 @@ struct Hole
     }
 };
 
+// Tilt aims the jet: WARBL's elevation (degrees, from the accelerometer) shifts where the jet meets the edge, as
+// if the whistle's voicing were slightly flexible. A real fipple flute is rigid; this is an extra control, and the
+// physics still decides what it does (mostly the balance of even and odd harmonics). Zeroed at the player's
+// normal playing angle, with a dead zone around it, then a straight line up to the maximum shift at +-range.
+struct Tilt
+{
+    bool enabled = false;
+    float zero = 0.0f;         // Degrees: the playing angle that leaves the voicing as it is
+    float deadZone = 3.0f;     // Degrees either side of zero with no effect
+    float range = 30.0f;       // Degrees from zero for the full shift
+    float maxShift = 0.1f;     // mm. On the D whistle +0.1 mm raises the 2nd harmonic 4-6 dB (fuller), -0.15 mm lowers it
+                               // ~6 dB (hollower); +0.15 mm already silences some notes near their thresholds.
+    bool invert = false;       // Swap the direction (it depends on how the sensor sits in WARBL)
+
+    // Edge offset change in mm for an elevation in degrees.
+    float edgeShiftMm (float elevation) const
+    {
+        if (! enabled)
+            return 0.0f;
+        const float x = (invert ? -1.0f : 1.0f) * (elevation - zero);
+        const float beyond = std::max (0.0f, std::abs (x) - deadZone);
+        const float u = std::min (1.0f, beyond / std::max (1.0f, range - deadZone));
+        return (x < 0.0f ? -u : u) * maxShift;
+    }
+};
+
 } // namespace response

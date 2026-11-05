@@ -17,6 +17,12 @@ juce::var sensorsToVar (const AudioEngine& a)
     d->setProperty ("holeCentre", a.holeCentre.load());
     d->setProperty ("holeFingerHeight", a.holeFingerHeight.load());
     d->setProperty ("holeFingerRange_mm", a.holeFingerRange.load());
+    d->setProperty ("tiltEnabled", a.tiltEnabled.load());
+    d->setProperty ("tiltInvert", a.tiltInvert.load());
+    d->setProperty ("tiltZero_deg", a.tiltZero.load());
+    d->setProperty ("tiltDeadZone_deg", a.tiltDeadZone.load());
+    d->setProperty ("tiltRange_deg", a.tiltRange.load());
+    d->setProperty ("tiltMaxShift_mm", a.tiltMaxShift.load());
     return o;
 }
 
@@ -36,6 +42,14 @@ void sensorsFromVar (const juce::var& o, AudioEngine& a)
     read ("holeCurve", a.holeCurve);
     read ("holeCentre", a.holeCentre);
     read ("holeFingerRange_mm", a.holeFingerRange);
+    read ("tiltZero_deg", a.tiltZero);
+    read ("tiltDeadZone_deg", a.tiltDeadZone);
+    read ("tiltRange_deg", a.tiltRange);
+    read ("tiltMaxShift_mm", a.tiltMaxShift);
+    if (o.hasProperty ("tiltEnabled"))
+        a.tiltEnabled = (bool) o["tiltEnabled"];
+    if (o.hasProperty ("tiltInvert"))
+        a.tiltInvert = (bool) o["tiltInvert"];
     if (o.hasProperty ("holeFingerHeight"))
         a.holeFingerHeight = (bool) o["holeFingerHeight"];
     if (o.hasProperty ("holeSCurve"))

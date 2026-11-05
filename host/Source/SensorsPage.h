@@ -55,7 +55,10 @@ private:
     juce::Label breathTitle { {}, "Breath" }, holeTitle { {}, "Tone holes" }, breathInfo, holeInfo;
     CurveView breathCurve { "Measured pressure (Pa)", "Breath to the model (Pa)" };
     CurveView holeCurve { "Coverage (1 = covered at WARBL calibration)", "How closed (0 = open, 1 = closed)" };
-    std::vector<Row> breathRows, holeRows;
+    std::vector<Row> breathRows, holeRows, tiltRows;
+    juce::Label tiltTitle { {}, "Tilt aims the jet" }, tiltInfo;
+    juce::ToggleButton tiltToggle { "On" }, tiltInvertToggle { "Invert" };
+    juce::TextButton tiltZeroButton { "Set zero now" };
     juce::TextButton breathDefaults { "Defaults" }, holeDefaults { "Defaults" };
     juce::ComboBox holeShape;
 

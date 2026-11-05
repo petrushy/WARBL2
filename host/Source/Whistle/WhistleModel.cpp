@@ -321,6 +321,7 @@ void WhistleModel::setControls (const Controls& controls, double rampSeconds)
         opennessStep[(size_t) i] = (target.openness[(size_t) i] - current.openness[(size_t) i]) / rampSamples;
     footStep = (target.footOpenness - current.footOpenness) / rampSamples;
     pressureStep = (target.mouthPressure - current.mouthPressure) / rampSamples;
+    edgeStep = (target.edgeShift - current.edgeShift) / rampSamples;
     rampRemaining = rampSamples;
 }
 
@@ -332,6 +333,7 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
             current.openness[(size_t) i] += opennessStep[(size_t) i];
         current.footOpenness += footStep;
         current.mouthPressure += pressureStep;
+        current.edgeShift += edgeStep;
         if (--rampRemaining == 0)
             current = target;
     }
@@ -459,13 +461,14 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
 
     const float jetHalfWidth = 0.4f * h;
     const float deflection = cfg.jetGrowth * h * filtered / speed + turbulence * jetHalfWidth * std::min (1.0f, jetSpeed / 20.0f);
-    const float jetFlow = cfg.windowWidth * jetHalfWidth * jetSpeed * flowShare * std::tanh ((deflection - cfg.edgeOffset) / jetHalfWidth);
+    const float edge = cfg.edgeOffset + current.edgeShift;  // Where the jet's centre line meets the edge
+    const float jetFlow = cfg.windowWidth * jetHalfWidth * jetSpeed * flowShare * std::tanh ((deflection - edge) / jetHalfWidth);
 
     // The edge turbulence comes in bursts as the jet sweeps across the edge (pulsed noise, locked to the tone),
     // which the ear hears as breathiness in the note rather than as a separate hiss. Below the playing threshold
     // the jet hardly moves off the edge, so the airy noise stays steady.
-    const float acrossEdge = 1.0f / std::cosh ((deflection - cfg.edgeOffset) / jetHalfWidth);
-    jetLock += lockCoeff * (std::min (1.0f, std::abs (deflection - cfg.edgeOffset) / jetHalfWidth) - jetLock);
+    const float acrossEdge = 1.0f / std::cosh ((deflection - edge) / jetHalfWidth);
+    jetLock += lockCoeff * (std::min (1.0f, std::abs (deflection - edge) / jetHalfWidth) - jetLock);
     const float pulsing = noisePulsing.load (std::memory_order_relaxed);
     const float edgeNoise = steadyEdgeNoise * (1.0f - pulsing + pulsing * acrossEdge * acrossEdge);
     const float jetFlowRate = (jetFlow - lastJetFlow) * (float) rate;

@@ -75,6 +75,15 @@ public:
     std::atomic<bool> holeSCurve { response::Hole().sCurve };
     std::atomic<bool> holeFingerHeight { response::Hole().fingerHeight };
     std::atomic<float> holeFingerRange { response::Hole().fingerRange };
+    // Tilt aims the jet (see response::Tilt); set on the message thread.
+    std::atomic<bool> tiltEnabled { response::Tilt().enabled }, tiltInvert { response::Tilt().invert };
+    std::atomic<float> tiltZero { response::Tilt().zero }, tiltDeadZone { response::Tilt().deadZone },
+        tiltRange { response::Tilt().range }, tiltMaxShift { response::Tilt().maxShift };
+    response::Tilt tiltResponse() const
+    {
+        return { tiltEnabled.load(), tiltZero.load(), tiltDeadZone.load(), tiltRange.load(), tiltMaxShift.load(), tiltInvert.load() };
+    }
+    std::atomic<float> measuredTilt { 0.0f };  // WARBL's elevation in degrees, smoothed over ~100 ms (for display and zero)
     // Each hole's size, for the physical (finger height) response; set with the instrument.
     std::array<std::atomic<float>, whistle::kNumHoles> holeRadius {}, holeEffectiveLength {};
     response::FingerHole fingerHole (int hole) const
@@ -154,6 +163,8 @@ private:
     uint32_t lastFrameTime = 0;  // Device timestamp of the last frame
     bool haveFrameTime = false;
     double frameInterval = 0.002;  // s, smoothed
+    float smoothedTilt = 0.0f;     // Degrees (audio thread)
+    bool haveTilt = false;
     whistle::Controls lastControls;
     int dryCapacity = 0;
 };

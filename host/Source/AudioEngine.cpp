@@ -233,6 +233,20 @@ whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& fram
         c.footOpenness = 1.0f - holes.closedness (coverage);
     }
 
+    // Elevation: the angle of WARBL's long axis (the sensor's y; the firmware swaps pitch and roll for the same
+    // reason) to the horizontal, from gravity; unaffected by rolling the instrument about its axis. Smoothed over
+    // ~100 ms so shaking or bumping doesn't wobble the tone.
+    const float ax = frame.accel[0], ay = frame.accel[1], az = frame.accel[2];
+    if (std::abs (ax) + std::abs (ay) + std::abs (az) > 100.0f)
+    {
+        const float elevation = std::atan2 (ay, std::hypot (ax, az)) * 180.0f / juce::MathConstants<float>::pi;
+        const float share = (float) std::clamp (frameInterval / 0.1, 0.001, 1.0);
+        smoothedTilt = haveTilt ? smoothedTilt + share * (elevation - smoothedTilt) : elevation;
+        haveTilt = true;
+        measuredTilt = smoothedTilt;
+    }
+    c.edgeShift = tiltResponse().edgeShiftMm (smoothedTilt) * 0.001f;
+
     const float measured = std::max (0.0f, (float) ((int) frame.pressure - ambient12.load()) * kPascalPerCount);
     measuredPressure = measured;
     c.mouthPressure = breathResponse().map (measured);
