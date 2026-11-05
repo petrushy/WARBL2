@@ -185,6 +185,14 @@ Rooms: small wooden room (0.4 s), studio live room (0.6 s), chamber music hall (
 
 **Load IR file...** takes any measured impulse response (WAV/AIFF/FLAC, mono or stereo). Free recordings of real halls and churches are available from the OpenAIR library (openair.hosted.york.ac.uk); check each file's licence.
 
+## Bluetooth
+
+The stream also works over Bluetooth MIDI (firmware from 2026-11-05). Connect WARBL as a Bluetooth MIDI device (macOS: Audio MIDI Setup → MIDI Studio → Bluetooth), unplug the USB cable (a USB host always wins), and tick **Stream**: the app sends its commands to every WARBL port, and WARBL streams back over the transport the command came on.
+
+Over Bluetooth, WARBL can only send at each connection event, every 7.5–15 ms (WARBL asks for 7.5; macOS usually grants 11.25 or 15). So it collects the samples of one interval (every 2 ms) and sends them as one **batch**: the first sequence number and the first and last timestamps, the count, one accelerometer reading (top 8 bits per axis, enough for tilt) and flags, then per sample the 12-bit pressure and the nine holes with 8 bits (no gyro). Eight samples are 116 bytes as SysEx, so a batch fits one BLE packet. Adafruit's BLE MIDI service sends SysEx three bytes per packet, so the firmware carries a copy of it (`warbl2_firmware/WarblBLEMidi.*`, BSD licence, same UUIDs) with one addition that sends a whole SysEx in as few packets as the connection's MTU allows.
+
+The transport adds about one connection interval, as for any Bluetooth MIDI. Frames then arrive in bursts, and **Smooth Bluetooth** (Monitor tab, on by default) plays them with their own 2 ms spacing, delayed just enough to absorb the bursts (about one more interval, shown as "smoothing +… ms"); off, each burst is applied as it arrives (lower delay, steppier breath and fingers). The Monitor shows the frames per batch and the batch interval. **as Bluetooth** makes the built-in simulator send batches every 15 ms through the same encoder and decoder (`--bluetooth` on the command line).
+
 ## Recording a session
 
 **Record** on the Monitor tab (or `--record` on the command line) saves what you play into `~/Downloads/WARBL Stream recordings/`: the sound as you hear it (stereo WAV) and every sensor frame (CSV: device and arrival time, sequence number, the nine raw hole readings, raw pressure, flags), with the instrument, the Sensors settings and WARBL's calibration in the CSV's header. That is enough to replay a performance through the model offline and find out what made a glitch. Press it again to stop; the files are named by date and time.

@@ -11,7 +11,8 @@ The upstream WARBL project is amowry/WARBL2. Fork-specific work lives on feature
 - `warbl2_firmware/`: main firmware (nRF52840, Arduino). Start with `warbl2_firmware.ino` (globals, `loop()`).
   - `Functions.ino`: nearly everything else.
   - `Defines.h`: settings indices, the MIDI CC protocol, the EEPROM map.
-  - `Sensor_stream.ino`: the SysEx sensor stream.
+  - `Sensor_stream.ino`: the SysEx sensor stream (USB frames; over BLE, batches per connection interval).
+  - `WarblBLEMidi.*`: a renamed copy of Adafruit's BLEMidi (BSD) that can send a whole SysEx per BLE packet.
 - `ATmega_firmware/`: the tone-hole sensor co-processor. The nRF reads it over SPI and reflashes it when `ATMEGA_FIRMWARE_VERSION` in `Defines.h` changes.
 - `webconfig/`: the browser Config Tool, using Web MIDI. Settings travel as CC 102–106 on channel 7.
 - `host/`: the JUCE 9 / CMake Mac app and its tools. See `host/README.md`.

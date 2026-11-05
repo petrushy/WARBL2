@@ -180,7 +180,7 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
         addAndMakeVisible (l);
     }
 
-    for (auto* b : { &streamButton, &suppressButton, &clickButton, &simulateButton })
+    for (auto* b : { &streamButton, &suppressButton, &clickButton, &simulateButton, &bluetoothSimButton, &smoothBluetoothButton })
     {
         b->setColour (juce::ToggleButton::textColourId, text);
         b->setWantsKeyboardFocus (false);  // Keep the space bar for the test phrase.
@@ -257,6 +257,12 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
     recordButton.onClick = [this] { toggleRecording(); };
     playButton.setTooltip ("Plays the instrument (Instrument tab) through a scale of its own fingerings, two octaves up, with the breath each note needs (space bar does the same).");
     simulateButton.setTooltip ("Plays a scripted scale as if from WARBL, through the same path as the real stream.");
+    bluetoothSimButton.setTooltip ("The simulator sends its frames as Bluetooth would: in batches, one every 15 ms.");
+    bluetoothSimButton.onClick = [this] { receiver.simulateBluetooth = bluetoothSimButton.getToggleState(); };
+    smoothBluetoothButton.setToggleState (audio.smoothBluetooth.load(), juce::dontSendNotification);
+    smoothBluetoothButton.setTooltip ("Over Bluetooth, frames arrive in bursts. On: play them with their own spacing, delayed just "
+                                      "enough to absorb the bursts (smooth). Off: apply each burst as it arrives (lowest delay, steppier).");
+    smoothBluetoothButton.onClick = [this] { audio.smoothBluetooth = smoothBluetoothButton.getToggleState(); };
     simulateButton.onClick = [this]
     {
         receiver.setSimulating (simulateButton.getToggleState());
@@ -393,7 +399,12 @@ void MonitorPage::timerCallback()
     timingView.update (stats);
     statsLabel.setText (juce::String (stats.framesPerSecond, 0) + " frames/s   lost " + juce::String (stats.lostFrames)
                             + "   new hole readings in " + juce::String (juce::roundToInt (stats.freshHoles * 100.0)) + " % of frames"
-                            + "   garbled ones rejected " + juce::String (stats.rejectedHoleReadings),
+                            + "   garbled ones rejected " + juce::String (stats.rejectedHoleReadings)
+                            + (stats.bluetooth ? "   Bluetooth: " + juce::String (stats.framesPerBatch, 1) + " frames per batch every "
+                                                     + juce::String (stats.batchIntervalMs, 1) + " ms"
+                                                     + (audio.smoothBluetooth.load() ? ", smoothing +" + juce::String (audio.bluetoothDelayMs.load(), 1) + " ms"
+                                                                                     : juce::String (", not smoothed"))
+                                               : juce::String()),
                         juce::dontSendNotification);
 
     if (auto* device = audio.deviceManager.getCurrentAudioDevice())
@@ -478,6 +489,8 @@ void MonitorPage::resized()
 
     auto clickRow = area.removeFromTop (28);
     simulateButton.setBounds (clickRow.removeFromRight (150));
+    bluetoothSimButton.setBounds (clickRow.removeFromRight (120));
+    smoothBluetoothButton.setBounds (clickRow.removeFromRight (160));
     clickButton.setBounds (clickRow.removeFromLeft (140));
     thresholdLabel.setBounds (clickRow.removeFromLeft (110));
     thresholdSlider.setBounds (clickRow.removeFromLeft (360));

@@ -864,7 +864,7 @@ void InstrumentPage::resized()
     left.removeFromTop (4);
 
     // Rows: holes get two sliders side by side to save space.
-    const int rowHeight = 22;
+    const int rowHeight = 20;
     size_t rowIndex = 0;
     for (auto* c : leftColumn)
     {

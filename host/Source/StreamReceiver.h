@@ -47,6 +47,7 @@ struct ReceivedFrame
     warbl::SensorFrame frame;
     double arrivalMs = 0.0;  // juce::Time::getMillisecondCounterHiRes() when the MIDI callback got it.
     double deviceMs = 0.0;   // Unwrapped device timestamp.
+    bool batched = false;    // Came in a Bluetooth batch (several frames per message, arriving together)
 };
 
 class StreamReceiver : private juce::MidiInputCallback, private juce::HighResolutionTimer
@@ -77,6 +78,7 @@ public:
 
     // Generate frames from a scripted player instead of WARBL (frames from WARBL are ignored meanwhile).
     void setSimulating (bool shouldSimulate);
+    std::atomic<bool> simulateBluetooth { false };  // The simulator sends Bluetooth batches every 15 ms instead of frames
     bool isSimulating() const { return simulating; }
 
     // Consumers. The audio queue must only be read by the audio thread, the UI queue by the message thread.
@@ -92,7 +94,9 @@ public:
         uint64_t lostFrames = 0;
         double framesPerSecond = 0.0;
         double freshHoles = 0.0;
-        uint64_t rejectedHoleReadings = 0;  // Garbled tone hole transfers WARBL caught (see SensorFrame::holesRejected)  // Share of recent frames with a new tone hole reading (WARBL's ATmega kept up)
+        uint64_t rejectedHoleReadings = 0;  // Garbled tone hole transfers WARBL caught (see SensorFrame::holesRejected)
+        bool bluetooth = false;             // The recent frames came in Bluetooth batches
+        double framesPerBatch = 0.0, batchIntervalMs = 0.0;  // Smoothed  // Share of recent frames with a new tone hole reading (WARBL's ATmega kept up)
         std::array<uint32_t, kHistogramBins> histogram {};
         uint32_t histogramOverflow = 0;
     };
@@ -103,7 +107,10 @@ public:
 private:
     void handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage&) override;
     void hiResTimerCallback() override;
-    void acceptFrame (const warbl::SensorFrame&, double nowMs);
+    void acceptFrame (const warbl::SensorFrame&, double nowMs, bool batched = false);
+    void acceptBatch (const uint8_t* data, size_t size, double nowMs);
+    std::vector<warbl::SensorFrame> simulatedBatch;  // Simulator timer thread only
+    double lastBatchMs = 0.0;
     void postInfo (const warbl::DeviceInfo&);
     void sendSysEx (const std::vector<uint8_t>&);
 

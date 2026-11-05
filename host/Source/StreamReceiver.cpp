@@ -100,8 +100,7 @@ void StreamReceiver::handleIncomingMidiMessage (juce::MidiInput* source, const j
         return;
     }
 
-    auto frame = warbl::decodeFrame (data, size);
-    if (! frame || simulating)
+    if (simulating || (*type != warbl::kFrame && *type != warbl::kBatch))
         return;
 
     // Stay with the first port that streams, so two streaming devices don't mix.
@@ -109,7 +108,26 @@ void StreamReceiver::handleIncomingMidiMessage (juce::MidiInput* source, const j
     if (! streamingInput.compare_exchange_strong (expected, source) && expected != source)
         return;
 
-    acceptFrame (*frame, nowMs);
+    if (*type == warbl::kBatch)
+        acceptBatch (data, size, nowMs);
+    else if (auto frame = warbl::decodeFrame (data, size))
+        acceptFrame (*frame, nowMs);
+}
+
+void StreamReceiver::acceptBatch (const uint8_t* data, size_t size, double nowMs)
+{
+    const auto frames = warbl::decodeBatch (data, size);
+    if (frames.empty())
+        return;
+    {
+        const juce::SpinLock::ScopedLockType lock (statsLock);
+        stats.framesPerBatch += 0.05 * ((double) frames.size() - stats.framesPerBatch);
+        if (lastBatchMs > 0.0 && nowMs - lastBatchMs < 200.0)
+            stats.batchIntervalMs += 0.05 * ((nowMs - lastBatchMs) - stats.batchIntervalMs);
+        lastBatchMs = nowMs;
+    }
+    for (const auto& f : frames)
+        acceptFrame (f, nowMs, true);
 }
 
 void StreamReceiver::postInfo (const warbl::DeviceInfo& info)
@@ -147,10 +165,23 @@ void StreamReceiver::setSimulating (bool shouldSimulate)
 void StreamReceiver::hiResTimerCallback()
 {
     const auto frame = player.frame ((double) simulatedTick++ * 0.002);
-    acceptFrame (frame, juce::Time::getMillisecondCounterHiRes());
+    if (! simulateBluetooth)
+    {
+        acceptFrame (frame, juce::Time::getMillisecondCounterHiRes());
+        return;
+    }
+    // As over Bluetooth: the frames of a 15 ms connection interval in one batch, through the real encoder and decoder.
+    simulatedBatch.push_back (frame);
+    if (simulatedBatch.size() >= 7 + (simulatedTick % 2))  // 7.5 frames per 15 ms on average
+    {
+        auto data = warbl::encodeBatchPayload (simulatedBatch);
+        data.insert (data.begin(), { warbl::kSysExId1, warbl::kSysExId2, warbl::kProtocolVersion, warbl::kBatch });
+        acceptBatch (data.data(), data.size(), juce::Time::getMillisecondCounterHiRes());
+        simulatedBatch.clear();
+    }
 }
 
-void StreamReceiver::acceptFrame (const warbl::SensorFrame& frame, double nowMs)
+void StreamReceiver::acceptFrame (const warbl::SensorFrame& frame, double nowMs, bool batched)
 {
     // The MIDI thread and the simulator timer can both get here around a switch; the queues allow one producer at a time.
     const juce::SpinLock::ScopedLockType producer (producerLock);
@@ -170,6 +201,11 @@ void StreamReceiver::acceptFrame (const warbl::SensorFrame& frame, double nowMs)
     received.frame = frame;
     received.arrivalMs = nowMs;
     received.deviceMs = (double) timestampUnwrapper.next (frame.timestamp) * 1000.0 / warbl::kDeviceTicksPerSecond;
+    received.batched = batched;
+    {
+        const juce::SpinLock::ScopedLockType lock (statsLock);
+        stats.bluetooth = batched;
+    }
 
     audioQueue.push (received);
     uiQueue.push (received);

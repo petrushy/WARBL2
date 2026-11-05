@@ -62,6 +62,7 @@ public:
     // Lines describing the instrument and settings, for the top of a recording's CSV (set by the main window).
     std::function<juce::StringArray()> recordingHeader;
     void startRecording() { if (! audio.recorder.isRecording()) toggleRecording(); }
+    void simulateBluetooth() { bluetoothSimButton.setToggleState (true, juce::sendNotificationSync); }
     ~MonitorPage() override;
 
     void paint (juce::Graphics&) override;
@@ -90,6 +91,7 @@ private:
     juce::MidiDeviceListConnection deviceListConnection;
 
     juce::Label statusLabel, infoLabel, statsLabel, audioLabel;
+    juce::ToggleButton bluetoothSimButton { "as Bluetooth" }, smoothBluetoothButton { "Smooth Bluetooth" };
     juce::ToggleButton streamButton { "Stream" }, suppressButton { "Suppress notes" }, clickButton { "Click on breath" },
         simulateButton { "Simulate WARBL" };
     juce::TextButton infoButton { "Request info" }, audioButton { "Audio settings..." }, resetButton { "Reset stats" };

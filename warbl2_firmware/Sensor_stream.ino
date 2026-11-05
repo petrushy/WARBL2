@@ -1,5 +1,7 @@
-// Sensor stream: sends lightly processed sensor readings to a host app over USB MIDI SysEx, for physical-modelling synthesis on the computer.
-// The stream is turned on by the host (it isn't saved) and only goes over USB, where latency is lowest.
+// Sensor stream: sends lightly processed sensor readings to a host app over MIDI SysEx, for physical-modelling synthesis on the computer.
+// The stream is turned on by the host (it isn't saved). Over USB (lowest latency) one frame goes out per loop. Over BLE MIDI
+// (when the host turned it on over BLE and no USB host is connected) the samples of one connection interval go out
+// together in one STREAM_BATCH, sized to fit one BLE packet.
 //
 // All messages: F0 7D 57 <protocol version> <type> <payload> F7. 7D is the non-commercial manufacturer ID and 57 ('W') marks WARBL.
 // Payloads are bit-packed MSB-first, 7 bits per SysEx data byte, so every sensor bit gets through.
@@ -13,6 +15,9 @@
 //     9 x 10-bit tone hole readings (ambient-light corrected by the ATmega, before smoothing and baseline subtraction),
 //     12-bit raw pressure (before smoothing), 3 x 16-bit raw accelerometer, 3 x 16-bit raw gyro (signed, two's complement),
 //     9-bit holeCovered (the firmware's own covered/uncovered decision, as a hint), 7 flag bits (bit 0: tone holes updated this frame).
+//   STREAM_BATCH (0x02), BLE only, once per connection interval: first seq 14 bits, timestamps of the first and last
+//     sample 2 x 21 bits, count 5 bits, accelerometer top 8 bits x 3 (once per batch), 7 flag bits; then per sample
+//     12-bit raw pressure and 9 x 8-bit tone hole readings (the top 8 of the 10). No gyro.
 //   STREAM_INFO (0x10): sequence of 16-bit values: firmware version, 9 tone hole baselines, 9 tone hole covered thresholds,
 //     ambient pressure (10-bit, as used by the firmware), accelerometer range code, gyro range code (Adafruit lsm6ds range enums), loop period in ms.
 
@@ -21,6 +26,7 @@
 #define STREAM_PROTOCOL_VERSION 1
 
 #define STREAM_FRAME 0x01
+#define STREAM_BATCH 0x02
 #define STREAM_INFO 0x10
 #define STREAM_CONFIG 0x20
 #define STREAM_REQUEST_INFO 0x21
@@ -29,6 +35,7 @@
 #define STREAM_CONFIG_SUPPRESS_NOTES 0x02
 
 #define STREAM_MAX_SYSEX 64  // Large enough for a frame (42 bytes) or the info message (~53 bytes).
+#define STREAM_BATCH_MAX_SAMPLES 16  // 16 x 2 ms covers a 30 ms connection interval; ~212 bytes as SysEx
 
 // Packs values MSB-first into 7-bit SysEx data bytes.
 struct SysExBitWriter {
@@ -54,19 +61,99 @@ void sendStreamSysEx(byte type, const byte* payload, byte payloadLength) {
     // TinyUSB starts a USB transfer after every write, so the first 4-byte packet left alone and the rest waited
     // for the host's next poll (1 ms): at most 500 frames/s. A frame is 60 bytes as USB-MIDI packets, so it
     // fits one 64-byte transfer.
-    byte message[STREAM_MAX_SYSEX + 2] = { 0xF0, STREAM_SYSEX_ID_1, STREAM_SYSEX_ID_2, STREAM_PROTOCOL_VERSION, type };
+    byte message[240] = { 0xF0, STREAM_SYSEX_ID_1, STREAM_SYSEX_ID_2, STREAM_PROTOCOL_VERSION, type };
+    if (payloadLength + 6 > sizeof(message)) {
+        return;
+    }
     memcpy(message + 5, payload, payloadLength);
     message[5 + payloadLength] = 0xF7;
-    tud_midi_stream_write(0, message, payloadLength + 6);
+    if (sensorStreamOverBLE) {
+        blemidi.sendSysExMessage(message, payloadLength + 6);  // In as few BLE packets as the MTU allows
+    } else {
+        tud_midi_stream_write(0, message, payloadLength + 6);
+    }
 }
 
 
 
 // Build and send one frame with the latest readings. Called every loop while streaming.
+// BLE: collect this loop's readings, and send them with the others of this connection interval.
+void addBatchSample(uint16_t& seq) {
+    static byte holes[STREAM_BATCH_MAX_SAMPLES][9];
+    static uint16_t pressures[STREAM_BATCH_MAX_SAMPLES];
+    static byte count = 0;
+    static uint16_t firstSeq = 0;
+    static uint32_t firstTime = 0, lastTime = 0;
+    static uint8_t flags = 0;
+    static unsigned long lastSendMs = 0;
+
+    if (connIntvl == 0 || !blemidi.notifyEnabled()) {
+        count = 0;
+        return;
+    }
+
+    if (count == 0) {
+        firstSeq = seq;
+        firstTime = NRF_RTC2->COUNTER & 0x1FFFFF;
+        flags = 0;
+    }
+    lastTime = NRF_RTC2->COUNTER & 0x1FFFFF;
+    for (byte i = 0; i < 9; i++) {
+        holes[count][i] = (byte)(constrain(toneholeRaw[i], 0, 1023) >> 2);
+    }
+    pressures[count] = twelveBitPressure & 0xFFF;
+    flags |= (toneholeRawUpdated ? 1 : 0) | (toneholeRawRejected ? 2 : 0);
+    toneholeRawUpdated = false;
+    toneholeRawRejected = false;
+    seq++;
+    count++;
+
+    // Send once per connection interval (or when full), so a batch fits one BLE packet and goes in the next event.
+    const unsigned long now = millis();
+    if (count < STREAM_BATCH_MAX_SAMPLES && (now - lastSendMs) < (unsigned long)connIntvl) {
+        return;
+    }
+    lastSendMs = now;
+
+    sensors_event_t accel;
+    sensors_event_t gyro;
+    sensors_event_t temp;
+    sox.getEvent(&accel, &gyro, &temp);  // Fills sox.rawAccX etc.
+
+    byte payload[220] = { 0 };
+    SysExBitWriter w;
+    w.out = payload;
+    w.put(firstSeq & 0x3FFF, 14);
+    w.put(firstTime, 21);
+    w.put(lastTime, 21);
+    w.put(count, 5);
+    w.put((uint8_t)(sox.rawAccX >> 8), 8);  // Top 8 bits (signed), enough for tilt
+    w.put((uint8_t)(sox.rawAccY >> 8), 8);
+    w.put((uint8_t)(sox.rawAccZ >> 8), 8);
+    w.put(flags & 0x7F, 7);
+    for (byte s = 0; s < count; s++) {
+        w.put(pressures[s], 12);
+        for (byte i = 0; i < 9; i++) {
+            w.put(holes[s][i], 8);
+        }
+    }
+    sendStreamSysEx(STREAM_BATCH, payload, w.length);
+    count = 0;
+}
+
+
+
 void sendSensorFrame() {
     static uint16_t seq = 0;
 
-    if (!sensorStreamOn || USBstatus != USB_HOST) {  // The stream only goes over USB.
+    if (!sensorStreamOn) {
+        return;
+    }
+    if (sensorStreamOverBLE) {
+        addBatchSample(seq);
+        return;
+    }
+    if (USBstatus != USB_HOST) {  // Otherwise the stream only goes over USB.
         return;
     }
 
@@ -123,7 +210,7 @@ void sendSensorStreamInfo() {
 
 
 
-void setSensorStream(bool on, bool suppressNotes) {
+void setSensorStream(bool on, bool suppressNotes, bool overBLE) {
 
     if (on && suppressNotes && noteon) {  // Don't leave a note hanging when note output stops.
         sendMIDI(NOTE_OFF, mainMidiChannel, notePlaying, 64);
@@ -132,6 +219,7 @@ void setSensorStream(bool on, bool suppressNotes) {
 
     sensorStreamOn = on;
     sensorStreamSuppressNotes = on && suppressNotes;
+    sensorStreamOverBLE = on && overBLE;
 
     if (on) {
         sox.setAccelDataRate(LSM6DS_RATE_1_66K_HZ);  // Faster than the stream loop, so each frame has a fresh reading.
@@ -144,8 +232,20 @@ void setSensorStream(bool on, bool suppressNotes) {
 
 
 
-// Incoming SysEx from USB. The array includes F0 and F7.
+// Incoming SysEx. The array includes F0 and F7. A stream turned on over BLE goes over BLE, unless a USB host is
+// connected (USB is faster, so it wins).
 void handleSysExFromUSB(byte* data, unsigned size) {
+    handleStreamSysEx(data, size, false);
+}
+
+void handleSysExFromBLE(byte* data, unsigned size) {
+    if (USBstatus == USB_HOST) {
+        return;
+    }
+    handleStreamSysEx(data, size, true);
+}
+
+void handleStreamSysEx(byte* data, unsigned size, bool fromBLE) {
     if (size < 6 || data[1] != STREAM_SYSEX_ID_1 || data[2] != STREAM_SYSEX_ID_2 || data[3] != STREAM_PROTOCOL_VERSION) {
         return;
     }
@@ -153,12 +253,20 @@ void handleSysExFromUSB(byte* data, unsigned size) {
     switch (data[4]) {
         case STREAM_CONFIG:
             if (size >= 7) {
-                setSensorStream(data[5] & STREAM_CONFIG_ON, data[5] & STREAM_CONFIG_SUPPRESS_NOTES);
+                setSensorStream(data[5] & STREAM_CONFIG_ON, data[5] & STREAM_CONFIG_SUPPRESS_NOTES, fromBLE);
             }
             break;
 
         case STREAM_REQUEST_INFO:
-            sendSensorStreamInfo();
+            if (fromBLE != sensorStreamOverBLE && sensorStreamOn) {
+                break;  // Answer on the transport the stream uses
+            }
+            {
+                const bool wasBLE = sensorStreamOverBLE;
+                sensorStreamOverBLE = fromBLE;  // Reply where it was asked
+                sendSensorStreamInfo();
+                sensorStreamOverBLE = wasBLE;
+            }
             break;
     }
 }

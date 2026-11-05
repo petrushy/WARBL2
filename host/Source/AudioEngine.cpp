@@ -339,16 +339,57 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         }
         lastFrameTime = received.frame.timestamp;
         haveFrameTime = true;
+
+        if (received.batched && smoothBluetooth)
+        {
+            // Playout time: the frame's device time plus the smallest arrival lag seen (the clocks' offset plus the
+            // fastest delivery), plus the spread of lags (how late a frame in a burst can be), plus a margin.
+            const double lag = received.arrivalMs - received.deviceMs;
+            minArrivalLag = std::min (minArrivalLag, lag);
+            arrivalLagSpread = std::max (arrivalLagSpread, lag - minArrivalLag);
+            const double delay = std::min (40.0, arrivalLagSpread + 1.0);
+            bluetoothDelayMs = (float) delay;
+            if (pendingCount == (int) pendingFrames.size())  // Full: drop the oldest
+            {
+                pendingHead = (pendingHead + 1) % (int) pendingFrames.size();
+                --pendingCount;
+            }
+            pendingFrames[(size_t) ((pendingHead + pendingCount) % (int) pendingFrames.size())] = { received.deviceMs + minArrivalLag + delay, controls };
+            ++pendingCount;
+            continue;
+        }
+
         bunch[(size_t) (count % kMaxBunch)] = controls;  // Beyond kMaxBunch, the oldest are dropped (stale anyway)
         haveControls = true;
         ++count;
     }
     int bunchSize = std::min (count, kMaxBunch);
 
+    // Bluetooth frames due in this block, at their place in it.
+    const double blockStartMs = juce::Time::getMillisecondCounterHiRes();
+    const double blockMs = numSamples * 1000.0 / sampleRate;
+    minArrivalLag += 0.001 * blockMs;                        // Follows a slowly drifting clock offset upwards too
+    arrivalLagSpread *= std::exp (-blockMs / 5000.0);        // Forgets a past burst over a few seconds
+    constexpr int kMaxDue = 32;
+    std::array<std::pair<int, whistle::Controls>, kMaxDue> due;
+    int dueCount = 0;
+    while (pendingCount > 0 && pendingFrames[(size_t) pendingHead].playoutMs <= blockStartMs + blockMs)
+    {
+        const auto& p = pendingFrames[(size_t) pendingHead];
+        const int offset = juce::jlimit (0, numSamples - 1, (int) ((p.playoutMs - blockStartMs) * sampleRate / 1000.0));
+        if (dueCount < kMaxDue)
+            due[(size_t) dueCount++] = { offset, p.controls };
+        controls = p.controls;
+        haveControls = true;
+        pendingHead = (pendingHead + 1) % (int) pendingFrames.size();
+        --pendingCount;
+    }
+
     if (scaleControls (controls, numSamples))
     {
         haveControls = true;
         bunchSize = 0;
+        dueCount = 0;
     }
     else if (manualPlay)
     {
@@ -358,6 +399,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
         controls.footOpenness = manualFootOpenness.load();
         haveControls = true;
         bunchSize = 0;
+        dueCount = 0;
     }
 
     // If frames stop arriving (stream off, cable pulled), stop blowing rather than hold the last breath.
@@ -376,7 +418,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     {
         samplesSinceControls = 0;
         lastControls = controls;
-        if (bunchSize < 2)
+        if (bunchSize < 2 && dueCount == 0)
             whistleModel.setControls (controls, frameInterval);
         for (int i = 0; i < whistle::kNumHoles; ++i)
             shownOpenness[(size_t) i] = controls.openness[(size_t) i];
@@ -395,7 +437,22 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     juce::FloatVectorOperations::clear (bodyDry.get(), numSamples);
     if (whistleEnabled)
     {
-        if (bunchSize >= 2)
+        if (dueCount > 0)
+        {
+            // Bluetooth frames at their own times: each takes over at its offset, reached over one frame interval.
+            int from = 0;
+            for (int i = 0; i < dueCount; ++i)
+            {
+                const int at = std::max (from, due[(size_t) i].first);
+                if (at > from)
+                    whistleModel.render (windowDry.get() + from, bodyDry.get() + from, at - from);
+                whistleModel.setControls (due[(size_t) i].second, frameInterval);
+                from = at;
+            }
+            if (from < numSamples)
+                whistleModel.render (windowDry.get() + from, bodyDry.get() + from, numSamples - from);
+        }
+        else if (bunchSize >= 2)
         {
             // Oldest first: frame i takes over at i/n of the block and is reached by the end of its share.
             const int oldest = count - bunchSize;

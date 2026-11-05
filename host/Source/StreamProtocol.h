@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -23,6 +24,7 @@ constexpr size_t kHeaderSize = 4;  // ID1, ID2, version, type
 enum MessageType : uint8_t
 {
     kFrame = 0x01,
+    kBatch = 0x02,  // Bluetooth: several samples in one message (see decodeBatch)
     kInfo = 0x10,
     kConfig = 0x20,
     kRequestInfo = 0x21
@@ -155,6 +157,14 @@ private:
 constexpr size_t kFrameBits = kSeqBits + kTimestampBits + kNumHoles * 10 + 12 + 6 * 16 + 9 + 7;
 constexpr size_t kInfoValues = 1 + kNumHoles * 2 + 1 + 3;
 
+// Bluetooth batch: the samples of one BLE connection interval in one message, so it fits one BLE packet.
+// Header: first sequence number, timestamps of the first and last sample, count, accelerometer (top 8 bits per
+// axis, once per batch: enough for tilt), flags. Per sample: pressure (12 bits, as USB) and the nine holes with
+// 8 bits (the top 8 of the 10-bit reading). No gyro.
+constexpr size_t kBatchHeaderBits = kSeqBits + 2 * kTimestampBits + 5 + 3 * 8 + 7;
+constexpr size_t kBatchSampleBits = 12 + kNumHoles * 8;
+constexpr int kMaxBatchSamples = 31;
+
 // The message type of a WARBL stream SysEx (data without F0/F7), or nothing if it isn't one.
 inline std::optional<uint8_t> messageType (const uint8_t* data, size_t size)
 {
@@ -185,6 +195,42 @@ inline std::optional<SensorFrame> decodeFrame (const uint8_t* data, size_t size)
     f.holeCovered = (uint16_t) r.get (9);
     f.flags = (uint8_t) r.get (7);
     return f;
+}
+
+// A batch as frames, with interpolated timestamps (empty if it isn't a valid batch).
+inline std::vector<SensorFrame> decodeBatch (const uint8_t* data, size_t size)
+{
+    std::vector<SensorFrame> frames;
+    if (messageType (data, size) != kBatch)
+        return frames;
+
+    BitReader r (data + kHeaderSize, size - kHeaderSize);
+    if (! r.canRead (kBatchHeaderBits))
+        return frames;
+    const auto seq = r.get (kSeqBits);
+    const auto first = r.get (kTimestampBits), last = r.get (kTimestampBits);
+    const int count = (int) r.get (5);
+    std::array<int16_t, 3> accel {};
+    for (auto& a : accel)
+        a = (int16_t) ((int8_t) (uint8_t) r.get (8) * 256);
+    const auto flags = (uint8_t) r.get (7);
+    if (count < 1 || ! r.canRead (kBatchSampleBits * (size_t) count))
+        return frames;
+
+    const uint32_t span = (last - first) & ((1u << kTimestampBits) - 1);
+    for (int i = 0; i < count; ++i)
+    {
+        SensorFrame f;
+        f.seq = (uint16_t) ((seq + (uint32_t) i) & ((1u << kSeqBits) - 1));
+        f.timestamp = (first + (count > 1 ? span * (uint32_t) i / (uint32_t) (count - 1) : 0)) & ((1u << kTimestampBits) - 1);
+        f.pressure = (uint16_t) r.get (12);
+        for (auto& h : f.holes)
+            h = (uint16_t) (r.get (8) * 4 + 2);  // Middle of the 8-bit step
+        f.accel = accel;
+        f.flags = flags;
+        frames.push_back (f);
+    }
+    return frames;
 }
 
 inline std::optional<DeviceInfo> decodeInfo (const uint8_t* data, size_t size)
@@ -224,6 +270,28 @@ inline std::vector<uint8_t> encodeFramePayload (const SensorFrame& f)
         w.put ((uint16_t) g, 16);
     w.put (f.holeCovered & 0x1FFu, 9);
     w.put (f.flags & 0x7Fu, 7);
+    return w.bytes;
+}
+
+// Packs frames as a Bluetooth batch (payload only), as the firmware does. For the simulator and tests.
+inline std::vector<uint8_t> encodeBatchPayload (const std::vector<SensorFrame>& frames)
+{
+    BitWriter w;
+    if (frames.empty())
+        return w.bytes;
+    w.put (frames.front().seq & ((1u << kSeqBits) - 1), kSeqBits);
+    w.put (frames.front().timestamp & ((1u << kTimestampBits) - 1), kTimestampBits);
+    w.put (frames.back().timestamp & ((1u << kTimestampBits) - 1), kTimestampBits);
+    w.put ((uint32_t) frames.size() & 0x1Fu, 5);
+    for (auto a : frames.back().accel)
+        w.put ((uint8_t) (int8_t) (a / 256), 8);
+    w.put (frames.back().flags & 0x7Fu, 7);
+    for (const auto& f : frames)
+    {
+        w.put (f.pressure & 0xFFFu, 12);
+        for (auto h : f.holes)
+            w.put ((uint32_t) std::min<uint16_t> (h, 1023) >> 2, 8);
+    }
     return w.bytes;
 }
 

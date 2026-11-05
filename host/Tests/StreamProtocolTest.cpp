@@ -174,6 +174,38 @@ int main()
         CHECK (decoded && decoded->covered[8] == 600 && decoded->gyroRange == 0b1100);
     }
 
+    // Bluetooth batch: 8 samples (one 15 ms connection interval), round trip and size.
+    {
+        std::vector<SensorFrame> frames;
+        for (int i = 0; i < 8; ++i)
+        {
+            SensorFrame f;
+            f.seq = (uint16_t) (16380 + i);  // Wraps past 14 bits
+            f.timestamp = (uint32_t) ((0x1FFFF0 + i * 66) & 0x1FFFFF);
+            f.pressure = (uint16_t) (400 + 37 * i);
+            for (int h = 0; h < kNumHoles; ++h)
+                f.holes[(size_t) h] = (uint16_t) (h * 113 + i);
+            f.accel = { -8000, 16000, 300 };
+            f.flags = 1;
+            frames.push_back (f);
+        }
+        const auto data = withHeader (kBatch, encodeBatchPayload (frames));
+        CHECK (data.size() + 2 <= 120);  // With F0/F7: fits one BLE packet at a 123-byte MTU
+        const auto decoded = decodeBatch (data.data(), data.size());
+        CHECK (decoded.size() == 8);
+        for (size_t i = 0; i < decoded.size() && i < frames.size(); ++i)
+        {
+            CHECK (decoded[i].seq == (frames[i].seq & 0x3FFF));
+            CHECK (decoded[i].pressure == frames[i].pressure);
+            for (int h = 0; h < kNumHoles; ++h)
+                CHECK (std::abs ((int) decoded[i].holes[(size_t) h] - (int) frames[i].holes[(size_t) h]) <= 2);
+            CHECK (std::abs ((int) ((decoded[i].timestamp - frames[i].timestamp) & 0x1FFFFF)) <= 1
+                   || ((frames[i].timestamp - decoded[i].timestamp) & 0x1FFFFF) <= 1);
+            CHECK (std::abs (decoded[i].accel[0] - frames[i].accel[0]) < 256 && std::abs (decoded[i].accel[1] - frames[i].accel[1]) < 256);
+        }
+        std::printf ("Batch of 8: %d bytes as SysEx\n", (int) data.size() + 2);
+    }
+
     // Unwrapping of the 21-bit timestamp.
     {
         Unwrapper u (kTimestampBits);

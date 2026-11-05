@@ -34,6 +34,8 @@ public:
                 monitor.setOutputDevice (args[output + 1].unquoted());
             if (args.contains ("--simulate"))
                 monitor.setSimulating (true);
+            if (args.contains ("--bluetooth"))  // The simulator sends Bluetooth batches
+                main->getMonitor().simulateBluetooth();
             if (args.contains ("--play"))
                 monitor.playTestPhrase();
             if (args.contains ("--record"))  // Starts recording at once (saved when the app quits)

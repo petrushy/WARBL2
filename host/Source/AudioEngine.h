@@ -59,7 +59,11 @@ public:
 
     std::atomic<bool> clickEnabled { false };
     std::atomic<bool> whistleEnabled { true };
-    std::atomic<bool> silent { false };  // Computes everything but outputs silence (test runs next to the player's app)
+    std::atomic<bool> silent { false };
+    // Bluetooth frames arrive in bursts (one batch per connection interval): play them with their own spacing,
+    // delayed just enough to absorb the bursts, instead of applying each burst at once.
+    std::atomic<bool> smoothBluetooth { true };
+    std::atomic<float> bluetoothDelayMs { 0.0f };  // The current playout delay (for display)  // Computes everything but outputs silence (test runs next to the player's app)
 
     // Sensor calibration from WARBL (or the simulator), set on the message thread.
     void setCalibration (const warbl::DeviceInfo&);
@@ -164,6 +168,15 @@ private:
     bool haveFrameTime = false;
     double frameInterval = 0.002;  // s, smoothed
     float smoothedTilt = 0.0f;     // Degrees (audio thread)
+    // Bluetooth playout buffer (audio thread): frames waiting for their time, and the arrival-lag statistics.
+    struct PendingFrame
+    {
+        double playoutMs = 0.0;
+        whistle::Controls controls;
+    };
+    std::array<PendingFrame, 128> pendingFrames {};
+    int pendingHead = 0, pendingCount = 0;
+    double minArrivalLag = 1.0e12, arrivalLagSpread = 0.0;  // ms
     bool haveTilt = false;
     whistle::Controls lastControls;
     int dryCapacity = 0;

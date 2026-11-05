@@ -115,6 +115,8 @@ void MainComponent::restoreState()
 
     sensorsFromVar (juce::JSON::parse (settings->getValue ("sensors")), audio);
 
+    if (settings->containsKey ("smoothBluetooth"))
+        audio.smoothBluetooth = settings->getBoolValue ("smoothBluetooth");
     if (settings->containsKey ("sourceSpread_deg"))
         audio.reverb.setSpread ((float) settings->getDoubleValue ("sourceSpread_deg"));
     const auto irFile = juce::File (settings->getValue ("reverbFile"));
@@ -142,6 +144,7 @@ void MainComponent::saveState()
     settings->setValue ("reverbLevel_dB", audio.reverb.wetDb.load());
     settings->setValue ("reverbPreDelay_ms", audio.reverb.preDelayMs.load());
     settings->setValue ("sourceSpread_deg", audio.reverb.getSpread());
+    settings->setValue ("smoothBluetooth", audio.smoothBluetooth.load());
     settings->setValue ("tab", tabs.getCurrentTabIndex());
     if (auto device = audio.deviceManager.createStateXml())
         settings->setValue ("audioDevice", device.get());

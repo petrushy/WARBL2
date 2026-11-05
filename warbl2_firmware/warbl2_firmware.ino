@@ -37,6 +37,7 @@ Pinout from left to right, holding WARBL with mouthpiece pointing up, looking at
 #include <nrfx_power.h>  // For detecting VBUS
 #include <nrf_wdt.h>     // Watchdog timer
 #include <bluefruit.h>
+#include "WarblBLEMidi.h"
 #include <Arduino.h>
 #include <Wire.h>  // I2C communication with EEPROM
 #include <SPI.h>   // Communication with ATmega32U4 and IMU
@@ -50,7 +51,7 @@ Pinout from left to right, holding WARBL with mouthpiece pointing up, looking at
 
 // Create instances of library classes.
 BLEDis bledis;
-BLEMidi blemidi;
+WarblBLEMidi blemidi;  // A copy of Adafruit's BLEMidi that can also send a whole SysEx per BLE packet (sensor stream)
 Adafruit_USBD_MIDI usb_midi;
 Adafruit_LSM6DSOX sox;
 SF sfusion;
@@ -71,7 +72,7 @@ struct MySettings : public MIDI_NAMESPACE::DefaultSettings {
 };
 
 // Create instances of the Arduino MIDI Library classes.
-MIDI_CREATE_CUSTOM_INSTANCE(BLEMidi, blemidi, BLEMIDI, MySettings);
+MIDI_CREATE_CUSTOM_INSTANCE(WarblBLEMidi, blemidi, BLEMIDI, MySettings);
 MIDI_CREATE_CUSTOM_INSTANCE(Adafruit_USBD_MIDI, usb_midi, MIDI, MySettings);
 
 
@@ -307,7 +308,8 @@ float pitchBendPerSemi = 4096.0f;
 
 // Sensor stream (see Sensor_stream.ino)
 bool sensorStreamOn = false;               // Whether we stream sensor readings to the host over USB SysEx
-bool sensorStreamSuppressNotes = false;    // Whether note, pressure, pitchbend and IMU MIDI output is turned off while streaming
+bool sensorStreamSuppressNotes = false;
+bool sensorStreamOverBLE = false;          // The stream was turned on over BLE MIDI (and USB has no host): batches over BLE    // Whether note, pressure, pitchbend and IMU MIDI output is turned off while streaming
 int prevChanPressure = 0;
 int prevChanPressureLSB = 0;
 int prevCCPressure = 0;
@@ -474,6 +476,7 @@ void setup() {
     BLEMIDI.turnThruOff();
     BLEMIDI.setHandleControlChange(handleControlChangeFromBLE);   // Handle received MIDI CC messages.
     BLEMIDI.setHandleProgramChange(handleProgramChangeFromBLE);   // Handle received MIDI PC messages.
+    BLEMIDI.setHandleSystemExclusive(handleSysExFromBLE);         // Sensor stream commands over BLE.
     Bluefruit.Periph.setConnectCallback(connect_callback);        // Get connection information and handle indication.
     Bluefruit.Periph.setDisconnectCallback(disconnect_callback);  // Detect disconnect.
     startAdv();
