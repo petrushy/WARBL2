@@ -111,6 +111,7 @@ var instrument = 0; //currently selected preset tab
 var lsb = 0; //used for reassembling pressure bytes from WARBL
 
 var connIntvlLSB = 0; //used for reassembling connection interval from WARBL
+var bluetoothOn = true; //Bluetooth on/off status reported by WARBL2
 
 var defaultInstr = 0; //default preset
 
@@ -229,6 +230,8 @@ function showWARBLNotDetected() {
 	document.getElementById("pressure").innerHTML = "";
 	document.getElementById("connLabel").innerHTML = "BLE not connected";
 	document.getElementById("connLabel").style.left = "95px";
+	document.getElementById("bluetoothLabel").style.display = "none"; //only shown once WARBL reports its Bluetooth status
+	document.getElementById("switchBluetooth").style.display = "none";
 	document.getElementById("naturalVibratoLabel").style.display = "none"; //only shown once WARBL reports its natural vibrato setting
 	document.getElementById("switchNaturalVibrato").style.display = "none";
 	document.getElementById("naturalVibratoLevelsButton").style.display = "none"; //only shown once WARBL reports its natural vibrato levels
@@ -998,6 +1001,13 @@ function WARBL_Receive(event, source) {
 						}
 
 						if ((data2 >= MIDI_CUST_FINGERING_PATTERN_START && data2 <= MIDI_CUST_FINGERING_PATTERN_END) && version > 3.9) {
+							if (fingeringWrite == i) {
+								document.getElementById("fingeringSelect" + i).value = data2 - MIDI_FINGERING_PATTERN_START;
+							}
+							updateCells(); //update any dependant fields	
+						}
+
+						if (data2 == MIDI_LOWER_HOLES_FINGERING_PATTERN) {
 							if (fingeringWrite == i) {
 								document.getElementById("fingeringSelect" + i).value = data2 - MIDI_FINGERING_PATTERN_START;
 							}
@@ -1927,16 +1937,19 @@ function WARBL_Receive(event, source) {
 						document.getElementById("fingeringSelect0").options[26].disabled = true;
 						document.getElementById("fingeringSelect0").options[27].disabled = true;
 						document.getElementById("fingeringSelect0").options[28].disabled = true;
+						document.getElementById("fingeringSelect0").options[29].disabled = true;
 						document.getElementById("fingeringSelect1").options[24].disabled = true;
 						document.getElementById("fingeringSelect1").options[25].disabled = true;
 						document.getElementById("fingeringSelect1").options[26].disabled = true;
 						document.getElementById("fingeringSelect1").options[27].disabled = true;
 						document.getElementById("fingeringSelect1").options[28].disabled = true;
+						document.getElementById("fingeringSelect1").options[29].disabled = true;
 						document.getElementById("fingeringSelect2").options[24].disabled = true;
 						document.getElementById("fingeringSelect2").options[25].disabled = true;
 						document.getElementById("fingeringSelect2").options[26].disabled = true;
 						document.getElementById("fingeringSelect2").options[27].disabled = true;
 						document.getElementById("fingeringSelect2").options[28].disabled = true;
+						document.getElementById("fingeringSelect2").options[29].disabled = true;
 
 						document.getElementById("keyLabel").innerHTML = "Key";
 						document.getElementById("keyLabel").style.left = "305px";
@@ -2314,6 +2327,21 @@ function WARBL_Receive(event, source) {
 						WARBL2SettingsReceive = data2 - MIDI_WARBL2_SETTINGS_START;
 					}
 
+					if (data2 == MIDI_BLUETOOTH_OFF || data2 == MIDI_BLUETOOTH_ON) { //Bluetooth on/off status
+						bluetoothOn = data2 == MIDI_BLUETOOTH_ON;
+						document.getElementById("bluetoothCheck").checked = bluetoothOn;
+						document.getElementById("bluetoothLabel").style.display = "block";
+						document.getElementById("switchBluetooth").style.display = "inline-block";
+						if (!bluetoothOn) {
+							document.getElementById("connLabel").innerHTML = "Bluetooth off";
+							document.getElementById("connLabel").style.left = "112px";
+						}
+						else if (document.getElementById("connLabel").innerHTML == "Bluetooth off") {
+							document.getElementById("connLabel").innerHTML = "BLE not connected";
+							document.getElementById("connLabel").style.left = "95px";
+						}
+					}
+
 
 					if (data2 >= MIDI_BUTTON_ACTIONS_START && version > 3.9) {
 
@@ -2384,7 +2412,11 @@ function WARBL_Receive(event, source) {
 						x = x / 100;              // convert back to decimal
 						x = parseFloat(x.toFixed(1));   // keep 1 digit after decimal					
 
-						if (x == 0) {
+						if (x == 0 && !bluetoothOn) {
+							document.getElementById("connLabel").innerHTML = "Bluetooth off";
+							document.getElementById("connLabel").style.left = "112px";
+						}
+						else if (x == 0) {
 							document.getElementById("connLabel").innerHTML = "BLE not connected";
 							document.getElementById("connLabel").style.left = "95px";
 						}
@@ -3833,7 +3865,7 @@ function updateCustom() { //keep correct settings enabled/disabled with respect 
 
 	var a = document.getElementById("fingeringSelect" + instrument).value;
 
-	if (document.getElementById("pitchbendradio2").checked == false && (((a == 0 || a == 1 || a == 4 || a == 10) && ((document.getElementById("pitchbendradio1").checked == true && version < 1.6) || (version == "Unknown" || version > 1.5))) || (version == "Unknown" || version > 1.5) && (a == 3 || a == 2))) {
+	if (document.getElementById("pitchbendradio2").checked == false && (((a == 0 || a == 1 || a == 4 || a == 10 || a == 78) && ((document.getElementById("pitchbendradio1").checked == true && version < 1.6) || (version == "Unknown" || version > 1.5))) || (version == "Unknown" || version > 1.5) && (a == 3 || a == 2))) {
 		document.getElementById("checkbox5").disabled = false;
 		document.getElementById("switch5").style.cursor = "pointer";
 	} else {
@@ -4973,6 +5005,11 @@ function WARBL2Radio(selection) {
 	sendToWARBL(MIDI_CC_119, selection);
 }
 
+
+function sendBluetooth(selection) {
+	blink(1);
+	sendToWARBL(MIDI_CC_106, selection ? MIDI_BLUETOOTH_ON : MIDI_BLUETOOTH_OFF);
+}
 
 function sendHost(selection) {
 	blink(1);

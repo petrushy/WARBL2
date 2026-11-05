@@ -603,6 +603,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                   <option value="23">EVI2</option>
                   <option value="24">EVI3</option>
                   <option value="25">Recorder with half hole</option>
+                  <option value="78">Tin whistle/flute, lower holes</option>
                   <option value="67">Custom 1</option>
                   <option value="68">Custom 2</option>
                   <option value="69">Custom 3</option>
@@ -636,6 +637,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                   <option value="23">EVI2</option>
                   <option value="24">EVI3</option>
                   <option value="25">Recorder with half hole</option>
+                  <option value="78">Tin whistle/flute, lower holes</option>
                   <option value="67">Custom 1</option>
                   <option value="68">Custom 2</option>
                   <option value="69">Custom 3</option>
@@ -669,6 +671,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                   <option value="23">EVI2</option>
                   <option value="24">EVI3</option>
                   <option value="25">Recorder with half hole</option>
+                  <option value="78">Tin whistle/flute, lower holes</option>
                   <option value="67">Custom 1</option>
                   <option value="68">Custom 2</option>
                   <option value="69">Custom 3</option>
@@ -2482,6 +2485,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                 <option value="15">Show battery level</option>
                 <option value="16">Register Hold</option>
                 <option value="17">Toggle slide mode</option>
+                <option value="18">Toggle Bluetooth on/off</option>
               </select>
             </div>
             <div class="styled-select blue semi-square">
@@ -2508,6 +2512,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                 <option value="15">Show battery level</option>
                 <option value="16">Register Hold</option>
                 <option value="17">Toggle slide mode</option>
+                <option value="18">Toggle Bluetooth on/off</option>
               </select>
             </div>
             <div class="styled-select blue semi-square">
@@ -2534,6 +2539,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                 <option value="15">Show battery level</option>
                 <option value="16">Register Hold</option>
                 <option value="17">Toggle slide mode</option>
+                <option value="18">Toggle Bluetooth on/off</option>
               </select>
             </div>
             <div class="styled-select blue semi-square">
@@ -2560,6 +2566,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                 <option value="15">Show battery level</option>
                 <option value="16">Register Hold</option>
                 <option value="17">Toggle slide mode</option>
+                <option value="18">Toggle Bluetooth on/off</option>
               </select>
             </div>
             <div class="styled-select blue semi-square">
@@ -2586,6 +2593,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                 <option value="15">Show battery level</option>
                 <option value="16">Register Hold</option>
                 <option value="17">Toggle slide mode</option>
+                <option value="18">Toggle Bluetooth on/off</option>
               </select>
             </div>
             <div class="styled-select blue semi-square">
@@ -2610,6 +2618,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                 <option value="15">Show battery level</option>
                 <option value="16">Register Hold</option>
                 <option value="17">Toggle slide mode</option>
+                <option value="18">Toggle Bluetooth on/off</option>
               </select>
             </div>
             <div class="styled-select blue semi-square">
@@ -2634,6 +2643,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                 <option value="15">Show battery level</option>
                 <option value="16">Register Hold</option>
                 <option value="17">Toggle slide mode</option>
+                <option value="18">Toggle Bluetooth on/off</option>
               </select>
             </div>
             <div class="styled-select blue semi-square">
@@ -2658,6 +2668,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                 <option value="15">Show battery level</option>
                 <option value="16">Register Hold</option>
                 <option value="17">Toggle slide mode</option>
+                <option value="18">Toggle Bluetooth on/off</option>
               </select>
             </div>
             <div class="WARBL2Elements">
@@ -2683,6 +2694,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                   <option value="15">Show battery level</option>
                   <option value="16">Register Hold</option>
                   <option value="17">Toggle slide mode</option>
+                  <option value="18">Toggle Bluetooth on/off</option>
                 </select>
               </div>
               <div class="styled-select blue semi-square">
@@ -2707,6 +2719,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                   <option value="15">Show battery level</option>
                   <option value="16">Register Hold</option>
                   <option value="17">Toggle slide mode</option>
+                  <option value="18">Toggle Bluetooth on/off</option>
                 </select>
               </div>
             </div>
@@ -3143,6 +3156,14 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                       <span class="slider round">
                       </span>
                     </label>
+                    <div class="bluetoothLabel noTouch" id="bluetoothLabel">
+                      Bluetooth
+                    </div>
+                    <label class="switch" id="switchBluetooth">
+                      <input checked="checked" class="checkboxes" id="bluetoothCheck" onchange="sendBluetooth(this.checked)" type="checkbox"/>
+                      <span class="slider round">
+                      </span>
+                    </label>
                     <div class="radiogroup11">
                       <fieldset>
                         <div>
@@ -3322,6 +3343,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                         <p>On WARBL2 you can also set a button action to <b> recenter the yaw </b> , or <b> show the battery level </b> . When triggered, the latter will blink the LED in a turquoise color from 1-10 times according to the battery level percentage. If the battery level is lower than 10%, the LED will blink once in red.</p>
                         <p>The <b> Register hold </b> option (WARBL2) allows you to temporarily prevent the register from changing by overblowing. This can be useful for changing the dynamics in the current register without accidentally changing the register.</p>
                         <p>The <b>Toggle slide</b> mode option switches back and forth between the Slide and vibrato mode and the Legato slide/vibrato mode, assuming either of those was previously selected. This can be used with or without the momentary switch turned on if assigned to a button click. </p>
+                        <p>The <b>Toggle Bluetooth on/off</b> option turns Bluetooth completely off (the WARBL disconnects and stops advertising) and back on again. USB MIDI is not affected. Bluetooth is always on after the WARBL is powered up. A long press of a button works well for this. The LED blinks blue three times when Bluetooth turns on and red three times when it turns off. Bluetooth can also be turned on/off with the <b>Bluetooth</b> switch in the WARBL2 Settings panel.</p>
                         <p>The <b>secret button</b> commands are a few additional hard-coded actions that involve covering certain tone holes while clicking button 1. These can be useful if normal button actions are used for other functions. They give you an alternative way of changing slide/vibrato mode and preset. With the "secret" commands turned on, covering only hole L3 while pressing button 1 will change the slide/vibrato mode, and covering only R3 while pressing button 1 will change the preset. Note that the <b> Use "secret" button commands </b> switch does not have to be on to use the "secret" drone control button, if that option is selected in the Drone Control panel.</p>
                       </div>
                     </div>
@@ -3366,6 +3388,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                         <p><b> Note: </b> It is not possible to import settings from an original WARBL to a WARBL2 or vice versa because they use different commands for communicating with the Configuration Tool.</p>
                         <p>The <b> MIDI note </b> display will show what MIDI note is currently being played, and the <b> MIDI Console </b> will show the most recent 300 MIDI messages that have been received. These are both useful for troubleshooting.</p>
                         <p>The <b> Fingering pattern </b> dropdown menu allows you to choose a fingering chart. Information about each chart is available on the <b> Documentation </b> web page. Note that there are four <b> Custom </b> charts available at the bottom of the list (see Custom Fingering Configuration below).</p>
+                        <p><b> Tin whistle/flute, lower holes </b> plays the tin whistle/flute fingering shifted down by one hole: the six holes from L2 to R4 play as L1 to R3 normally would, and the L1 hole is ignored. Overblowing behaves exactly as with the standard tin whistle/flute fingering. With <b> Custom vibrato </b>, R4 and R3 are used as the vibrato holes instead of R3 and R2. Note that the <b> Vibrato holes </b> settings still refer to the physical holes.</p>
                         <p>The <b> Transpose </b> menu allows you to change keys. With WARBL2, if this is set to 0 (the default) then the selected fingering chart will produce the notes shown in the documentation. You can transpose up or down as much as 18 semitones to play in different keys. Most MIDI apps also allow transposing the received MIDI notes, and often it is simpler to do this in the MIDI app rather than in the Configuration Tool. With the original WARBL, this menu will default to an offset value, but will still play by default in the key shown in the documentation.</p>
                         <p>The <b> Note channel </b> input allows you to select the MIDI channel (1-16) used for sending notes from WARBL. This should typically be left set to "1".</p>
                         <p>The <b> Bend Range </b> setting is the number of semitones of pitch bend that the WARBL will allow. This should typically be set to the default value of 2.</p>
@@ -3577,6 +3600,7 @@ if (!isiOS && ("serviceWorker" in navigator)) {
                       <p>This panel contains information and settings specific to WARBL2. Changes to this panel are saved immediately; it is not necessary to "save settings for the current preset", and as with sensor calibration, these settings apply to the entire device rather than one specific preset.</p>
                       <p>The <b> battery voltage </b> is shown as a convenience, but the <b> percentage monitor </b> on the far right is usually a more reliable indicator of charge level. As mentioned previously, it is an estimate and becomes more accurate after letting the battery run all the way down (until the WARBL2 powers off) and then charging fully. When charging, a charging icon is shown next to the percentage monitor. If the charging icon is blinking, it may be an indicator of a battery fault such as very low or high temperatures or a battery that is too old to charge.</p>
                       <p>The BLE status is shown in the bottom left. When connected by BLE it will show the connection interval in milliseconds.</p>
+                      <p>The <b> Bluetooth </b> switch turns Bluetooth completely off (the WARBL2 disconnects and stops advertising, so other devices can't find or connect to it) and back on again. USB MIDI is not affected. When Bluetooth is off, the BLE status shows "Bluetooth off". Bluetooth is always on after the WARBL2 is powered up. You can also assign <b> Toggle Bluetooth on/off </b> to a button. The LED blinks blue three times when Bluetooth turns on and red three times when it turns off. <b> Note: </b> if the Configuration Tool is connected by Bluetooth, turning Bluetooth off will disconnect it, so use USB if you want to turn it back on from here. A computer that has paired with the WARBL2 will usually keep listing it as a known device while Bluetooth is off, but it will show as not connected.</p>
                       <p>If the WARBL2 is connected to both BLE and USB, you can choose whether to send MIDI data over either or both connections. If only one connection is available, that connection will be used regardless of this setting. The WARBL2 will also communicate with the Configuration Tool by all available connections regardless of this setting.</p>
                       <p>The WARBL2 can be charged from any USB host (for example PC, Mac, tablet, or phone) or from a USB charging brick. Charging from a USB host can be turned off, which is recommended if you are using USB MIDI and the WARBL2 is often connected to a host. This will help save the battery of your host device.</p>
                       <p>To save battery life, the WARBL2 will shut down automatically after some time if no MIDI notes have been sent or commands have been received from the Configuration Tool. You can adjust the power off time with the slider. Moving the slider to its maximum will prevent the WARBL2 from ever shutting off automatically. An infinity symbol (∞) will be shown. This setting is generally not recommended because it can cause the battery to be depleted. You can also assign a button action to power off the WARBL2 in the Button Behavior panel.</p>
