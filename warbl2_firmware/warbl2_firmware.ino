@@ -308,9 +308,9 @@ int iPitchBend[] = { 8192, 8192, 8192, 8192, 8192, 8192, 8192, 8192, 8192 };  //
 float pitchBendPerSemi = 4096.0f;
 
 // Sensor stream (see Sensor_stream.ino)
-bool sensorStreamOn = false;               // Whether we stream sensor readings to the host over USB SysEx
-bool sensorStreamSuppressNotes = false;
-bool sensorStreamOverBLE = false;          // The stream was turned on over BLE MIDI (and USB has no host): batches over BLE    // Whether note, pressure, pitchbend and IMU MIDI output is turned off while streaming
+bool sensorStreamOn = false;               // Whether we stream sensor readings to the host (USB frames or BLE batches)
+bool sensorStreamSuppressNotes = false;    // Whether note, pressure, pitchbend and IMU MIDI output is turned off while streaming
+bool sensorStreamOverBLE = false;          // The stream was turned on over BLE MIDI (and USB has no host): batches over BLE
 int prevChanPressure = 0;
 int prevChanPressureLSB = 0;
 int prevCCPressure = 0;
