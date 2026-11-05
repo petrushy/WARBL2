@@ -153,6 +153,7 @@ err_t WarblBLEMidi::begin(void)
   _io.setProperties(CHR_PROPS_READ | CHR_PROPS_WRITE | CHR_PROPS_WRITE_WO_RESP | CHR_PROPS_NOTIFY);
   _io.setPermission(SECMODE_ENC_NO_MITM, SECMODE_ENC_NO_MITM);
   _io.setWriteCallback(WarblBLEMidi::blemidi_write_cb);
+  _io.setMaxLen(244);  // WARBL: allow full-size notifications (the default, 20 bytes, silently cut longer ones short)
 
   VERIFY_STATUS( _io.begin() );
 
@@ -411,13 +412,18 @@ bool WarblBLEMidi::sendSplit(uint8_t data[], uint8_t len)
 // BLE MIDI packet layout for SysEx (MIDI over Bluetooth LE spec): every packet starts with a header byte
 // (bit 7 set, the timestamp's high 6 bits); a timestamp byte (bit 7 set, low 7 bits) comes before F0 and before
 // F7; packets in between carry only the header and data bytes.
+uint16_t WarblBLEMidi::maxPacketLength(void)
+{
+  BLEConnection* connection = Bluefruit.Connection(Bluefruit.connHandle());
+  const uint16_t mtu = connection ? connection->getMtu() : 23;
+  return (uint16_t) min(244, (int) mtu - 3);  // ATT notification payload
+}
+
 bool WarblBLEMidi::sendSysExMessage(const uint8_t* message, uint16_t length)
 {
   if (length < 2 || message[0] != 0xF0 || message[length - 1] != 0xF7) return false;
 
-  BLEConnection* connection = Bluefruit.Connection(Bluefruit.connHandle());
-  const uint16_t mtu = connection ? connection->getMtu() : 23;
-  const uint16_t maxPacket = (uint16_t) min(244, (int) mtu - 3);  // ATT notification payload
+  const uint16_t maxPacket = maxPacketLength();
 
   const uint32_t tstamp = millis();
   const uint8_t header = (uint8_t) (0x80 | ((tstamp >> 7) & 0x3F));

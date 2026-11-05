@@ -77,6 +77,13 @@ void sendStreamSysEx(byte type, const byte* payload, byte payloadLength) {
 
 
 // Build and send one frame with the latest readings. Called every loop while streaming.
+// Size of a batch of `samples` as one BLE MIDI packet: BLE header and two timestamps, F0, 4 header bytes, the payload
+// (7 bits per byte), F7.
+uint16_t batchPacketBytes(byte samples) {
+    const uint32_t bits = 14 + 21 + 21 + 5 + 24 + 7 + (12 + 9 * 8) * (uint32_t)samples;
+    return 3 + 1 + 4 + (bits + 6) / 7 + 1;
+}
+
 // BLE: collect this loop's readings, and send them with the others of this connection interval.
 void addBatchSample(uint16_t& seq) {
     static byte holes[STREAM_BATCH_MAX_SAMPLES][9];
@@ -108,9 +115,16 @@ void addBatchSample(uint16_t& seq) {
     seq++;
     count++;
 
-    // Send once per connection interval (or when full), so a batch fits one BLE packet and goes in the next event.
+    // Send once per connection interval, or earlier if one more sample wouldn't fit one BLE packet: a batch always
+    // goes in a single packet, so if it can't be sent it is lost whole, never cut off in the middle of a SysEx (which
+    // would leave the host's BLE MIDI parser waiting for its end, swallowing the notes that follow).
     const unsigned long now = millis();
-    if (count < STREAM_BATCH_MAX_SAMPLES && (now - lastSendMs) < (unsigned long)connIntvl) {
+    const bool full = count >= STREAM_BATCH_MAX_SAMPLES || batchPacketBytes(count + 1) > blemidi.maxPacketLength();
+    if (!full && (now - lastSendMs) < (unsigned long)connIntvl) {
+        return;
+    }
+    if (batchPacketBytes(count) > blemidi.maxPacketLength()) {  // A tiny MTU: even this doesn't fit one packet
+        count = 0;
         return;
     }
     lastSendMs = now;

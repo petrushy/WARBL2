@@ -67,6 +67,8 @@ class WarblBLEMidi: public BLEService, public Stream
     // WARBL addition: a whole SysEx message (F0 ... F7) in as few BLE MIDI packets as the connection's MTU allows
     // (the Stream/MIDI path above sends SysEx 3 bytes per packet). Returns false if a notification failed.
     bool sendSysExMessage(const uint8_t* message, uint16_t length);
+    // The largest BLE MIDI packet the current connection takes (ATT MTU - 3, at most 244 bytes).
+    uint16_t maxPacketLength(void);
     bool sendSplit(uint8_t data[], uint8_t len);
 
     // message type helpers
