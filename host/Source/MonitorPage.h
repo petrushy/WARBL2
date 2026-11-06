@@ -106,7 +106,7 @@ private:
     std::unique_ptr<juce::FileChooser> irChooser;
 
     HoleView holeView;
-    ScopeView pressureScope { "Pressure (12-bit, above ambient)", -100.0f, 1500.0f };
+    ScopeView pressureScope { "Breath pressure measured (Pa above ambient)", -150.0f, 2500.0f };
     ScopeView accelScope { "Accelerometer (g)", -2.0f, 2.0f };
     ScopeView gyroScope { "Gyro (deg/s)", -500.0f, 500.0f };
     TimingView timingView;

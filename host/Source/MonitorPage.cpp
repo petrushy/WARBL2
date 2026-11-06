@@ -432,7 +432,7 @@ void MonitorPage::timerCallback()
     for (const auto& r : history)
     {
         const auto& f = r.frame;
-        pressure.values.push_back ((float) ((int) f.pressure - ambient) * 0.25f);  // In 12-bit counts, as the scale was made for
+        pressure.values.push_back ((float) ((int) f.pressure - ambient) * AudioEngine::kPascalPerCount);
         ax.values.push_back (units.accelToG (f.accel[0]));
         ay.values.push_back (units.accelToG (f.accel[1]));
         az.values.push_back (units.accelToG (f.accel[2]));
