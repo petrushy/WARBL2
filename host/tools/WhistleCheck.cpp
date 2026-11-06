@@ -87,7 +87,8 @@ Controls controlsFor (const Openness& open)
 
 // Plays a breath gesture through one fingering: the pressure is sent every 2 ms, like WARBL's frames.
 // Returns the sound at `rate`.
-static float vortexArg = 1.0f;  // vortex=: the edge vortex loss (playGesture, radiation)
+static float vortexArg = 1.0f;
+static bool geometryArgs = false;  // window=, width=, flue=, top=, foot= given: retune before playing  // vortex=: the edge vortex loss (playGesture, radiation)
 
 static std::vector<float> playGesture (const Geometry& g, const Voicing& v, const Openness& open,
                                        const std::function<double (double)>& pressureAt, double seconds, double rate)
@@ -193,6 +194,12 @@ static void windwayArgs (int argc, char* argv[], int from, Geometry& g)
         if (arg.startsWith ("windway=")) g.windwayLength = value * 0.001;
         if (arg.startsWith ("edge=")) g.edgeOffset = value * 0.001;
         if (arg.startsWith ("vortex=")) vortexArg = (float) value;
+        // The fipple's size (mm); the instrument is retuned afterwards where it matters (analyse).
+        if (arg.startsWith ("window=")) { g.windowLength = value * 0.001; geometryArgs = true; }
+        if (arg.startsWith ("width=")) { g.windowWidth = value * 0.001; geometryArgs = true; }
+        if (arg.startsWith ("flue=")) { g.windwayHeight = value * 0.001; geometryArgs = true; }
+        if (arg.startsWith ("top=")) { g.boreDiameterTop = value * 0.001; geometryArgs = true; }
+        if (arg.startsWith ("foot=")) { g.boreDiameterFoot = value * 0.001; geometryArgs = true; }
     }
 }
 
@@ -869,6 +876,8 @@ int main (int argc, char* argv[])
             windwayArgs (argc, argv, 4, g);
             jetVoicingArgs (argc, argv, 4, voicing);
             voicing.vortexLoss = vortexArg;
+            if (geometryArgs && ! tuneToScale (g, lowestNote (g), true))
+                std::printf ("(retuned for the new fipple: not every tuned note reached)\n");
             const double rate = reader->sampleRate;
             auto steps = planScale (g, voicing, lowestNote (g), 21);  // D up to B in the second octave, as the recordings
             std::vector<float> modelOut;

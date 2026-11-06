@@ -16,11 +16,16 @@ const std::vector<Material>& materials()
 
 Voicing presetVoicing (size_t index)
 {
-    // The recorder's jet band is set a little higher than the whistles' so its second- and third-octave notes
-    // (high Bb, B, C ...) speak; the whistles' defaults give their register changes at ~1 and ~4 kPa.
+    // The recorder's jet band is set higher than the whistles' so its second- and third-octave notes speak at
+    // lower breath (top C at ~3 kPa, C6 at ~0.6 kPa; at 0.035 the low C goes sharp); the whistles' defaults give
+    // their register changes at ~1 and ~4 kPa. One band-pass stage: no silent pressures between the registers.
     Voicing v;
     if (index < presets().size() && presets()[index].chart == FingeringChart::baroqueRecorder)
-        v.jetStrouhal = 0.025f;
+    {
+        v.jetStrouhal = 0.03f;
+        v.jetStages = 1;
+        v.breathNoise = 0.025f;  // A recorder's narrow, smooth windway: a clean tone with little hiss
+    }
     return v;
 }
 
@@ -137,12 +142,15 @@ const std::vector<Geometry>& presets()
                 // the back, all seven front holes, thick walls and a wide windway. Typical dimensions, not a measured
                 // instrument. The sizes of the thumb hole, L3, R1 and R3 come from the tuner (high Bb, high A, the F#
                 // fork and high B); L2's (5 mm) puts the Bb fork in tune; L1's, R2's and R4's are first guesses.
-                auto g = make ("Soprano recorder in C (baroque fingering)", 0.29567, 0.0130, 0.0095,
-                               { { { true, 0.10881, 0.00589 }, { true, 0.12359, 0.00600 }, { true, 0.13189, 0.00503 }, { true, 0.14898, 0.00444 },
-                                   { true, 0.17130, 0.00402 }, { true, 0.20228, 0.00650 }, { true, 0.21735, 0.00553 }, { true, 0.24347, 0.00450 } } },
-                               0.0035, 1.1, 0.0012, 0.0045, 0.0100);
+                auto g = make ("Soprano recorder in C (baroque fingering)", 0.29147, 0.0130, 0.0095,
+                               { { { true, 0.10313, 0.00533 }, { true, 0.11984, 0.00600 }, { true, 0.12810, 0.00503 }, { true, 0.14534, 0.00449 },
+                                   { true, 0.16734, 0.00402 }, { true, 0.19821, 0.00650 }, { true, 0.21303, 0.00547 }, { true, 0.23932, 0.00450 } } },
+                               0.0035, 1.1, 0.0010, 0.0037, 0.0088);  // Window 3.7 x 8.8 mm, as a measured soprano (NMMSD)
                 g.chart = FingeringChart::baroqueRecorder;
-                g.windwayHeight = 0.0009;  // A thin windway lets the jet drive the top notes (WhistleCheck notes/chart)
+                // A short window for the jet's thickness (W/h 3.7, a whistle's ~5) grows the jet less on its way to the
+                // edge: it switches less fully, a purer tone, and the top notes speak at lower breath.
+                // The edge nearly on the jet's centre line: weak even harmonics, as on baroque recorders.
+                g.edgeOffset = 0.00005;
                 g.windwayLength = 0.030;  // The block is longer than a whistle's fipple plug
                 g.bellClosesFoot = true;  // Top C# closes the foot (on the knee); without a bell sensor it stays open.
                 return g;
