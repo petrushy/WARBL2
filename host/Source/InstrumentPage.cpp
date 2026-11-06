@@ -431,6 +431,11 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
                      "acts as soon as the finger lifts).");
 
     addHeading ("Output (breath and hole response: Sensors tab)");
+    addRow ("Breath scale", 0.2, 2.0, 0.01, "x", [&model] { return (double) model.breathScale.load(); },
+            [&model] (double v) { model.breathScale = (float) v; }, false)
+        .setTooltip ("How hard this instrument is blown, as a share of WARBL's breath response (Sensors tab). A recorder takes "
+                     "about half a whistle's pressure (0.7 for the recorder: gentle low notes, top C near full breath), but WARBL's "
+                     "mouthpiece feels the same for both. Only WARBL's breath is scaled, not Play scale or the screen.");
     addRow ("Output level", -30.0, 12.0, 0.5, "dB", [&model] { return (double) model.outputGainDb.load(); },
             [&model] (double v) { model.outputGainDb = (float) v; }, false);
 

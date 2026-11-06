@@ -254,8 +254,12 @@ void SensorsPage::timerCallback()
 
     const float measured = audio.measuredPressure.load();
     breathInfo.setText ("Sensitivity " + juce::String (b.outputMax / std::max (1.0f, b.inputMax - b.inputMin), 2) + "x\n"
-                            + "Now: measured " + juce::String (juce::roundToInt (measured)) + " Pa -> model "
-                            + juce::String (juce::roundToInt (b.map (measured))) + " Pa",
+                            + "Now: measured " + juce::String (juce::roundToInt (measured)) + " Pa -> "
+                            + juce::String (juce::roundToInt (b.map (measured))) + " Pa"
+                            + (std::abs (audio.whistleModel.breathScale.load() - 1.0f) > 0.005f
+                                   ? " x " + juce::String (audio.whistleModel.breathScale.load(), 2) + " (instrument's breath scale) = "
+                                         + juce::String (juce::roundToInt (b.map (measured) * audio.whistleModel.breathScale.load())) + " Pa to the model"
+                                   : juce::String (" to the model")),
                         juce::dontSendNotification);
     const bool physical = audio.holeFingerHeight.load();
     holeInfo.setText (physical ? "Coverage comes from WARBL's hole calibration. Each hole opens by the finger's height and the hole's "

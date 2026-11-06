@@ -144,6 +144,10 @@ struct Voicing
     // Band-pass stages in the jet's response (its preference for frequencies near the Strouhal number): each adds
     // selectivity but also phase shift, which narrows each register's pressure range.
     int jetStages = 2;
+    // How hard this instrument is blown, as a share of WARBL's breath response (Sensors tab): a recorder is blown
+    // about half as hard as a whistle, but WARBL's mouthpiece feels the same for both. Only WARBL's breath is
+    // scaled (not Play scale or playing from the screen, which give the model's own pressures).
+    float breathScale = 1.0f;
 };
 
 // Starting points, tuned (see WhistleGeometry.cpp).

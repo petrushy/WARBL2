@@ -92,6 +92,7 @@ juce::var toVar (const Instrument& instrument)
     set (voicing, "jetGain", v.jetGain);
     set (voicing, "slowJetGrowth", v.slowJetGrowth);
     set (voicing, "jetStages", v.jetStages);
+    set (voicing, "breathScale", v.breathScale);
     root.getDynamicObject()->setProperty ("voicing", voicing);
 
     return root;
@@ -177,6 +178,7 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     // Files from before these existed keep the jet they were made with (the Voicing defaults).
     read (voicing, "jetGain", instrument.voicing.jetGain);
     read (voicing, "slowJetGrowth", instrument.voicing.slowJetGrowth);
+    read (voicing, "breathScale", instrument.voicing.breathScale);
     if (voicing.hasProperty ("jetStages"))
         instrument.voicing.jetStages = juce::jlimit (1, 2, (int) voicing["jetStages"]);
 

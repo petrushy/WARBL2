@@ -186,6 +186,7 @@ void WhistleModel::setVoicing (const Voicing& v)
     jetGain = v.jetGain;
     slowJetGrowth = v.slowJetGrowth;
     jetStages = juce::jlimit (1, 2, v.jetStages);
+    breathScale = v.breathScale;
 }
 
 Voicing WhistleModel::getVoicing() const
@@ -204,6 +205,7 @@ Voicing WhistleModel::getVoicing() const
     v.jetGain = jetGain.load();
     v.slowJetGrowth = slowJetGrowth.load();
     v.jetStages = jetStages.load();
+    v.breathScale = breathScale.load();
     return v;
 }
 

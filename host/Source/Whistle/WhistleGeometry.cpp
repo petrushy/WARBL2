@@ -24,7 +24,14 @@ Voicing presetVoicing (size_t index)
     {
         v.jetStrouhal = 0.03f;
         v.jetStages = 1;
+        // A slow jet grows more (low notes speak from the softest breath, no gap before the octave), a fast one less
+        // (a purer second octave).
+        v.slowJetGrowth = 0.67f;
         v.breathNoise = 0.025f;  // A recorder's narrow, smooth windway: a clean tone with little hiss
+        // Its scale is in tune at ~0.4-0.6 of a whistle's pressures (low C 170 Pa, the whistle's low D 400 Pa), up
+        // to top C at 3.7 kPa: 0.7 of WARBL's breath puts the low notes at a gentle breath and keeps top C in reach
+        // (WARBL's full breath gives ~5.5 kPa).
+        v.breathScale = 0.7f;
     }
     return v;
 }
