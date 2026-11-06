@@ -385,6 +385,19 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
             [&model] (double v) { model.jetStrouhal = (float) v; }, false);
     addRow ("Jet wave speed (x jet speed)", 0.3, 0.9, 0.01, "", [&model] { return (double) model.jetConvection.load(); },
             [&model] (double v) { model.jetConvection = (float) v; }, false);
+    addRow ("Jet gain", 0.5, 2.5, 0.01, "", [&model] { return (double) model.jetGain.load(); },
+            [&model] (double v) { model.jetGain = (float) v; }, false)
+        .setTooltip ("How much the jet amplifies the sound's push on its way across the window (1 = the textbook growth). Higher: "
+                     "the jet swings further across the edge, so the tone gets fuller and squarer, and notes speak more softly.");
+    addRow ("Slow-jet growth", 0.0, 1.0, 0.01, "", [&model] { return (double) model.slowJetGrowth.load(); },
+            [&model] (double v) { model.slowJetGrowth = (float) v; }, false)
+        .setTooltip ("A slowly blown jet amplifies more (more wavelengths fit across the window), a fast one less: soft notes come "
+                     "out rich, like a real whistle's bottom D, and the hard-blown second octave purer. 0 = the same at any "
+                     "speed; 0.67 = thin-jet theory.");
+    addRow ("Jet band-pass stages", 1.0, 2.0, 1.0, "", [&model] { return (double) model.jetStages.load(); },
+            [&model] (double v) { model.jetStages = juce::roundToInt (v); }, false)
+        .setTooltip ("How sharply the jet prefers frequencies near its Strouhal number. 2 = sharper, but its extra phase shift "
+                     "narrows each register and leaves silent pressures between them; 1 = no silent gaps, notes speak more softly.");
     addRow ("Breath noise", 0.0, 1.0, 0.01, "", [&model] { return (double) model.breathNoise.load(); },
             [&model] (double v) { model.breathNoise = (float) v; }, false)
         .setTooltip ("Turbulence where the jet hits the edge. It grows with jet speed and gets brighter as you blow harder, and it "

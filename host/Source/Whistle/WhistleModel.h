@@ -66,6 +66,8 @@ public:
     std::atomic<float> vortexLoss { 1.0f };  // See Voicing
     std::atomic<float> attackChiff { 0.0f };  // See Voicing
     std::atomic<float> fingerGapDamping { 0.0f };  // See Voicing
+    std::atomic<float> jetGain { 1.0f };  // See Voicing
+    std::atomic<float> slowJetGrowth { 0.0f };  // See Voicing
 
     // Sets all of the above that a Voicing holds, or reads them back.
     void setVoicing (const Voicing&);
@@ -75,6 +77,8 @@ public:
     // the window (Pa), and a log of the flow into the bore (m^3/s), both per internal sample.
     float testSource = 0.0f;
     std::vector<float>* windowFlowLog = nullptr;
+    std::vector<float>* jetLog = nullptr;
+    float testJetGain = 1.0f;  // Multiplies the jet's growth across the window  // Per sample: deflection minus edge (m), jet flow (m^3/s), jet drive, vortex drop (Pa)
     float testWindowRadiation = 1.0f, testBodyRadiation = 1.0f;  // Scale what the window / the holes and foot radiate
 
     // For display.
@@ -133,6 +137,8 @@ private:
 
         float windwayHeight = 0.001f, windwayLength = 0.018f, windowLength = 0.005f, windowWidth = 0.008f, edgeOffset = 0.0f;
         float jetGrowth = 1.0f;     // Amplification of the jet's deflection on its way to the edge.
+        float jetGrowthExponent = 0.0f;  // ln of jetGrowth: alpha_i W
+        float referenceJetSpeed = 30.0f;  // m/s: the jet speed whose band centre (Strouhal 0.02) is the lowest note
         float dipoleLength = 0.0f;  // delta_d in the jet-drive pressure.
     };
 
@@ -168,6 +174,9 @@ private:
     float jetB0 = 0.0f, jetA1 = 0.0f, jetA2 = 0.0f;
     std::array<std::array<float, 4>, 3> jetState {};  // x1, x2, y1, y2 per band-pass stage
     int jetFilterCountdown = 0;
+    float jetAmplification = 1.0f;  // Growth across the window at the reference speed (updated with the jet filter)
+    float jetSlowBoost = 0.0f;      // Extra growth of a slow jet, for its long waves (see Voicing::slowJetGrowth)
+    float jetBoostA = 0.0f, jetBoostLow = 0.0f;  // Lowpass that picks out those long waves
     float noiseLow0 = 0.0f, noiseLow = 0.0f, noiseHigh = 0.0f, noiseLowA = 0.0f, noiseHighA = 0.0f, noiseNorm = 1.0f;
     int noiseFilterCountdown = 0;
     std::minstd_rand rng { 12345 };

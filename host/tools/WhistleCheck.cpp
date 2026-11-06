@@ -164,6 +164,22 @@ static void windwayNoiseArg (int argc, char* argv[], Voicing& v)
             v.breathNoise = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getFloatValue();
 }
 
+// The jet's voicing: st=<Strouhal> conv=<convection> noise=<0-1> gain=<jet gain> slow=<slow-jet growth> stages=<1-2>.
+static void jetVoicingArgs (int argc, char* argv[], int from, Voicing& v)
+{
+    for (int i = from; i < argc; ++i)
+    {
+        const juce::String arg (argv[i]);
+        const float value = arg.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+        if (arg.startsWith ("st=")) v.jetStrouhal = value;
+        if (arg.startsWith ("conv=")) v.jetConvection = value;
+        if (arg.startsWith ("noise=")) v.breathNoise = value;
+        if (arg.startsWith ("gain=")) v.jetGain = value;
+        if (arg.startsWith ("slow=")) v.slowJetGrowth = value;
+        if (arg.startsWith ("stages=")) v.jetStages = (int) value;
+    }
+}
+
 // mass=<0-1> friction=<0-1> windway=<length mm>: try the windway's physics; edge=<mm>: the edge offset;
 // vortex=<0-1.5>: the edge vortex loss.
 static void windwayArgs (int argc, char* argv[], int from, Geometry& g)
@@ -851,12 +867,7 @@ int main (int argc, char* argv[])
             auto g = presets()[index];
             auto voicing = presetVoicing (index);
             windwayArgs (argc, argv, 4, g);
-            for (int i = 4; i < argc; ++i)
-            {
-                const juce::String arg (argv[i]);
-                if (arg.startsWith ("st=")) voicing.jetStrouhal = arg.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
-                if (arg.startsWith ("noise=")) voicing.breathNoise = arg.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
-            }
+            jetVoicingArgs (argc, argv, 4, voicing);
             voicing.vortexLoss = vortexArg;
             const double rate = reader->sampleRate;
             auto steps = planScale (g, voicing, lowestNote (g), 21);  // D up to B in the second octave, as the recordings
@@ -1285,6 +1296,100 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "inside")  // inside [preset] [fingering index] [edge= vortex= st=]: the jet and the window flow while a note plays
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        windwayArgs (argc, argv, 3, g);
+        auto voicing = presetVoicing (index);
+        voicing.breathNoise = 0.0f;
+        int which = 0;
+        for (int i = 3; i < argc; ++i)
+        {
+            const juce::String arg (argv[i]);
+            if (arg.containsOnly ("0123456789")) which = arg.getIntValue();
+        }
+        jetVoicingArgs (argc, argv, 3, voicing);
+        voicing.breathNoise = 0.0f;
+        voicing.vortexLoss *= vortexArg;
+        const auto fingerings = lowRegister (g);
+        const auto& c = fingerings[(size_t) juce::jlimit (0, (int) fingerings.size() - 1, which)];
+        std::printf ("%s, %s, edge offset %.2f mm, vortex loss %.2f, Strouhal %.3f, jet gain %.2f, slow-jet growth %.2f, %d stage(s)\n"
+                     "  swing: deflection minus edge over the jet half-width (min/max); sat: share of time |x| > half-width\n"
+                     "  harmonics in dB re H1 of: window flow (into the bore), jet flow, sound out\n\n"
+                     "  Pa     f0 Hz  dBFS   swing min/max  sat    flow H2 H3 H4      jet H2 H3 H4      out H2 H3 H4   drive/vortex H1 Pa\n",
+                     g.name.toRawUTF8(), c.holePattern (g).c_str(), g.edgeOffset * 1000.0, voicing.vortexLoss, voicing.jetStrouhal, voicing.jetGain,
+                     voicing.slowJetGrowth, voicing.jetStages);
+        constexpr double rate = 48000.0;
+        for (double pressure : { 150.0, 250.0, 350.0, 500.0, 600.0, 700.0, 800.0, 900.0, 1050.0, 1200.0, 1500.0 })
+        {
+            WhistleModel model;
+            model.setGeometry (g);
+            model.prepare (rate);
+            model.setVoicing (voicing);
+            std::vector<float> flowLog, jetLog;
+            auto controls = controlsFor (c.openness (g));
+            std::vector<float> out ((size_t) (0.6 * rate), 0.0f);
+            const int block = (int) (rate * 0.002);
+            for (int start = 0; start < (int) out.size(); start += block)
+            {
+                if (start >= (int) (0.4 * rate)) { model.windowFlowLog = &flowLog; model.jetLog = &jetLog; }
+                controls.mouthPressure = (float) (pressure * std::min (1.0, start / (rate * 0.04)));
+                model.setControls (controls);
+                model.render (out.data() + start, std::min (block, (int) out.size() - start));
+            }
+            model.windowFlowLog = nullptr;
+            model.jetLog = nullptr;
+            double clarity = 0.0;
+            const double f0 = measurePitch (out, rate, clarity);
+            if (f0 <= 0.0 || clarity < 0.8)
+            {
+                std::printf ("  %4.0f   (no clear note)\n", pressure);
+                continue;
+            }
+            const double inner = rate * (double) flowLog.size() / (0.2 * rate);
+            auto harmonic = [&] (const std::vector<float>& x, size_t stride, size_t offset, double r, int k)
+            {
+                const size_t n = x.size() / stride;
+                double re = 0.0, im = 0.0;
+                for (size_t i = 0; i < n; ++i)
+                {
+                    const double ph = 2.0 * juce::MathConstants<double>::pi * k * f0 * (double) i / r;
+                    re += x[i * stride + offset] * std::cos (ph);
+                    im += x[i * stride + offset] * std::sin (ph);
+                }
+                return 2.0 * std::hypot (re, im) / (double) n;
+            };
+            const std::vector<float> tail (out.end() - (long) (0.2 * rate), out.end());
+            const float hw = 0.4f * (float) g.windwayHeight;
+            float lo = 1.0e9f, hi = -1.0e9f;
+            size_t saturated = 0;
+            for (size_t i = 0; i < jetLog.size(); i += 4)
+            {
+                lo = std::min (lo, jetLog[i] / hw);
+                hi = std::max (hi, jetLog[i] / hw);
+                saturated += std::abs (jetLog[i]) > hw ? 1 : 0;
+            }
+            double rms = 0.0;
+            for (auto v : tail) rms += (double) v * v;
+            auto rel = [&] (const std::vector<float>& x, size_t stride, size_t offset, double r)
+            {
+                const double h1 = harmonic (x, stride, offset, r, 1);
+                std::printf ("   ");
+                for (int k = 2; k <= 4; ++k)
+                    std::printf (" %3.0f", 20.0 * std::log10 (harmonic (x, stride, offset, r, k) / h1 + 1.0e-9));
+                std::printf ("    ");
+            };
+            std::printf ("  %4.0f  %7.1f %5.1f   %5.2f/%5.2f  %3.0f%%", pressure, f0, 10.0 * std::log10 (rms / (double) tail.size() + 1.0e-12), lo, hi,
+                         100.0 * (double) saturated / (double) (jetLog.size() / 4));
+            rel (flowLog, 1, 0, inner);
+            rel (jetLog, 4, 1, inner);
+            rel (tail, 1, 0, rate);
+            std::printf ("%6.0f /%5.0f\n", harmonic (jetLog, 4, 2, inner, 1), harmonic (jetLog, 4, 3, inner, 1));
+        }
+        return 0;
+    }
+
     if (mode == "radiation")  // radiation [preset] [p=<Pa>]: harmonics from the window and from the holes and foot
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
@@ -1436,6 +1541,8 @@ int main (int argc, char* argv[])
         windwayNoiseArg (argc, argv, voicing);
         voicing.windwayMass = windwayMass;
         voicing.windwayFriction = windwayFriction;
+        jetVoicingArgs (argc, argv, 3, voicing);
+        voicing.vortexLoss *= vortexArg;
         std::printf ("%s: breath swept from 100 to 5000 Pa and back (exponentially), slowly (4 s each way) and fast (1 s).\n"
                      "Which register sounds over which pressures, in the order heard (1 = low register, - = no clear note,\n"
                      "below -40 dBFS or not on a resonance). Going up and coming down differ: flutes have hysteresis. A brief 1\n"
@@ -1854,6 +1961,8 @@ int main (int argc, char* argv[])
         windwayArgs (argc, argv, 3, g);
         scaleVoicing.windwayMass = windwayMass;
         scaleVoicing.windwayFriction = windwayFriction;
+        jetVoicingArgs (argc, argv, 3, scaleVoicing);
+        scaleVoicing.vortexLoss *= vortexArg;
         const double lowest = lowestNote (g);
         const auto planStart = juce::Time::getMillisecondCounterHiRes();
         const auto steps = planScale (g, scaleVoicing, lowest);

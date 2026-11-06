@@ -133,6 +133,17 @@ struct Voicing
     // The viscous resistance of the thin gap under a finger just above a hole, as a multiple of the computed one:
     // 0 = off (a barely lifted finger already lets the hole act), 1 = physical (it leaks almost nothing at first).
     float fingerGapDamping = 0.0f;
+    // The jet's amplification of the sound's push on its way across the window, as a multiple of the computed one
+    // (Rayleigh growth, e^(0.38 W / h)): higher = the jet swings further across the edge, a richer, squarer tone.
+    float jetGain = 1.0f;
+    // How much more a slow jet amplifies (more disturbance wavelengths fit across the window): the growth's
+    // exponent scales as (U_ref / U)^this, U_ref being the jet speed whose band centre is the lowest note. 0 = the
+    // same growth at any speed; 2/3 = a thin jet's long-wave theory. Soft notes come out richer, hard-blown ones
+    // (the second octave) purer.
+    float slowJetGrowth = 0.0f;
+    // Band-pass stages in the jet's response (its preference for frequencies near the Strouhal number): each adds
+    // selectivity but also phase shift, which narrows each register's pressure range.
+    int jetStages = 2;
 };
 
 // Starting points, tuned (see WhistleGeometry.cpp).

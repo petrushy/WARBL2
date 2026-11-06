@@ -17,6 +17,7 @@ constexpr double kMaxHeadSectionLength = 0.008;  // Finer sections where a head 
 constexpr double kListenerDistance = 0.5;  // m in front of the window, for the radiation delays and level.
 constexpr float kEdgeNoise = 0.15f;       // Edge pressure fluctuation at 20 m/s, as a fraction of rho U^2 (Breath noise 1)
 constexpr float kDirectNoise = 1.0f;      // Share of the edge noise radiated straight from the window (at 1)
+constexpr float kMaxSlowdown = 3.0f;  // The slow jet's growth stops rising below a third of the reference speed
 constexpr float kKinematicViscosity = (float) (kAirViscosity / kAirDensity);  // m^2/s
 
 // Amplitude attenuation per metre from viscous and thermal wall losses at frequency hz (tube radius a), as in
@@ -159,6 +160,7 @@ void WhistleModel::resetState()
     for (auto& st : jetState)
         st.fill (0.0f);
     jetFilterCountdown = 0;
+    jetBoostLow = 0.0f;
     for (auto& r : radiation)
         r.fill (0.0f);
     for (auto& d : decimatorBuffer)
@@ -181,6 +183,9 @@ void WhistleModel::setVoicing (const Voicing& v)
     vortexLoss = v.vortexLoss;
     attackChiff = v.attackChiff;
     fingerGapDamping = v.fingerGapDamping;
+    jetGain = v.jetGain;
+    slowJetGrowth = v.slowJetGrowth;
+    jetStages = juce::jlimit (1, 2, v.jetStages);
 }
 
 Voicing WhistleModel::getVoicing() const
@@ -196,6 +201,9 @@ Voicing WhistleModel::getVoicing() const
     v.vortexLoss = vortexLoss.load();
     v.attackChiff = attackChiff.load();
     v.fingerGapDamping = fingerGapDamping.load();
+    v.jetGain = jetGain.load();
+    v.slowJetGrowth = slowJetGrowth.load();
+    v.jetStages = jetStages.load();
     return v;
 }
 
@@ -309,7 +317,9 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
     out.windowLength = (float) g.windowLength;
     out.windowWidth = (float) g.windowWidth;
     out.edgeOffset = (float) g.edgeOffset;
-    out.jetGrowth = (float) std::exp (0.38 * g.windowLength / g.windwayHeight);  // Jet instability growth (alpha_i ~ 0.38/h)
+    out.jetGrowthExponent = (float) (0.38 * g.windowLength / g.windwayHeight);  // Jet instability growth (alpha_i ~ 0.38/h)
+    out.jetGrowth = std::exp (out.jetGrowthExponent);
+    out.referenceJetSpeed = (float) (presetLowestNote (g) * g.windwayHeight / 0.02);
     out.dipoleLength = (float) (4.0 / kPi * std::sqrt (2.0 * g.windwayHeight * g.windowLength));
 }
 
@@ -446,6 +456,17 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
         jetB0 = (float) (alpha / a0);
         jetA1 = (float) (-2.0 * std::cos (w0) / a0);
         jetA2 = (float) ((1.0 - alpha) / a0);
+
+        // Growth exponent alpha_i W at this speed: a slower jet fits more wavelengths of the disturbance into the
+        // window and amplifies it more (limited to 3x slower than the reference, below which the note hardly sounds).
+        const float slow = slowJetGrowth.load (std::memory_order_relaxed);
+        const float exponent = slow > 0.0f ? cfg.jetGrowthExponent * std::pow (std::min (kMaxSlowdown, cfg.referenceJetSpeed / speed), slow)
+                                           : cfg.jetGrowthExponent;
+        // A fast jet grows less at every frequency; a slow one more, but only for long waves (high resonances
+        // lie above its band, where it doesn't amplify: boosting them too makes soft breath squeak).
+        jetAmplification = jetGain.load (std::memory_order_relaxed) * std::exp (std::min (exponent, cfg.jetGrowthExponent));
+        jetSlowBoost = std::exp (std::max (0.0f, exponent - cfg.jetGrowthExponent)) - 1.0f;
+        jetBoostA = (float) (1.0 - std::exp (-w0));  // One-pole lowpass at the band centre
     }
     float filtered = delayed;
     for (int stage = 0; stage < jetStages.load (std::memory_order_relaxed); ++stage)
@@ -460,7 +481,9 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
     }
 
     const float jetHalfWidth = 0.4f * h;
-    const float deflection = cfg.jetGrowth * h * filtered / speed + turbulence * jetHalfWidth * std::min (1.0f, jetSpeed / 20.0f);
+    // The slow jet's extra growth is for long waves (at and below the band centre), not for high resonances.
+    jetBoostLow += jetBoostA * (filtered - jetBoostLow);
+    const float deflection = jetAmplification * h * (filtered + jetSlowBoost * jetBoostLow) / speed + turbulence * jetHalfWidth * std::min (1.0f, jetSpeed / 20.0f);
     const float edge = cfg.edgeOffset + current.edgeShift;  // Where the jet's centre line meets the edge
     const float jetFlow = cfg.windowWidth * jetHalfWidth * jetSpeed * flowShare * std::tanh ((deflection - edge) / jetHalfWidth);
 
@@ -478,6 +501,8 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
     const float jetDrive = rho * cfg.dipoleLength / cfg.windowArea * jetFlowRate;
     const float vortexDrop = -vortexLoss.load (std::memory_order_relaxed) * 0.5f * rho * (windowVelocity / 0.6f) * std::abs (windowVelocity / 0.6f);
     const float source = jetDrive + vortexDrop + edgeNoise + testSource;
+    if (jetLog != nullptr)
+        jetLog->insert (jetLog->end(), { deflection - edge, jetFlow, jetDrive, vortexDrop });
 
     // 3. Window end. The jet's pressure pushes the air in the window (mass M) into the bore:
     //    p_top = source - M dU/dt, with p_top = p+ + p- and U = (p+ - p-) / Z0, solved for the outgoing p+

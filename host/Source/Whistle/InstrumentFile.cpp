@@ -89,6 +89,9 @@ juce::var toVar (const Instrument& instrument)
     set (voicing, "vortexLoss", v.vortexLoss);
     set (voicing, "attackChiff", v.attackChiff);
     set (voicing, "fingerGapDamping", v.fingerGapDamping);
+    set (voicing, "jetGain", v.jetGain);
+    set (voicing, "slowJetGrowth", v.slowJetGrowth);
+    set (voicing, "jetStages", v.jetStages);
     root.getDynamicObject()->setProperty ("voicing", voicing);
 
     return root;
@@ -171,6 +174,11 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     read (voicing, "vortexLoss", instrument.voicing.vortexLoss);
     read (voicing, "attackChiff", instrument.voicing.attackChiff);
     read (voicing, "fingerGapDamping", instrument.voicing.fingerGapDamping);
+    // Files from before these existed keep the jet they were made with (the Voicing defaults).
+    read (voicing, "jetGain", instrument.voicing.jetGain);
+    read (voicing, "slowJetGrowth", instrument.voicing.slowJetGrowth);
+    if (voicing.hasProperty ("jetStages"))
+        instrument.voicing.jetStages = juce::jlimit (1, 2, (int) voicing["jetStages"]);
 
     // Sanity checks: anything that would make the model meaningless.
     auto bad = [&] (bool condition, const char* message)
