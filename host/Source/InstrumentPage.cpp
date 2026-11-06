@@ -154,9 +154,11 @@ void TuningTable::paint (juce::Graphics& g)
     g.drawText ("Fingering", header.removeFromLeft (columns[1]), juce::Justification::centredLeft);
     g.drawText ("Resonance vs. the note (> 10 c highlighted)", header, juce::Justification::centredLeft);
 
+    // Rows shrink if the chart is long, so every note shows.
+    const int rowHeight = entries.empty() ? 19 : juce::jlimit (13, 19, area.getHeight() / (int) entries.size());
     for (const auto& e : entries)
     {
-        auto line = area.removeFromTop (19);
+        auto line = area.removeFromTop (rowHeight);
         // Filled, open and half circles; plugged or unused holes left out.
         juce::String pattern;
         for (auto ch : e.pattern)
@@ -931,5 +933,5 @@ void InstrumentPage::resized()
     liveLabel.setBounds (area.removeFromTop (24));
     area.removeFromTop (8);
     tableTitle.setBounds (area.removeFromTop (22));
-    tuningTable.setBounds (area.removeFromTop (330));
+    tuningTable.setBounds (area);  // The rest: a recorder's chart has 22 notes
 }

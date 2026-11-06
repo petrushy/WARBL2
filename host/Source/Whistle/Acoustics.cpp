@@ -191,19 +191,22 @@ const std::vector<ChartFingering>& chartFor (FingeringChart chart)
     // Recorder: the eight holes by name, LT L1 L2 L3 R1 R2 R3 R4 (fingers = hole indices); a ninth character is
     // the foot (bell). Baroque fingering in C, from the Dolmetsch chart for recorders in C, with its forks; the
     // thumb is pinched ('p', a small crack open) for the second and third octaves.
-    // Each hole's position is set by a note that uses it (R2 by the forked F, the thumb hole by D'': thumb open,
-    // L2 covered). With cross-fingering tuning some hole sizes are set too: R1 by the F# fork and, following the
-    // maker's rule that a hole's position mostly sets its low note and its size its upper note, R3 by E'' and L3
-    // by A''. The other forks and upper notes are left to the geometry.
+    // Each hole's position is set by a note that uses it (R2 by the forked F, the thumb hole by high D: thumb
+    // open, L2 covered). With cross-fingering tuning the hole sizes tune the forks and the upper notes, as a maker
+    // voices them (a hole's position mostly sets its low note, its size its upper notes): R1 by the F# fork, L3
+    // by high A, the thumb hole (every pinched note vents through it) by high Bb and R3 by high B. Top C is left
+    // to the player: it only adds L2 to high B's fingering, and with L2's position held by low B no hole size moves
+    // it apart from high B (it stays ~15 c below, WhistleCheck grid), so a recorder player opens the thumb a
+    // little wider. The other forks and upper notes are left to the geometry.
     static const std::vector<ChartFingering> recorder {
         { "C", "xxxxxxxx", 0, 1, bore },          { "D", "xxxxxxxo", 2, 1, 7 },          { "E", "xxxxxxoo", 4, 1, 6 },
         { "F", "xxxxxoxx", 5, 1, 5 },             { "F#", "xxxxoxxo", 6, 1, none, 4 },   { "G", "xxxxoooo", 7, 1, 4 },
         { "A", "xxxooooo", 9, 1, 3 },             { "Bb", "xxoxxooo", 10, 1 },           { "B", "xxoooooo", 11, 1, 2 },
         { "high C", "xoxooooo", 12, 1, 1 },       { "high D", "ooxooooo", 14, 1, 0 },
-        { "high E", "pxxxxxoo", 16, 2, none, 6 }, { "high F", "pxxxxoxo", 17, 2 },       { "high F#", "pxxxoxoo", 18, 2 },
+        { "high E", "pxxxxxoo", 16, 2 },          { "high F", "pxxxxoxo", 17, 2 },       { "high F#", "pxxxoxoo", 18, 2 },
         { "high G", "pxxxoooo", 19, 2 },          { "high G#", "pxxoxooo", 20, 2 },      { "high A", "pxxooooo", 21, 2, none, 3 },
-        { "high Bb", "pxxooxxo", 22, 2 },         { "high B", "pxxoxxoo", 23, 2 },
-        { "top C", "pxooxxoo", 24, 3 },           { "top C#", "pxoxxoxox", 25, 3 },      { "top D", "pxoxxoxo", 26, 3 },
+        { "high Bb", "pxxooxxo", 22, 2, none, 0 }, { "high B", "pxxoxxoo", 23, 2, none, 6 },
+        { "top C", "pxooxxoo", 24, 3 },                     { "top C#", "pxoxxoxox", 25, 3 },      { "top D", "pxoxxoxo", 26, 3 },
     };
 
     // Härjedalspipa: six holes opened from the bottom, cylindrical bore, in the traditional scale on A#:
@@ -342,89 +345,156 @@ bool tunePositions (Geometry& g, double lowestHz, bool resize = false)
 
 namespace
 {
-// Sets one hole's diameter (positions retuned for each try) so a cross-fingering is in tune.
-// E.g. a smaller top hole vents less, so the covered holes below it pull the cross-fingered note further down.
-bool tuneDiameter (Geometry& g, double lowestHz, const ChartFingering& cross, bool resize)
+// Solves a small linear system A x = b (Gaussian elimination, partial pivoting). False if singular.
+bool solveLinear (std::vector<std::vector<double>> a, std::vector<double> b, std::vector<double>& x)
 {
-    auto& diameter = g.holes[(size_t) ChartFingering::holeFor (g, cross.tunesDiameter)].diameter;
-    const double original = diameter;
-    const Geometry originalGeometry = g;
-    auto crossError = [&] (double d)
+    const size_t n = b.size();
+    for (size_t col = 0; col < n; ++col)
     {
-        diameter = d;
-        if (! tunePositions (g, lowestHz, resize))
-            return 1.0e9;
-        return predictedCents (g, cross, lowestHz);
-    };
-
-    // Scan diameters for a sign change of the error, then bisect.
-    double lo = 0.0, hi = 0.0, errorLo = 0.0;
-    double previousDiameter = 0.0, previousError = 1.0e9;
-    for (double d = std::max (0.0015, 0.2 * original); d <= original * 1.6; d += 0.1 * original)
-    {
-        const double error = crossError (d);
-        if (error < 1.0e8 && previousError < 1.0e8 && (error > 0.0) != (previousError > 0.0))
+        size_t pivot = col;
+        for (size_t row = col + 1; row < n; ++row)
+            if (std::abs (a[row][col]) > std::abs (a[pivot][col]))
+                pivot = row;
+        if (std::abs (a[pivot][col]) < 1.0e-12)
+            return false;
+        std::swap (a[col], a[pivot]);
+        std::swap (b[col], b[pivot]);
+        for (size_t row = col + 1; row < n; ++row)
         {
-            lo = previousDiameter;
-            errorLo = previousError;
-            hi = d;
-            break;
+            const double factor = a[row][col] / a[col][col];
+            for (size_t k = col; k < n; ++k)
+                a[row][k] -= factor * a[col][k];
+            b[row] -= factor * b[col];
         }
-        previousDiameter = d;
-        previousError = error;
     }
-
-    if (hi > 0.0)
+    x.assign (n, 0.0);
+    for (size_t row = n; row-- > 0;)
     {
-        for (int iteration = 0; iteration < 25 && hi - lo > 0.00002; ++iteration)
-        {
-            const double mid = 0.5 * (lo + hi);
-            const double errorMid = crossError (mid);
-            if (errorMid > 1.0e8)
-                break;
-            if ((errorMid > 0.0) == (errorLo > 0.0))
-            {
-                lo = mid;
-                errorLo = errorMid;
-            }
-            else
-            {
-                hi = mid;
-            }
-        }
-        if (std::abs (crossError (0.5 * (lo + hi))) < 5.0)
-            return true;
+        double sum = b[row];
+        for (size_t k = row + 1; k < n; ++k)
+            sum -= a[row][k] * x[k];
+        x[row] = sum / a[row][row];
     }
-
-    // The hole's size alone can't put the cross-fingering in tune: keep it and tune the rest.
-    g = originalGeometry;
-    tunePositions (g, lowestHz, resize);
-    return false;
+    return true;
 }
 } // namespace
 
 bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingerings, bool resizeHoles)
 {
+    // The notes that set a hole's size (one note per hole).
     std::vector<const ChartFingering*> crosses;
+    std::vector<int> holes;
     if (tuneCrossFingerings)
         for (const auto& c : chartFor (g.chart))
-            if (ChartFingering::holeFor (g, c.tunesDiameter) >= 0)
+        {
+            const int hole = ChartFingering::holeFor (g, c.tunesDiameter);
+            if (hole >= 0 && g.holes[(size_t) hole].enabled && std::find (holes.begin(), holes.end(), hole) == holes.end())
+            {
                 crosses.push_back (&c);
+                holes.push_back (hole);
+            }
+        }
 
+    if (! tunePositions (g, lowestHz, resizeHoles))
+        return false;
     if (crosses.empty())
-        return tunePositions (g, lowestHz, resizeHoles);
+        return true;
 
-    // Several cross-fingerings, each with its own hole size: take turns until they all hold.
-    bool ok = true;
-    for (int round = 0; round < (crosses.size() > 1 ? 3 : 1); ++round)
+    // The hole sizes together, by damped Newton steps on their logarithms: the sizes interact (the thumb hole
+    // vents every pinched note; R3 and R4 both move high B and top C), so one at a time doesn't settle. Every
+    // trial gets its positions retuned, so the notes that set positions stay in tune throughout.
+    const size_t n = crosses.size();
+    auto errors = [&] (Geometry& trial, std::vector<double>& out)
     {
-        ok = true;
-        for (const auto* cross : crosses)
-            ok = tuneDiameter (g, lowestHz, *cross, resizeHoles) && ok;
+        if (! tunePositions (trial, lowestHz, resizeHoles))
+            return false;
+        out.resize (n);
+        for (size_t i = 0; i < n; ++i)
+            out[i] = predictedCents (trial, *crosses[i], lowestHz);
+        return true;
+    };
+    auto cost = [] (const std::vector<double>& e)
+    {
+        double sum = 0.0;
+        for (double v : e)
+            sum += v * v;
+        return sum;
+    };
+
+    std::vector<double> error;
+    if (! errors (g, error))
+        return false;
+    double damping = 0.01;
+    for (int iteration = 0; iteration < 15; ++iteration)
+    {
+        double worst = 0.0;
+        for (double v : error)
+            worst = std::max (worst, std::abs (v));
+        if (worst < 1.0)
+            break;
+
+        // Cents per unit of log diameter, by trying each hole 5 % wider.
+        std::vector<std::vector<double>> jacobian (n, std::vector<double> (n, 0.0));
+        bool ok = true;
+        for (size_t k = 0; k < n && ok; ++k)
+        {
+            auto trial = g;
+            trial.holes[(size_t) holes[k]].diameter *= std::exp (0.05);
+            std::vector<double> moved;
+            ok = errors (trial, moved);
+            for (size_t i = 0; ok && i < n; ++i)
+                jacobian[i][k] = (moved[i] - error[i]) / 0.05;
+        }
+        if (! ok)
+            break;
+
+        // Levenberg-Marquardt: (J'J + damping diag) step = -J'e, with more damping while a step doesn't help.
+        bool improved = false;
+        for (int attempt = 0; attempt < 6 && ! improved; ++attempt)
+        {
+            std::vector<std::vector<double>> normal (n, std::vector<double> (n, 0.0));
+            std::vector<double> gradient (n, 0.0), step;
+            for (size_t r = 0; r < n; ++r)
+            {
+                for (size_t c = 0; c < n; ++c)
+                    for (size_t i = 0; i < n; ++i)
+                        normal[r][c] += jacobian[i][r] * jacobian[i][c];
+                for (size_t i = 0; i < n; ++i)
+                    gradient[r] -= jacobian[i][r] * error[i];
+            }
+            for (size_t r = 0; r < n; ++r)
+                normal[r][r] *= 1.0 + damping;
+            if (! solveLinear (normal, gradient, step))
+                break;
+
+            auto trial = g;
+            for (size_t k = 0; k < n; ++k)
+            {
+                auto& hole = trial.holes[(size_t) holes[k]];
+                const double widest = 0.85 * 2.0 * trial.radiusAt (hole.position);
+                hole.diameter = juce::jlimit (0.0025, widest, hole.diameter * std::exp (juce::jlimit (-0.3, 0.3, step[k])));
+            }
+            std::vector<double> trialError;
+            if (errors (trial, trialError) && cost (trialError) < cost (error))
+            {
+                g = trial;
+                error = trialError;
+                damping = std::max (1.0e-4, damping / 3.0);
+                improved = true;
+            }
+            else
+            {
+                damping *= 5.0;
+            }
+        }
+        if (! improved)
+            break;
     }
-    for (const auto* cross : crosses)
-        ok = ok && std::abs (predictedCents (g, *cross, lowestHz)) < 5.0;
-    return ok;
+
+    for (double v : error)
+        if (std::abs (v) > 5.0)
+            return false;
+    return true;
 }
 
 } // namespace whistle

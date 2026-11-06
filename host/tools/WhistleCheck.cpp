@@ -1296,6 +1296,96 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "grid")  // grid [preset] <hole a> <hole b> <note> <note>: two notes' tuning over two holes' sizes (positions retuned)
+    {
+        const auto index = (size_t) presetArg (argv[2]);
+        auto g = presets()[index];
+        const int a = juce::String (argv[3]).getIntValue(), b = juce::String (argv[4]).getIntValue();
+        const auto& chart = chartFor (g.chart);
+        const ChartFingering* notes[2] {};
+        for (const auto& c : chart)
+            for (int k = 0; k < 2; ++k)
+                if (juce::String (c.name) == juce::String (argv[5 + k]))
+                    notes[k] = &c;
+        if (notes[0] == nullptr || notes[1] == nullptr)
+            return 1;
+        std::printf ("%s and %s (cents) over %s (rows) and %s (columns) sizes, x of now\n       ", notes[0]->name, notes[1]->name, kHoleNames[(size_t) a], kHoleNames[(size_t) b]);
+        const double scales[] = { 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3 };
+        for (double sb : scales) std::printf ("   x%.1f     ", sb);
+        std::printf ("\n");
+        for (double sa : scales)
+        {
+            std::printf ("  x%.1f ", sa);
+            for (double sb : scales)
+            {
+                auto t = g;
+                t.holes[(size_t) a].diameter *= sa;
+                t.holes[(size_t) b].diameter *= sb;
+                if (! tuneToScale (t, lowestNote (g), false))
+                    std::printf ("     -      ");
+                else
+                    std::printf ("  %+4.0f/%+4.0f ", predictedCents (t, *notes[0], lowestNote (g)), predictedCents (t, *notes[1], lowestNote (g)));
+            }
+            std::printf ("\n");
+        }
+        return 0;
+    }
+
+    if (mode == "tunetry")  // tunetry [preset] [top=<mm>] [foot=<mm>]: tune with hole sizes (bore changed), every chart note's tuning
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        for (int i = 3; i < argc; ++i)
+        {
+            const juce::String arg (argv[i]);
+            const double value = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue() * 0.001;
+            if (arg.startsWith ("top=")) g.boreDiameterTop = value;
+            if (arg.startsWith ("foot=")) g.boreDiameterFoot = value;
+        }
+        const bool ok = tuneToScale (g, lowestNote (g), true);
+        std::printf ("%s, bore %.1f -> %.1f mm: %s\n ", g.name.toRawUTF8(), g.boreDiameterTop * 1000.0, g.boreDiameterFoot * 1000.0, ok ? "tuned" : "NOT ALL IN TUNE");
+        for (const auto& c : chartFor (g.chart))
+            std::printf (" %s %+.0f", c.name, predictedCents (g, c, lowestNote (g)));
+        std::printf ("\n  sizes (mm):");
+        for (const auto& h : g.holes)
+            std::printf (" %.2f", h.diameter * 1000.0);
+        std::printf ("\n");
+        return 0;
+    }
+
+    if (mode == "sizes")  // sizes [preset]: how each hole's size moves the upper notes (positions retuned), in cents per +10 %
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        const double lowest = lowestNote (g);
+        tuneToScale (g, lowest, false);
+        const auto& chart = chartFor (g.chart);
+        std::printf ("%s: cents each chart note moves when one hole is made 10 %% wider (positions retuned)\n  %-9s now  ", g.name.toRawUTF8(), "note");
+        for (int h = 0; h < kNumHoles; ++h)
+            if (g.holes[(size_t) h].enabled)
+                std::printf ("%6s", kHoleNames[(size_t) h]);
+        std::printf ("\n");
+        std::vector<std::vector<double>> moves (chart.size());
+        for (int h = 0; h < kNumHoles; ++h)
+        {
+            if (! g.holes[(size_t) h].enabled)
+                continue;
+            auto wider = g;
+            wider.holes[(size_t) h].diameter *= 1.1;
+            const bool ok = tuneToScale (wider, lowest, false);
+            for (size_t k = 0; k < chart.size(); ++k)
+                moves[k].push_back (ok ? predictedCents (wider, chart[k], lowest) - predictedCents (g, chart[k], lowest) : 999.0);
+        }
+        for (size_t k = 0; k < chart.size(); ++k)
+        {
+            std::printf ("  %-9s %+4.0f  ", chart[k].name, predictedCents (g, chart[k], lowest));
+            for (double m : moves[k])
+                std::printf ("%+6.1f", m);
+            std::printf ("\n");
+        }
+        return 0;
+    }
+
     if (mode == "inside")  // inside [preset] [fingering index] [edge= vortex= st=]: the jet and the window flow while a note plays
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);

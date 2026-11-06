@@ -135,10 +135,11 @@ const std::vector<Geometry>& presets()
             {
                 // Soprano recorder in C with baroque fingering: reverse-conical bore (wide at the top), thumb hole on
                 // the back, all seven front holes, thick walls and a wide windway. Typical dimensions, not a measured
-                // instrument. R1, R3 and L3's sizes come from the tuner (F# fork, E'' and A''); the others are first guesses.
-                auto g = make ("Soprano recorder in C (baroque fingering)", 0.29545, 0.0130, 0.0095,
-                               { { { true, 0.10920, 0.00600 }, { true, 0.12361, 0.00600 }, { true, 0.13570, 0.00600 }, { true, 0.14961, 0.00455 },
-                                   { true, 0.17122, 0.00403 }, { true, 0.20204, 0.00650 }, { true, 0.21228, 0.00453 }, { true, 0.24317, 0.00450 } } },
+                // instrument. The sizes of the thumb hole, L3, R1 and R3 come from the tuner (high Bb, high A, the F#
+                // fork and high B); L2's (5 mm) puts the Bb fork in tune; L1's, R2's and R4's are first guesses.
+                auto g = make ("Soprano recorder in C (baroque fingering)", 0.29567, 0.0130, 0.0095,
+                               { { { true, 0.10881, 0.00589 }, { true, 0.12359, 0.00600 }, { true, 0.13189, 0.00503 }, { true, 0.14898, 0.00444 },
+                                   { true, 0.17130, 0.00402 }, { true, 0.20228, 0.00650 }, { true, 0.21735, 0.00553 }, { true, 0.24347, 0.00450 } } },
                                0.0035, 1.1, 0.0012, 0.0045, 0.0100);
                 g.chart = FingeringChart::baroqueRecorder;
                 g.windwayHeight = 0.0009;  // A thin windway lets the jet drive the top notes (WhistleCheck notes/chart)
