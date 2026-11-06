@@ -82,13 +82,13 @@ void CurveView::paint (juce::Graphics& g)
 //==============================================================================
 SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
 {
-    for (auto* l : { &breathTitle, &holeTitle, &tiltTitle })
+    for (auto* l : { &breathTitle, &holeTitle, &tiltTitle, &thumbTitle })
     {
         l->setColour (juce::Label::textColourId, accent);
         l->setFont (juce::FontOptions (16.0f, juce::Font::bold));
         addAndMakeVisible (l);
     }
-    for (auto* l : { &breathInfo, &holeInfo, &tiltInfo })
+    for (auto* l : { &breathInfo, &holeInfo, &tiltInfo, &thumbInfo })
     {
         l->setColour (juce::Label::textColourId, text);
         l->setJustificationType (juce::Justification::topLeft);
@@ -150,12 +150,11 @@ SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
     holeCurve.curve = [this, shownHole] (float x) { return audio.holeResponse().closedness (x, audio.fingerHole (shownHole())); };
     holeCurve.points = [this]
     {
-        const auto response = audio.holeResponse();
         std::vector<CurveView::Point> p;
         for (int i = 0; i < whistle::kNumHoles; ++i)
         {
             const float x = audio.measuredCoverage[(size_t) i].load();
-            p.push_back ({ x, kHoleNames[(size_t) i], std::clamp (response.closedness (x, audio.fingerHole (i)), 0.0f, 1.0f) });
+            p.push_back ({ x, kHoleNames[(size_t) i], std::clamp (audio.holeClosedness (i, x), 0.0f, 1.0f) });
         }
         p.push_back ({ audio.measuredBellCoverage.load(), "Bell" });
         return p;
@@ -182,6 +181,22 @@ SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
     };
     addAndMakeVisible (breathDefaults);
     addAndMakeVisible (holeDefaults);
+
+    // Thumb
+    thumbTitle.setTooltip ("A recorder's thumb pinch uncovers a strip of the hole at the rim while the thumb stays over the "
+                           "sensor, so WARBL still reads it as mostly covered. With its own response the thumb's open area follows "
+                           "the coverage in a straight line (curve 64) instead of the fingers' S-curve, which hears a pinch as "
+                           "nearly closed. The chart is tuned for a pinch 25 % open.");
+    thumbToggle.setColour (juce::ToggleButton::textColourId, text);
+    thumbToggle.setToggleState (audio.thumbOwn.load(), juce::dontSendNotification);
+    thumbToggle.onClick = [this] { audio.thumbOwn = thumbToggle.getToggleState(); };
+    addAndMakeVisible (thumbToggle);
+    addRow (thumbRows, "Thumb open below", 0.0, 0.6, 0.01, "", audio.thumbOpenBelow)
+        .setTooltip ("Coverage below which the thumb hole is fully open.");
+    addRow (thumbRows, "Thumb closed at", 0.3, 1.3, 0.01, "", audio.thumbClosedAt)
+        .setTooltip ("Coverage at which the thumb hole is fully closed. Lower: a pinch reads as more closed.");
+    addRow (thumbRows, "Thumb curve (64 = straight)", 0.0, 127.0, 1.0, "", audio.thumbCurve)
+        .setTooltip ("Above 64 the hole stays more open as the thumb covers it (a pinch reads as more open), below 64 it closes sooner.");
 
     // Tilt
     tiltTitle.setTooltip ("WARBL's elevation shifts where the jet meets the edge, as if the whistle's voicing were slightly "
@@ -256,6 +271,16 @@ void SensorsPage::timerCallback()
                                           : juce::String ("unchanged (off)")),
                       juce::dontSendNotification);
 
+    {
+        const float coverage = audio.measuredCoverage[0].load();
+        const float open = 1.0f - std::clamp (audio.holeClosedness (0, coverage), 0.0f, 1.0f);
+        thumbInfo.setText ("Thumb now: coverage " + juce::String (coverage, 2) + " -> " + juce::String (juce::roundToInt (100.0f * open))
+                               + " % open. The recorder's chart pinches to 25 %; each 15 % more makes the high notes ~23 c sharper.",
+                           juce::dontSendNotification);
+        for (auto& row : thumbRows)
+            row.slider->setEnabled (audio.thumbOwn.load());
+    }
+
     holeRows[2].slider->setEnabled (! physical);  // Curve
     holeRows[3].slider->setEnabled (! physical);  // Centre
     holeRows[4].slider->setEnabled (physical);    // Finger range
@@ -311,5 +336,19 @@ void SensorsPage::resized()
     };
 
     layout (left, breathTitle, breathDefaults, breathRows, breathInfo, breathCurve, nullptr);
+    // Thumb, at the bottom of the holes column.
+    auto thumbArea = right.removeFromBottom (28 + 26 * (int) thumbRows.size() + 40);
+    right.removeFromBottom (8);
+    auto thumbTop = thumbArea.removeFromTop (28);
+    thumbToggle.setBounds (thumbTop.removeFromRight (130));
+    thumbTitle.setBounds (thumbTop);
+    for (auto& row : thumbRows)
+    {
+        auto line = thumbArea.removeFromTop (26);
+        row.label->setBounds (line.removeFromLeft (190));
+        row.slider->setBounds (line);
+    }
+    thumbInfo.setBounds (thumbArea);
+
     layout (right, holeTitle, holeDefaults, holeRows, holeInfo, holeCurve, &holeShape);
 }

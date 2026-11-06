@@ -184,6 +184,7 @@ response::Hole AudioEngine::holeResponse() const
 whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& frame)
 {
     const auto holes = holeResponse();
+    const auto thumb = thumbResponse();
     whistle::Controls c;
     for (int hole = 0; hole < whistle::kNumHoles; ++hole)
     {
@@ -191,7 +192,7 @@ whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& fram
         const float span = (float) std::max (1, covered[sensor].load() - baseline[sensor].load());
         const float coverage = ((float) frame.holes[sensor] - (float) baseline[sensor].load()) / span;
         measuredCoverage[(size_t) hole] = coverage;
-        c.openness[(size_t) hole] = 1.0f - holes.closedness (coverage, fingerHole (hole));
+        c.openness[(size_t) hole] = 1.0f - (hole == 0 && thumb.own ? thumb.closedness (coverage) : holes.closedness (coverage, fingerHole (hole)));
     }
 
     // The bell sensor; the model only uses it if the instrument lets it close the foot.

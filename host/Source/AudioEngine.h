@@ -47,6 +47,18 @@ public:
     std::atomic<bool> holeSCurve { response::Hole().sCurve };
     std::atomic<bool> holeFingerHeight { response::Hole().fingerHeight };
     std::atomic<float> holeFingerRange { response::Hole().fingerRange };
+    // The thumb hole's own response (see response::Thumb); set on the message thread.
+    std::atomic<bool> thumbOwn { response::Thumb().own };
+    std::atomic<float> thumbOpenBelow { response::Thumb().openBelow }, thumbClosedAt { response::Thumb().closedAt },
+        thumbCurve { response::Thumb().curve };
+    response::Thumb thumbResponse() const { return { thumbOwn.load(), thumbOpenBelow.load(), thumbClosedAt.load(), thumbCurve.load() }; }
+    // How closed a hole is for its coverage (the thumb by its own response if set).
+    float holeClosedness (int hole, float coverage) const
+    {
+        if (hole == 0 && thumbOwn.load())
+            return thumbResponse().closedness (coverage);
+        return holeResponse().closedness (coverage, fingerHole (hole));
+    }
     // Tilt aims the jet (see response::Tilt); set on the message thread.
     std::atomic<bool> tiltEnabled { response::Tilt().enabled }, tiltInvert { response::Tilt().invert };
     std::atomic<float> tiltZero { response::Tilt().zero }, tiltDeadZone { response::Tilt().deadZone },

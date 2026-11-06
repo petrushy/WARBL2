@@ -101,6 +101,23 @@ struct Hole
     }
 };
 
+// The thumb hole (recorders): a pinch slides the thumb so it uncovers a strip of the hole at the rim, rather than
+// lifting off it as a finger does, and the thumb stays close over the sensor. The sensor still reads most of the
+// hole as covered (a half-uncovered hole reads ~0.5-0.8), which the fingers' S-curve would treat as nearly closed,
+// so the thumb has its own response: by default the open area follows the coverage in a straight line.
+struct Thumb
+{
+    bool own = true;          // false: the thumb uses the fingers' response
+    float openBelow = 0.05f;  // Coverage below which the hole is fully open
+    float closedAt = 1.0f;    // Coverage at which it is fully closed
+    float curve = 64.0f;      // Power curve on WARBL's 0-127 scale, 64 = straight (open area = 1 - coverage)
+
+    float closedness (float coverage) const
+    {
+        return applyCurve ((coverage - openBelow) / std::max (0.01f, closedAt - openBelow), curve);
+    }
+};
+
 // Tilt aims the jet: WARBL's elevation (degrees, from the accelerometer) shifts where the jet meets the edge, as
 // if the whistle's voicing were slightly flexible. A real fipple flute is rigid; this is an extra control, and the
 // physics still decides what it does (mostly the balance of even and odd harmonics). Zeroed at the player's
