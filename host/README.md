@@ -193,6 +193,15 @@ Over Bluetooth, WARBL can only send at each connection event, every 7.5–15 ms 
 
 The transport adds about one connection interval, as for any Bluetooth MIDI. Frames then arrive in bursts, and **Smooth Bluetooth** (Monitor tab, on by default) plays them with their own 2 ms spacing, delayed just enough to absorb the bursts (about one more interval, shown as "smoothing +… ms"); off, each burst is applied as it arrives (lower delay, steppier breath and fingers). The Monitor shows the frames per batch and the batch interval. **as Bluetooth** makes the built-in simulator send batches every 15 ms through the same encoder and decoder (`--bluetooth` on the command line).
 
+## Comparing with real whistles
+
+`WhistleCheck analyse <file.wav> [<preset> [edge=<mm>] [vortex=] [st=] [noise=]]` splits a recorded scale into its notes and measures each one: pitch and its wobble, level, attack, spectral centroid, harmonics 2-10 relative to the fundamental, and the noise floor between the harmonics in four bands; then averages per octave. With a preset, the model plays the same scale (D up to B in the second octave, at the pressures where it is in tune) and its sound goes through the same analysis. Recordings are in `tools/Real-examples/` (laptop microphone, so trust patterns more than absolute numbers, especially the noise).
+
+Findings (2026-11-06, Goldie and Löfberg high D, Goldie low D):
+- **Low octave: the model was thin.** The real whistles' second harmonic averages −12 to −16 dB re the fundamental (the bottom D's −2 to −3 dB), the model's −21 dB, with odd harmonics dominating (hollow). An edge offset of 0.2 mm instead of 0.1 gives −15 dB with the other harmonics still matching; every scale note still plays, the octave breaks move up ~5 %, and a short unsettled zone appears just below each break.
+- **Second octave: the model was bright at its in-tune pressures** (H2/H3 about −22/−16 dB against the real −31/−31), but just above its break it is as pure as the real whistles (D at 1300 Pa: −32/−31); its odd harmonics grow quickly with breath. The model's second octave is flat when blown gently and needs more breath to reach pitch, where the real Goldie played it pure and 12-21 cents sharp. Raising the second octave's gentle-breath pitch (the jet's phase, or the octave's tuning) would let it be played purer.
+- **Breath noise:** the model's is up to 5-10 dB above the recordings between the harmonics (weak evidence: the laptop microphone may suppress noise).
+
 ## Recording a session
 
 **Record** on the Monitor tab (or `--record` on the command line) saves what you play into `~/Downloads/WARBL Stream recordings/`: the sound as you hear it (stereo WAV) and every sensor frame (CSV: device and arrival time, sequence number, the nine raw hole readings, raw pressure, flags), with the instrument, the Sensors settings and WARBL's calibration in the CSV's header. That is enough to replay a performance through the model offline and find out what made a glitch. Press it again to stop; the files are named by date and time.

@@ -644,6 +644,230 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "analyse")  // analyse <file.wav> [<preset> [p=<Pa>]]: a recorded scale note by note; with a preset, the model's too
+    {
+        if (argc < 3)
+        {
+            std::printf ("analyse <file.wav> [<preset>]\n");
+            return 1;
+        }
+        struct NoteAnalysis
+        {
+            double start = 0.0, length = 0.0, hz = 0.0, cents = 0.0, wobble = 0.0, levelDb = 0.0, centroid = 0.0, attackMs = 0.0;
+            std::array<double, 13> harmonics {};  // dB re the fundamental, 1..12
+            std::array<double, 4> noise {};       // dB re the fundamental: median between harmonics in 1-2, 2-4, 4-8, 8-12 kHz
+        };
+
+        // Note by note: frames every 10 ms (40 ms windows) with level and pitch; runs of steady pitch are notes.
+        auto analyse = [] (const std::vector<float>& x, double rate)
+        {
+            const auto hop = (size_t) (0.01 * rate), window = (size_t) (0.04 * rate);
+            struct FrameInfo { double level, hz; };
+            std::vector<FrameInfo> frames;
+            const int minLag = (int) (rate / 2500.0), maxLag = (int) (rate / 140.0);
+            for (size_t start = 0; start + window + (size_t) maxLag + 1 < x.size(); start += hop)
+            {
+                double energy = 0.0;
+                for (size_t i = 0; i < window; ++i)
+                    energy += (double) x[start + i] * x[start + i];
+                const double level = 10.0 * std::log10 (energy / (double) window + 1e-20);
+                // Normalised autocorrelation, first peak near the best one.
+                std::vector<double> r ((size_t) maxLag + 2, 0.0);
+                double best = 0.0;
+                for (int lag = minLag; lag <= maxLag + 1; ++lag)
+                {
+                    double sum = 0.0, e2 = 0.0;
+                    for (size_t i = 0; i < window; i += 2)
+                    {
+                        sum += (double) x[start + i] * x[start + i + (size_t) lag];
+                        e2 += (double) x[start + i + (size_t) lag] * x[start + i + (size_t) lag];
+                    }
+                    r[(size_t) lag] = sum / std::sqrt (energy * 0.5 * e2 + 1e-30);
+                    if (lag <= maxLag)
+                        best = std::max (best, r[(size_t) lag]);
+                }
+                double hz = 0.0;
+                if (best > 0.85)
+                    for (int lag = minLag + 1; lag <= maxLag; ++lag)
+                        if (r[(size_t) lag] >= 0.92 * best && r[(size_t) lag] >= r[(size_t) lag - 1] && r[(size_t) lag] >= r[(size_t) lag + 1])
+                        {
+                            const double den = r[(size_t) lag - 1] - 2.0 * r[(size_t) lag] + r[(size_t) lag + 1];
+                            const double off = den < 0.0 ? 0.5 * (r[(size_t) lag - 1] - r[(size_t) lag + 1]) / den : 0.0;
+                            hz = rate / (lag + off);
+                            break;
+                        }
+                frames.push_back ({ level, hz });
+            }
+            double loudest = -200.0;
+            for (const auto& f : frames)
+                loudest = std::max (loudest, f.level);
+
+            std::vector<NoteAnalysis> notes;
+            size_t i = 0;
+            while (i < frames.size())
+            {
+                if (frames[i].hz <= 0.0 || frames[i].level < loudest - 35.0)
+                {
+                    ++i;
+                    continue;
+                }
+                size_t j = i + 1;
+                while (j < frames.size() && frames[j].hz > 0.0 && frames[j].level > loudest - 35.0
+                       && std::abs (1200.0 * std::log2 (frames[j].hz / frames[i].hz)) < 60.0)
+                    ++j;
+                if (j - i >= 20)  // At least 200 ms
+                {
+                    NoteAnalysis n;
+                    n.start = (double) i * (double) hop / rate;
+                    n.length = (double) (j - i) * (double) hop / rate;
+                    // Pitch and level from the middle 60 %.
+                    const size_t a0 = i + (j - i) / 5, a1 = j - (j - i) / 5;
+                    std::vector<double> pitches;
+                    double levelSum = 0.0;
+                    for (size_t k = a0; k < a1; ++k)
+                    {
+                        pitches.push_back (frames[k].hz);
+                        levelSum += frames[k].level;
+                    }
+                    std::sort (pitches.begin(), pitches.end());
+                    n.hz = pitches[pitches.size() / 2];
+                    double var = 0.0;
+                    for (double p : pitches)
+                        var += std::pow (1200.0 * std::log2 (p / n.hz), 2.0);
+                    n.wobble = std::sqrt (var / (double) pitches.size());
+                    n.levelDb = levelSum / (double) (a1 - a0);
+                    const double midi = 69.0 + 12.0 * std::log2 (n.hz / 440.0);
+                    n.cents = (midi - std::round (midi)) * 100.0;
+                    // Attack: from 10 % to 90 % of the steady level, looking back from the note's start.
+                    size_t onset = i;
+                    while (onset > 0 && frames[onset - 1].level > n.levelDb - 20.0 && frames[onset - 1].level < frames[onset].level + 0.5)
+                        --onset;
+                    size_t reach = onset;
+                    while (reach < j && frames[reach].level < n.levelDb - 0.9)
+                        ++reach;
+                    n.attackMs = (double) (reach - onset) * 10.0;
+
+                    // Spectrum of the middle part (Hann, up to 2^15 samples).
+                    constexpr int order = 15;
+                    const size_t fftSize = (size_t) 1 << order;
+                    const size_t from = a0 * hop, to = std::min (x.size(), a1 * hop + window);
+                    const size_t length = std::min (fftSize, to - from);
+                    std::vector<float> buffer (2 * fftSize, 0.0f);
+                    for (size_t k = 0; k < length; ++k)
+                        buffer[k] = x[from + k] * (float) (0.5 - 0.5 * std::cos (2.0 * juce::MathConstants<double>::pi * (double) k / (double) length));
+                    juce::dsp::FFT fft (order);
+                    fft.performFrequencyOnlyForwardTransform (buffer.data());
+                    const double binHz = rate / (double) fftSize;
+                    auto peakDb = [&] (double hz)
+                    {
+                        const int lo = (int) (hz * 0.985 / binHz), hi = (int) (hz * 1.015 / binHz) + 1;
+                        double peak = 1e-12;
+                        for (int b = std::max (1, lo); b <= hi && b < (int) fftSize / 2; ++b)
+                            peak = std::max (peak, (double) buffer[(size_t) b]);
+                        return 20.0 * std::log10 (peak);
+                    };
+                    const double h1 = peakDb (n.hz);
+                    for (int k = 1; k <= 12; ++k)
+                        n.harmonics[(size_t) k] = k * n.hz < rate * 0.45 ? peakDb (k * n.hz) - h1 : -120.0;
+                    // Noise: median magnitude in bins away from the harmonics, per band.
+                    const double bands[5] = { 1000.0, 2000.0, 4000.0, 8000.0, 12000.0 };
+                    for (int band = 0; band < 4; ++band)
+                    {
+                        std::vector<double> mags;
+                        for (int b = (int) (bands[band] / binHz); b < (int) (bands[band + 1] / binHz); ++b)
+                        {
+                            const double frac = std::fmod (b * binHz / n.hz, 1.0);
+                            if (frac > 0.3 && frac < 0.7)
+                                mags.push_back (buffer[(size_t) b]);
+                        }
+                        std::sort (mags.begin(), mags.end());
+                        n.noise[(size_t) band] = mags.empty() ? -120.0 : 20.0 * std::log10 (mags[mags.size() / 2] + 1e-12) - h1;
+                    }
+                    double num = 0.0, den = 0.0;
+                    for (int b = 1; b < (int) (8000.0 / binHz); ++b)
+                    {
+                        const double m = (double) buffer[(size_t) b] * buffer[(size_t) b];
+                        num += m * b * binHz;
+                        den += m;
+                    }
+                    n.centroid = num / (den + 1e-30);
+                    notes.push_back (n);
+                }
+                i = j;
+            }
+            return notes;
+        };
+
+        auto print = [] (const char* title, const std::vector<NoteAnalysis>& notes)
+        {
+            std::printf ("%s\n  note        Hz  cents wobble  level  attack centroid   H2  H3  H4  H5  H6  H7  H8  H9 H10 |  noise 1-2k 2-4k 4-8k 8-12k\n", title);
+            for (const auto& n : notes)
+            {
+                std::printf ("  %-4s %8.1f %+5.0f %5.1fc %5.1fdB %5.0fms %6.0fHz ", noteName (n.hz).c_str(), n.hz, n.cents, n.wobble, n.levelDb,
+                             n.attackMs, n.centroid);
+                for (int k = 2; k <= 10; ++k)
+                    std::printf ("%4.0f", n.harmonics[(size_t) k]);
+                std::printf (" | %10.0f %4.0f %4.0f %5.0f\n", n.noise[0], n.noise[1], n.noise[2], n.noise[3]);
+            }
+            // Averages per octave (the second from 1.9 x the first note), in dB re the fundamental; brightness as
+            // the centroid over the fundamental.
+            for (int octave = 0; octave < 2 && ! notes.empty(); ++octave)
+            {
+                std::array<double, 6> sum {};
+                double bright = 0.0, noise = 0.0;
+                int count = 0;
+                for (const auto& n : notes)
+                    if ((n.hz >= 1.9 * notes.front().hz) == (octave == 1))
+                    {
+                        for (int k = 2; k <= 5; ++k)
+                            sum[(size_t) k] += n.harmonics[(size_t) k];
+                        bright += n.centroid / n.hz;
+                        noise += n.noise[1];
+                        ++count;
+                    }
+                if (count > 0)
+                    std::printf ("  average, octave %d (%d notes): H2 %5.1f  H3 %5.1f  H4 %5.1f  H5 %5.1f   centroid %.2f x f0   noise 2-4k %5.1f\n",
+                                 octave + 1, count, sum[2] / count, sum[3] / count, sum[4] / count, sum[5] / count, bright / count, noise / count);
+            }
+        };
+
+        juce::AudioFormatManager formats;
+        formats.registerBasicFormats();
+        const juce::File file = juce::File::getCurrentWorkingDirectory().getChildFile (juce::String::fromUTF8 (argv[2]));
+        std::unique_ptr<juce::AudioFormatReader> reader (formats.createReaderFor (file));
+        if (reader == nullptr)
+        {
+            std::printf ("Can't read %s\n", argv[2]);
+            return 1;
+        }
+        juce::AudioBuffer<float> audio ((int) reader->numChannels, (int) reader->lengthInSamples);
+        reader->read (&audio, 0, (int) reader->lengthInSamples, 0, true, true);
+        std::vector<float> recorded (audio.getReadPointer (0), audio.getReadPointer (0) + audio.getNumSamples());
+        print ((file.getFileName() + " (recording)").toRawUTF8(), analyse (recorded, reader->sampleRate));
+
+        if (argc > 3)
+        {
+            const auto index = (size_t) presetArg (argv[3]);
+            auto g = presets()[index];
+            auto voicing = presetVoicing (index);
+            windwayArgs (argc, argv, 4, g);
+            for (int i = 4; i < argc; ++i)
+            {
+                const juce::String arg (argv[i]);
+                if (arg.startsWith ("st=")) voicing.jetStrouhal = arg.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+                if (arg.startsWith ("noise=")) voicing.breathNoise = arg.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+            }
+            voicing.vortexLoss = vortexArg;
+            const double rate = reader->sampleRate;
+            auto steps = planScale (g, voicing, lowestNote (g), 21);  // D up to B in the second octave, as the recordings
+            std::vector<float> modelOut;
+            playScale (g, voicing, steps, rate, &modelOut);
+            print ((g.name + " (model, scale at the in-tune pressures)").toRawUTF8(), analyse (modelOut, rate));
+            saveWavArg (argc, argv, "model-scale", modelOut, rate);
+        }
+        return 0;
+    }
+
     if (mode == "replay")  // replay <recording.csv> [from=<s>] [to=<s>] [st=] [outmax=<Pa>] [wav=<prefix>]: a recorded session through the model
     {
         if (argc < 3)
