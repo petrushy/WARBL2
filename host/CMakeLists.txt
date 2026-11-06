@@ -25,6 +25,7 @@ target_sources(WarblStream PRIVATE
     Source/MonitorPage.cpp
     Source/InstrumentPage.cpp
     Source/SensorsPage.cpp
+    Source/ModelPage.cpp
     Source/StreamReceiver.cpp
     Source/Recorder.cpp
     Source/AudioEngine.cpp

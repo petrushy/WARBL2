@@ -3,6 +3,7 @@
 #pragma once
 
 #include "InstrumentPage.h"
+#include "ModelPage.h"
 #include "MonitorPage.h"
 #include "SensorsPage.h"
 
@@ -18,6 +19,7 @@ public:
     void showMonitor() { tabs.setCurrentTabIndex (0); }
     void showInstrument() { tabs.setCurrentTabIndex (1); }
     void showSensors() { tabs.setCurrentTabIndex (2); }
+    void showModel() { tabs.setCurrentTabIndex (3); }
     void loadPreset (int index) { instrument->loadPreset (index); }
     void setSaveStateOnExit (bool shouldSave) { saveOnExit = shouldSave; }
     AudioEngine& getAudio() { return audio; }

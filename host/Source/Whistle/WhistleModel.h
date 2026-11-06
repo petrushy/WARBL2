@@ -77,13 +77,41 @@ public:
     // the window (Pa), and a log of the flow into the bore (m^3/s), both per internal sample.
     float testSource = 0.0f;
     std::vector<float>* windowFlowLog = nullptr;
-    std::vector<float>* jetLog = nullptr;
-    float testJetGain = 1.0f;  // Multiplies the jet's growth across the window  // Per sample: deflection minus edge (m), jet flow (m^3/s), jet drive, vortex drop (Pa)
+    std::vector<float>* jetLog = nullptr;  // Per sample: deflection minus edge (m), jet flow (m^3/s), jet drive, vortex drop (Pa)
     float testWindowRadiation = 1.0f, testBodyRadiation = 1.0f;  // Scale what the window / the holes and foot radiate
 
     // For display.
     std::atomic<float> jetVelocity { 0.0f };   // m/s
     std::atomic<float> level { 0.0f };         // Output RMS, linear
+
+    // A live look inside, for the Model tab: written by the audio thread only while `enabled` (it costs a little),
+    // read by the message thread. Relaxed atomics: a view that mixes two neighbouring samples is harmless.
+    struct Scope
+    {
+        static constexpr int size = 8192;  // Internal samples (~85 ms at 96 kHz)
+        std::atomic<bool> enabled { false };
+        // Per internal sample, at written % size: the jet's centre line at the edge (m, positive = into the
+        // pipe), the jet's flow into the pipe and the flow through the window into the bore (m^3/s), the jet drive
+        // and the vortex loss (Pa), and the radiated sound.
+        std::array<std::atomic<float>, size> deflection {}, jetFlow {}, windowFlow {}, drive {}, vortex {}, sound {};
+        std::atomic<int> written { 0 };
+        // Now (refreshed every 64 samples).
+        std::atomic<float> rate { 96000.0f }, mouthPressure { 0.0f }, jetSpeed { 0.0f }, flowShare { 1.0f };
+        std::atomic<float> travelSamples { 0.0f };  // Jet's time from flue to edge
+        std::atomic<float> growthExponent { 0.0f }; // ln of the growth across the window (excluding Jet gain)
+        std::atomic<float> bandCentre { 0.0f };     // Hz, the jet's preferred frequency
+        std::atomic<float> slowBoost { 0.0f };      // Extra growth for long waves (see Voicing::slowJetGrowth)
+        std::atomic<float> edge { 0.0f };           // m, edge position incl. tilt
+        // Pressure in the bore at each junction (window = 0 ... foot): RMS (Pa) and the sign of its correlation
+        // with the pressure at the window (+1 in phase, -1 opposite).
+        static constexpr int maxJunctions = 65;
+        std::atomic<int> junctions { 0 };
+        std::array<std::atomic<float>, maxJunctions> junctionX {}, junctionRms {}, junctionSign {};
+    };
+    Scope scope;
+
+    // The geometry last set (message thread).
+    Geometry getGeometry() const { const juce::SpinLock::ScopedLockType lock (pendingLock); return geometry; }
 
 private:
     static constexpr int kMaxSegments = 64;
@@ -121,6 +149,7 @@ private:
         std::array<std::array<float, 5>, kMaxSegments> loss {};  // Wall loss and dispersion filter (b0 b1 b2 a1 a2)
         std::array<int, kMaxSegments + 1> holeAt {};   // Hole index at junction j (between sections j-1 and j), or -1.
         std::array<float, kMaxSegments + 1> radiationDelay {};  // Samples from junction j to the listener (relative).
+        std::array<float, kMaxSegments + 1> junctionX {};       // m from the window (for display)
         // Per hole (full size): inner air mass (chimney and inner end correction) and outer air mass (outer end
         // correction, b / 2) in kg/m^4, the radiation resistance rho c / A in parallel with the outer mass
         // (Pa s/m^3), and the chimney's compliance when covered (m^3/Pa).
@@ -150,7 +179,7 @@ private:
     int oversampling = 2;  // Internal samples per host sample: 2 below 88.2 kHz, 1 at 88.2 kHz and above
     Geometry geometry;
 
-    juce::SpinLock pendingLock;
+    mutable juce::SpinLock pendingLock;
     Config pending;
     std::atomic<bool> hasPending { false };
     Config config;
@@ -191,6 +220,8 @@ private:
     std::array<std::array<float, kDecimatorTaps>, 2> decimatorBuffer {};
     int decimatorWrite = 0;
     float levelState = 0.0f;
+    std::array<float, kMaxSegments + 1> junctionPower {}, junctionCorrelation {};  // Scope: p^2 and p p_window, averaged
+    int scopeCountdown = 0;
 
     // Controls, ramped per internal sample
     Controls current, target;

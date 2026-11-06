@@ -273,6 +273,8 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
 
     for (int j = 1; j < out.numSegments; ++j)
         out.holeAt[(size_t) j] = junctions[(size_t) j].second;
+    for (int j = 0; j <= out.numSegments; ++j)
+        out.junctionX[(size_t) j] = (float) junctions[(size_t) j].first;
 
     // Sound reaches a listener in front of the window later from points further down the tube.
     for (int j = 0; j <= out.numSegments; ++j)
@@ -545,6 +547,8 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
         out[2] = 3.0 * a0 - a1 - a2 + 3.0 * a3;
         out[3] = a0 - a1 + a2 - a3;
     };
+    std::array<float, kMaxSegments + 1> junctionPressure {};
+    junctionPressure[0] = topPressure;
     for (int jn = 1; jn < n; ++jn)
     {
         const float a = arriveRight[(size_t) jn - 1], b = arriveLeft[(size_t) jn];
@@ -597,6 +601,7 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
 
         sendRight[(size_t) jn] = p - b;
         sendLeft[(size_t) jn - 1] = p - a;
+        junctionPressure[(size_t) jn] = p;
     }
 
     // 5. Foot: open (radiating, reflection -1 at low frequencies) or, if the bell sensor may close it, a blend
@@ -608,6 +613,7 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
     const float footOpen = cfg.bellClosesFoot ? juce::jlimit (0.0f, 1.0f, current.footOpenness) : 1.0f;
     const float reflectedFoot = -footOpen * lowpassed + (1.0f - footOpen) * arrivingFoot;
     sendLeft[(size_t) n - 1] = reflectedFoot;
+    junctionPressure[(size_t) n] = arrivingFoot + reflectedFoot;
     radiate (n, testBodyRadiation * cfg.area[(size_t) n - 1] / (rho * c) * (arrivingFoot - reflectedFoot));
 
     // 6. Send the new waves into the sections.
@@ -629,6 +635,49 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
     radiationRead = (radiationRead + 1) & (kRadiationSize - 1);
     windowOut = out[0];
     bodyOut = out[1];
+
+    if (scope.enabled.load (std::memory_order_relaxed))
+    {
+        const int w = scope.written.load (std::memory_order_relaxed);
+        const auto i = (size_t) (w & (Scope::size - 1));
+        scope.deflection[i].store (deflection, std::memory_order_relaxed);
+        scope.jetFlow[i].store (jetFlow, std::memory_order_relaxed);
+        scope.windowFlow[i].store (flowIntoBore, std::memory_order_relaxed);
+        scope.drive[i].store (jetDrive, std::memory_order_relaxed);
+        scope.vortex[i].store (vortexDrop, std::memory_order_relaxed);
+        scope.sound[i].store (out[0] + out[1], std::memory_order_relaxed);
+        scope.written.store (w + 1, std::memory_order_release);
+
+        constexpr float smoothing = 0.002f;  // ~5 ms at 96 kHz
+        for (int j = 0; j <= n; ++j)
+        {
+            const float p = junctionPressure[(size_t) j];
+            junctionPower[(size_t) j] += smoothing * (p * p - junctionPower[(size_t) j]);
+            junctionCorrelation[(size_t) j] += smoothing * (p * topPressure - junctionCorrelation[(size_t) j]);
+        }
+        if ((scopeCountdown--) <= 0)
+        {
+            scopeCountdown = 64;
+            scope.rate.store ((float) rate, std::memory_order_relaxed);
+            scope.mouthPressure.store (pressure, std::memory_order_relaxed);
+            scope.jetSpeed.store (jetSpeed, std::memory_order_relaxed);
+            scope.flowShare.store (flowShare, std::memory_order_relaxed);
+            scope.travelSamples.store (travel, std::memory_order_relaxed);
+            scope.growthExponent.store (std::log (jetAmplification / std::max (0.01f, jetGain.load (std::memory_order_relaxed))),
+                                        std::memory_order_relaxed);
+            scope.bandCentre.store (jetStrouhal.load (std::memory_order_relaxed) * speed / h, std::memory_order_relaxed);
+            scope.slowBoost.store (jetSlowBoost, std::memory_order_relaxed);
+            scope.edge.store (edge, std::memory_order_relaxed);
+            const int count = std::min (n + 1, Scope::maxJunctions);
+            for (int j = 0; j < count; ++j)
+            {
+                scope.junctionX[(size_t) j].store (cfg.junctionX[(size_t) j], std::memory_order_relaxed);
+                scope.junctionRms[(size_t) j].store (std::sqrt (junctionPower[(size_t) j]), std::memory_order_relaxed);
+                scope.junctionSign[(size_t) j].store (junctionCorrelation[(size_t) j] >= 0.0f ? 1.0f : -1.0f, std::memory_order_relaxed);
+            }
+            scope.junctions.store (count, std::memory_order_relaxed);
+        }
+    }
 
     jetVelocity.store (jetSpeed, std::memory_order_relaxed);
 }

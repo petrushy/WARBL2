@@ -22,7 +22,7 @@ public:
         // "--snapshot <file.png>" saves a picture of the window after a few seconds, then quits.
         const auto args = juce::StringArray::fromTokens (commandLine, true);
         // "--output <device>" picks the audio output; "--play" plays the test phrase at start.
-        // "--monitor", "--instrument", "--sensors" open that tab.
+        // "--monitor", "--instrument", "--sensors", "--model" open that tab.
         if (auto* main = dynamic_cast<MainComponent*> (mainWindow->getContentComponent()))
         {
             // A snapshot run may run next to the player's own copy of the app: compute the sound, but play none.
@@ -46,6 +46,8 @@ public:
                 main->showInstrument();
             if (args.contains ("--sensors"))
                 main->showSensors();
+            if (args.contains ("--model"))
+                main->showModel();
             const auto preset = args.indexOf ("--preset");
             if (preset >= 0 && preset + 1 < args.size())
                 main->loadPreset (args[preset + 1].getIntValue());

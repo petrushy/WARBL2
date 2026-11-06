@@ -83,6 +83,7 @@ MainComponent::MainComponent()
     tabs.addTab ("Monitor", background, monitor, true);
     tabs.addTab ("Instrument", background, instrument, true);
     tabs.addTab ("Sensors", background, new SensorsPage (audio), true);
+    tabs.addTab ("Model", background, new ModelPage (audio), true);
     tabs.setTabBarDepth (30);
     addAndMakeVisible (tabs);
 

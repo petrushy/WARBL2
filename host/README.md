@@ -147,6 +147,18 @@ The presets store their tuned dimensions: the tuner is too slow to run at startu
 - **Voicing:** the jet's band (Strouhal number), how fast disturbances travel along the jet, and breath noise.
 - **Output level.**
 
+## Inside the model (Model tab)
+
+A live look at what the model does, in the order the air goes: breath, windway, jet, edge, the sound source at the window, the bore and the sound out. Each block shows its live values and names the settings that act there.
+
+- **The jet crossing the window (slow motion):** the jet's centre line and width from the flue to the edge, drawn from the last few milliseconds of the simulation at ~0.4 cycles per second. Disturbances leave the flue small, pushed by the sound's flow through the window (orange arrow), grow on the way, and decide at the edge how much of the jet goes into the pipe.
+- **At the edge, over two periods:** the jet's centre line relative to the edge (in half-widths; beyond the shaded band it goes all one way), the jet's flow into the pipe (square when it swings far) and the sound's flow through the window. The thin line is the moment shown in slow motion.
+- **Which resonance sounds:** the bore's resonances for the current fingering (admittance at the window, from `Acoustics`) and the jet's amplification against frequency at the current breath (its band-pass stages and the slow jet's extra growth). The played note and its harmonics are marked.
+- **Harmonics of the sound,** H2–H10 in dB below the fundamental, next to the values measured on real whistles.
+- **The air column:** the pressure's size along the bore (nodes at open holes and the foot) and its swing.
+
+The model only records this while the tab is visible. `--model` opens the tab (with `--snapshot`, `--play` plays the scale for something to see).
+
 ## Saving
 
 - **The app remembers its state between runs.** It saves the current instrument, the sensor response, the reverb (room or IR file, level, pre-delay), the audio device and buffer size, and the open tab to `~/Library/Application Support/WARBL Stream/WARBL Stream.settings`.
