@@ -222,6 +222,8 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
     wetSlider.setTextValueSuffix (" dB");
     wetSlider.setValue (audio.reverb.wetDb.load(), juce::dontSendNotification);
     wetSlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 70, 20);
+    for (auto* s : { &wetSlider, &preDelaySlider, &spreadSlider })
+        s->setScrollWheelEnabled (false);  // Only dragging or typing changes a value
     wetSlider.setTooltip ("0 dB is the natural balance for a listener at the room's distance; lower is drier.");
     wetSlider.onValueChange = [this] { audio.reverb.wetDb = (float) wetSlider.getValue(); };
     addAndMakeVisible (wetSlider);

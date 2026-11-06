@@ -228,6 +228,7 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     };
 
     referenceBox.setSliderStyle (juce::Slider::IncDecButtons);
+    referenceBox.setScrollWheelEnabled (false);
     referenceBox.setRange (380.0, 500.0, 0.5);
     referenceBox.setTextValueSuffix (" Hz");
     referenceBox.setTextBoxStyle (juce::Slider::TextBoxLeft, false, 62, 20);
@@ -461,6 +462,7 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     manualBreath.setSkewFactorFromMidPoint (1500.0);  // Fine control in the low register, room for the third and fourth.
     manualBreath.setTextValueSuffix (" Pa");
     manualBreath.setTextBoxStyle (juce::Slider::TextBoxRight, false, 70, 20);
+    manualBreath.setScrollWheelEnabled (false);
     manualBreath.setValue (0.0, juce::dontSendNotification);
     manualBreath.onValueChange = [this] { audio.manualPressure = (float) manualBreath.getValue(); };
     manualBreath.setTooltip ("Breath pressure when playing from the screen. A D whistle's low register starts around 400 Pa; "
@@ -492,6 +494,7 @@ juce::Slider& InstrumentPage::addRow (juce::String name, double min, double max,
     row.label = std::make_unique<juce::Label> (juce::String(), name);
     row.label->setColour (juce::Label::textColourId, text);
     row.slider = std::make_unique<juce::Slider>();
+    row.slider->setScrollWheelEnabled (false);  // Only dragging or typing changes a value; the wheel scrolls the page
     row.slider->setRange (min, max, step);
     row.slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 72, 20);
     if (unit.isNotEmpty())

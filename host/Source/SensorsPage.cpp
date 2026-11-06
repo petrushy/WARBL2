@@ -234,6 +234,7 @@ juce::Slider& SensorsPage::addRow (std::vector<Row>& rows, juce::String name, do
     row.label = std::make_unique<juce::Label> (juce::String(), name);
     row.label->setColour (juce::Label::textColourId, text);
     row.slider = std::make_unique<juce::Slider>();
+    row.slider->setScrollWheelEnabled (false);  // Only dragging or typing changes a value
     row.slider->setRange (min, max, step);
     row.slider->setTextBoxStyle (juce::Slider::TextBoxRight, false, 72, 20);
     if (unit.isNotEmpty())
