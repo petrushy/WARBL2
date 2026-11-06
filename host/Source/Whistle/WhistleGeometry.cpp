@@ -20,6 +20,17 @@ Voicing presetVoicing (size_t index)
     // lower breath (top C at ~3 kPa, C6 at ~0.6 kPa; at 0.035 the low C goes sharp); the whistles' defaults give
     // their register changes at ~1 and ~4 kPa. One band-pass stage: no silent pressures between the registers.
     Voicing v;
+    if (index < presets().size() && presets()[index].name.startsWith ("Low D"))
+    {
+        // The low whistle (see its geometry): a jet band low enough for its registers to sit where a low D is
+        // blown (low D ~120-670 Pa, the octave from ~670 Pa), one band-pass stage (the pitch follows the breath
+        // half as much as with two), and a lower vortex loss, which lets the low notes swing further across the edge:
+        // the reedy odd harmonics of a real low D (WhistleCheck analyse with Real-examples/Low-D-Goldie.wav).
+        v.jetStrouhal = 0.0095f;
+        v.jetStages = 1;
+        v.vortexLoss = 0.4f;
+        v.jetGain = 0.75f;  // With the octave in tune, more let quick fingering changes flip into it on the way
+    }
     if (index < presets().size() && presets()[index].chart == FingeringChart::baroqueRecorder)
     {
         v.jetStrouhal = 0.03f;
@@ -122,11 +133,19 @@ const std::vector<Geometry>& presets()
                   0.0040, 1.3, 0.0010, 0.0050, 0.0085),
             [&]
             {
-                auto g = make ("Low D whistle", 0.54129, 0.0220, 0.0220,
-                               { { { false, 0.0, 0.0 }, { true, 0.24368, 0.00693 }, { true, 0.29238, 0.01100 }, { true, 0.33283, 0.01050 },
-                                   { true, 0.38549, 0.01150 }, { true, 0.40603, 0.01100 }, { true, 0.45773, 0.00950 }, { false, 0.0, 0.0 } } },
-                               0.0010, 1.0, 0.0016, 0.0090, 0.0150);
+                // Low D whistle: a 22 mm cylindrical bore (a Goldie low D measures ~21.8), a 1.0 mm windway (Goldie
+                // medium blowers 0.9-1.0 mm) and a 13 mm wide window, as forum measurements of low whistles give. The
+                // window is short (5.2 mm, Overton style): a longer one let the jet grow so much that quick fingering
+                // changes flipped into the octave on the way (WhistleCheck transition).
+                auto g = make ("Low D whistle", 0.53008, 0.0220, 0.0220,
+                               { { { false, 0.0, 0.0 }, { true, 0.23128, 0.00693 }, { true, 0.28032, 0.01100 }, { true, 0.32098, 0.01050 },
+                                   { true, 0.37384, 0.01150 }, { true, 0.39448, 0.01100 }, { true, 0.44635, 0.00950 }, { false, 0.0, 0.0 } } },
+                               0.0010, 1.0, 0.0010, 0.0052, 0.0130);
                 g.windwayLength = 0.028;  // A bigger fipple
+                // A slightly wider head (24 mm over the top 60 mm) flattens the second octave into tune: with the
+                // plain bore it played 10-18 cents sharp (WhistleCheck chart "low D" headlength= headdiameter=).
+                g.headLength = 0.060;
+                g.headDiameter = 0.024;
                 return g;
             }(),
             [&]

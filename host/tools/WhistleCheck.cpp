@@ -402,7 +402,12 @@ int main (int argc, char* argv[])
             if (arg.startsWith ("st=")) strouhal = (float) value;
             if (arg.startsWith ("conv=")) convection = (float) value;
             if (arg.startsWith ("h=")) g.windwayHeight = value * 0.001;
+            if (arg.startsWith ("stages=")) stages = (int) value;
         }
+        stages = presetVoicing ((size_t) index).jetStages;
+        for (int i = 3; i < argc; ++i)
+            if (juce::String (argv[i]).startsWith ("stages="))
+                stages = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getIntValue();
         windwayArgs (argc, argv, 3, g);
         if (g.headLength > 0.0)
         {
@@ -425,11 +430,15 @@ int main (int argc, char* argv[])
         auto g = presets()[index];
         windwayArgs (argc, argv, 3, g);
         auto voicing = presetVoicing (index);
+        jetVoicingArgs (argc, argv, 3, voicing);
         voicing.breathNoise = 0.0f;
+        voicing.vortexLoss *= vortexArg;
         double pressure = 600.0;
         for (int i = 3; i < argc; ++i)
             if (juce::String (argv[i]).startsWith ("p="))
                 pressure = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        int changes = 0, jumps = 0, stuck = 0;
+        std::vector<double> settleTimes;
         std::printf ("%s at %.0f Pa: one hole switched within one 2 ms sensor frame. Pitch (from zero crossings, cents\n"
                      "relative to the new note) in the 5 ms steps after the change, and when it stays within 10 cents.\n\n",
                      g.name.toRawUTF8(), pressure);
@@ -476,6 +485,11 @@ int main (int argc, char* argv[])
                         last = t;
                     }
                 std::printf ("  %-5s -> %-5s ", from.name, to.name);
+                ++changes;
+                const double expected = lowestNote (g) * std::pow (2.0, to.semitones / 12.0);
+                if (std::abs (1200.0 * std::log2 (final / expected)) > 300.0)
+                    ++stuck;
+                bool jumped = false;
                 double settled = 0.0;
                 for (auto it = crossings.rbegin(); it != crossings.rend(); ++it)
                     if (std::abs (1200.0 * std::log2 (1.0 / it->second / final)) > 10.0)
@@ -494,13 +508,23 @@ int main (int argc, char* argv[])
                             ++count;
                         }
                     if (count > 0)
-                        std::printf (" %+5.0f", 1200.0 * std::log2 (count / sum / final));
+                    {
+                        const double cents = 1200.0 * std::log2 (count / sum / final);
+                        jumped = jumped || (t >= 0.005 && std::abs (cents) > 500.0);
+                        std::printf (" %+5.0f", cents);
+                    }
                     else
                         std::printf ("     .");
                 }
+                jumps += jumped ? 1 : 0;
+                settleTimes.push_back (settled * 1000.0);
                 std::printf ("   settled after %.0f ms\n", settled * 1000.0);
             }
         }
+        std::sort (settleTimes.begin(), settleTimes.end());
+        std::printf ("\nSummary: %d changes, %d jump to another register on the way (> 500 c after 5 ms), %d end in the wrong one; "
+                     "settling median %.0f ms, worst %.0f ms\n", changes, jumps, stuck,
+                     settleTimes.empty() ? 0.0 : settleTimes[settleTimes.size() / 2], settleTimes.empty() ? 0.0 : settleTimes.back());
         return 0;
     }
 
@@ -875,7 +899,7 @@ int main (int argc, char* argv[])
             auto voicing = presetVoicing (index);
             windwayArgs (argc, argv, 4, g);
             jetVoicingArgs (argc, argv, 4, voicing);
-            voicing.vortexLoss = vortexArg;
+            voicing.vortexLoss *= vortexArg;
             if (geometryArgs && ! tuneToScale (g, lowestNote (g), true))
                 std::printf ("(retuned for the new fipple: not every tuned note reached)\n");
             const double rate = reader->sampleRate;
