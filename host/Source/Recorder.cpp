@@ -40,7 +40,7 @@ bool Recorder::start (double sampleRate, const juce::StringArray& header)
         return false;
     for (const auto& line : header)
         *newCsv << "# " << line << "\n";
-    *newCsv << "device_ms,arrival_ms,seq,bell,r4,r3,r2,r1,l3,l2,l1,thumb,pressure,flags\n";
+    *newCsv << "device_ms,arrival_ms,seq,bell,r4,r3,r2,r1,l3,l2,l1,thumb,pressure14,flags\n";
 
     framesWritten = 0;
     audioStartMs = 0.0;

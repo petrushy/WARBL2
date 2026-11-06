@@ -155,7 +155,7 @@ void AudioEngine::setCalibration (const warbl::DeviceInfo& info)
         baseline[(size_t) i] = info.baseline[(size_t) i];
         covered[(size_t) i] = info.covered[(size_t) i];
     }
-    ambient12 = info.ambientPressure * 4;
+    ambient14 = info.ambientPressure;
 }
 
 juce::String AudioEngine::calibrationText() const
@@ -166,7 +166,7 @@ juce::String AudioEngine::calibrationText() const
     text << " covered";
     for (const auto& c : covered)
         text << " " << c.load();
-    text << " ambient12 " << ambient12.load() << " pascal_per_count " << juce::String (kPascalPerCount, 6);
+    text << " ambient14 " << ambient14.load() << " pascal_per_count " << juce::String (kPascalPerCount, 6);
     return text;
 }
 
@@ -218,7 +218,7 @@ whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& fram
     }
     c.edgeShift = tiltResponse().edgeShiftMm (smoothedTilt) * 0.001f;
 
-    const float measured = std::max (0.0f, (float) ((int) frame.pressure - ambient12.load()) * kPascalPerCount);
+    const float measured = std::max (0.0f, (float) ((int) frame.pressure - ambient14.load()) * kPascalPerCount);
     measuredPressure = measured;
     c.mouthPressure = breathResponse().map (measured) * whistleModel.breathScale.load();
     return c;

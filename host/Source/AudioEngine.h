@@ -37,7 +37,7 @@ public:
     void setCalibration (const warbl::DeviceInfo&);
 
     // WARBL's pressure sensor: 900 counts (10-bit) = 24 inches of water, i.e. about 1.66 Pa per 12-bit count.
-    static constexpr float kPascalPerCount = 24.0f * 249.089f / (900.0f * 4.0f);
+    static constexpr float kPascalPerCount = 24.0f * 249.089f / (900.0f * 4.0f * 4.0f);  // Per 14-bit count
 
     // Sensor response (see SensorResponse.h), set on the message thread.
     std::atomic<float> breathInputMin { response::Breath().inputMin }, breathInputMax { response::Breath().inputMax },
@@ -119,7 +119,7 @@ private:
 
     StreamReceiver& receiver;
     std::array<std::atomic<int>, warbl::kNumHoles> baseline {}, covered {};
-    std::atomic<int> ambient12 { 1040 };
+    std::atomic<int> ambient14 { 4160 };
     // Test scale state. Planning runs on scalePlanner; the steps reach the audio thread under scaleAudioLock.
     mutable juce::CriticalSection scaleLock;  // Message thread and planner
     whistle::Geometry scaleGeometry;

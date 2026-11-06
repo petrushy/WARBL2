@@ -318,7 +318,7 @@ void MonitorPage::showInfo (const warbl::DeviceInfo& info)
     deviceInfo = info;
     audio.setCalibration (info);
     infoLabel.setText ("Firmware " + juce::String (info.firmwareVersion / 10.0, 1) + "   ambient pressure "
-                           + juce::String (info.ambientPressure * 4) + " (12-bit)   loop " + juce::String (info.loopPeriodMs) + " ms",
+                           + juce::String (info.ambientPressure) + " (14-bit)   loop " + juce::String (info.loopPeriodMs) + " ms",
                        juce::dontSendNotification);
 }
 
@@ -423,7 +423,7 @@ void MonitorPage::timerCallback()
 
     holeView.update (history.back().frame, deviceInfo);
 
-    const int ambient = deviceInfo ? deviceInfo->ambientPressure * 4 : 0;
+    const int ambient = deviceInfo ? deviceInfo->ambientPressure : 0;
     ScopeView::Trace pressure { "pressure", accent, {} };
     ScopeView::Trace ax { "x", juce::Colours::indianred, {} }, ay { "y", juce::Colours::lightgreen, {} }, az { "z", juce::Colours::cornflowerblue, {} };
     ScopeView::Trace gx { "x", juce::Colours::indianred, {} }, gy { "y", juce::Colours::lightgreen, {} }, gz { "z", juce::Colours::cornflowerblue, {} };
@@ -432,7 +432,7 @@ void MonitorPage::timerCallback()
     for (const auto& r : history)
     {
         const auto& f = r.frame;
-        pressure.values.push_back ((float) ((int) f.pressure - ambient));
+        pressure.values.push_back ((float) ((int) f.pressure - ambient) * 0.25f);  // In 12-bit counts, as the scale was made for
         ax.values.push_back (units.accelToG (f.accel[0]));
         ay.values.push_back (units.accelToG (f.accel[1]));
         az.values.push_back (units.accelToG (f.accel[2]));

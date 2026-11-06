@@ -17,7 +17,7 @@ class SimulatedPlayer
 public:
     static constexpr uint16_t kBaseline = 40;
     static constexpr uint16_t kCovered = 700;
-    static constexpr uint16_t kAmbient10 = 260;
+    static constexpr uint16_t kAmbient14 = 4160;
     static constexpr double kNoteSeconds = 1.2;
 
     static DeviceInfo info()
@@ -26,7 +26,7 @@ public:
         i.firmwareVersion = 47;
         i.baseline.fill (kBaseline);
         i.covered.fill (kCovered);
-        i.ambientPressure = kAmbient10;
+        i.ambientPressure = kAmbient14;
         i.accelRange = 2;      // 4 g
         i.gyroRange = 0b1100;  // 2000 dps
         i.loopPeriodMs = 2;
@@ -57,8 +57,8 @@ public:
                 f.holeCovered |= (uint16_t) (1 << hole);
         }
 
-        // Up to ~830 Pa (500 counts at ~1.66 Pa each): the low register of a D whistle.
-        f.pressure = (uint16_t) (kAmbient10 * 4 + breath * 500.0 + noise (7));
+        // Up to ~830 Pa (2000 14-bit counts at ~0.42 Pa each): the low register of a D whistle.
+        f.pressure = (uint16_t) (kAmbient14 + breath * 2000.0 + noise (28));
         f.accel = { (int16_t) (2000 * std::sin (t)), 300, 8000 };
         f.gyro = { (int16_t) (3000 * std::cos (t * 2.0)), 0, 0 };
         f.flags = 1;

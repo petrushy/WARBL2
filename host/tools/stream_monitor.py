@@ -15,14 +15,18 @@ import time
 import mido
 
 ID = [0x7D, 0x57]
-VERSION = 1
+COMMAND_VERSION = 1  # Commands are unchanged since version 1, which every firmware accepts
 FRAME, INFO, CONFIG, REQUEST_INFO = 0x01, 0x10, 0x20, 0x21
-FRAME_FIELDS = [("seq", 14), ("time", 21)] + [(f"hole{i}", 10) for i in range(9)] + [
-    ("pressure", 12),
-    ("ax", 16), ("ay", 16), ("az", 16),
-    ("gx", 16), ("gy", 16), ("gz", 16),
-    ("covered", 9), ("flags", 7),
-]
+
+
+def frame_fields(version):
+    """Version 2 sends the pressure at 14 bits, version 1 at 12."""
+    return [("seq", 14), ("time", 21)] + [(f"hole{i}", 10) for i in range(9)] + [
+        ("pressure", 14 if version >= 2 else 12),
+        ("ax", 16), ("ay", 16), ("az", 16),
+        ("gx", 16), ("gy", 16), ("gz", 16),
+        ("covered", 9), ("flags", 7),
+    ]
 SIGNED = {"ax", "ay", "az", "gx", "gy", "gz"}
 
 
@@ -38,8 +42,11 @@ def unpack(data, widths):
     return values
 
 
-def decode_frame(data):
-    frame = dict(zip([n for n, _ in FRAME_FIELDS], unpack(data, [w for _, w in FRAME_FIELDS])))
+def decode_frame(data, version):
+    fields = frame_fields(version)
+    frame = dict(zip([n for n, _ in fields], unpack(data, [w for _, w in fields])))
+    if version < 2:
+        frame["pressure"] <<= 2  # Shown at 14 bits either way
     for name in SIGNED:
         if frame[name] >= 0x8000:
             frame[name] -= 0x10000
@@ -62,7 +69,7 @@ def main():
     inp = mido.open_input(find_warbl(mido.get_input_names()))
 
     def send(type_, payload=()):
-        out.send(mido.Message("sysex", data=ID + [VERSION, type_] + list(payload)))
+        out.send(mido.Message("sysex", data=ID + [COMMAND_VERSION, type_] + list(payload)))
 
     send(REQUEST_INFO)
     send(CONFIG, [0x01 | (0x02 if args.suppress else 0)])
@@ -70,15 +77,16 @@ def main():
     last_seq, frames, gaps, start = None, 0, 0, time.monotonic()
     try:
         for msg in inp:
-            if msg.type != "sysex" or list(msg.data[:3]) != ID + [VERSION]:
+            if msg.type != "sysex" or list(msg.data[:2]) != ID or msg.data[2] not in (1, 2):
                 continue
-            kind, payload = msg.data[3], msg.data[4:]
+            version, kind, payload = msg.data[2], msg.data[3], msg.data[4:]
             if kind == INFO:
-                v = unpack(payload, [16] * 23)
-                print(f"firmware {v[0]}  baselines {v[1:10]}  covered {v[10:19]}  ambient {v[19]}  "
+                v = unpack(payload, [16] * (24 if version >= 2 else 23))
+                ambient = v[23] if version >= 2 else v[19] << 4
+                print(f"protocol {version}  firmware {v[0]}  baselines {v[1:10]}  covered {v[10:19]}  ambient {ambient} (14-bit)  "
                       f"accel range {v[20]}  gyro range {v[21]}  loop {v[22]} ms")
             elif kind == FRAME:
-                f = decode_frame(payload)
+                f = decode_frame(payload, version)
                 if last_seq is not None and f["seq"] != (last_seq + 1) & 0x3FFF:
                     gaps += 1
                 last_seq = f["seq"]
@@ -86,7 +94,7 @@ def main():
                 if frames % 50 == 0:  # Print about 10 times a second.
                     rate = frames / (time.monotonic() - start)
                     holes = " ".join(f"{f[f'hole{i}']:4d}" for i in range(9))
-                    print(f"{rate:6.0f} fps  gaps {gaps}  p {f['pressure']:4d}  holes {holes}  "
+                    print(f"{rate:6.0f} fps  gaps {gaps}  p {f['pressure']:5d}  holes {holes}  "
                           f"covered {f['covered']:09b}  acc {f['ax']:6d} {f['ay']:6d} {f['az']:6d}  "
                           f"gyro {f['gx']:6d} {f['gy']:6d} {f['gz']:6d}")
     except KeyboardInterrupt:

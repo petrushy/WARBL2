@@ -3,6 +3,9 @@
 //
 // SysEx (without F0/F7): 7D 57 <protocol version> <type> <payload>
 // Payloads are bit-packed MSB-first, 7 bits per data byte.
+// Version 2 sends the pressure at 14 bits (version 1: 12) and adds the 14-bit ambient pressure to the info. Both
+// are decoded; pressures are given at 14 bits either way. Commands haven't changed, so they go out as version 1,
+// which every firmware accepts.
 
 #pragma once
 
@@ -18,7 +21,8 @@ namespace warbl
 
 constexpr uint8_t kSysExId1 = 0x7D;
 constexpr uint8_t kSysExId2 = 0x57;
-constexpr uint8_t kProtocolVersion = 1;
+constexpr uint8_t kProtocolVersion = 2;  // What WARBL sends (and the encoders below write)
+constexpr uint8_t kCommandVersion = 1;   // What the host sends
 constexpr size_t kHeaderSize = 4;  // ID1, ID2, version, type
 
 enum MessageType : uint8_t
@@ -53,7 +57,7 @@ struct SensorFrame
     uint16_t seq = 0;
     uint32_t timestamp = 0;                 // Device time, 1/32768 s, 21 bits.
     std::array<uint16_t, kNumHoles> holes {};  // 10-bit, ambient-light corrected, unsmoothed, no baseline subtracted.
-    uint16_t pressure = 0;                  // 12-bit raw ADC.
+    uint16_t pressure = 0;                  // 14-bit raw ADC (version 1's 12-bit readings x 4).
     std::array<int16_t, 3> accel {};        // Raw LSM6DSOX counts.
     std::array<int16_t, 3> gyro {};
     uint16_t holeCovered = 0;               // Firmware's covered/uncovered decision (hint).
@@ -68,7 +72,7 @@ struct DeviceInfo
     uint16_t firmwareVersion = 0;
     std::array<uint16_t, kNumHoles> baseline {};  // Reading with the hole open.
     std::array<uint16_t, kNumHoles> covered {};   // Reading with the hole covered (calibration).
-    uint16_t ambientPressure = 0;                 // 10-bit, as used by the firmware.
+    uint16_t ambientPressure = 0;                 // 14-bit (from version 1, the firmware's 10-bit value x 16).
     uint16_t accelRange = 0;                      // Adafruit lsm6ds_accel_range_t
     uint16_t gyroRange = 0;                       // Adafruit lsm6ds_gyro_range_t
     uint16_t loopPeriodMs = 0;
@@ -82,8 +86,8 @@ struct DeviceInfo
         return ((float) raw - (float) baseline[(size_t) hole]) / span;
     }
 
-    // 12-bit pressure relative to the ambient reading taken at startup.
-    int pressureAboveAmbient (uint16_t raw) const { return (int) raw - (int) ambientPressure * 4; }
+    // 14-bit pressure relative to the ambient reading taken at startup.
+    int pressureAboveAmbient (uint16_t raw) const { return (int) raw - (int) ambientPressure; }
 
     // Raw IMU counts to physical units (LSM6DSOX sensitivities, range codes as in Adafruit_LSM6DS.h).
     float accelToG (int16_t raw) const
@@ -154,23 +158,33 @@ private:
     int bitsInByte = 0;
 };
 
-constexpr size_t kFrameBits = kSeqBits + kTimestampBits + kNumHoles * 10 + 12 + 6 * 16 + 9 + 7;
-constexpr size_t kInfoValues = 1 + kNumHoles * 2 + 1 + 3;
+// Pressure bits per frame and batch sample, by protocol version.
+constexpr int pressureBits (uint8_t version) { return version >= 2 ? 14 : 12; }
+constexpr size_t frameBits (uint8_t version) { return kSeqBits + kTimestampBits + kNumHoles * 10 + (size_t) pressureBits (version) + 6 * 16 + 9 + 7; }
+constexpr size_t kFrameBits = frameBits (kProtocolVersion);
+constexpr size_t kInfoValues = 1 + kNumHoles * 2 + 1 + 3;  // Version 1; version 2 adds the 14-bit ambient
 
 // Bluetooth batch: the samples of one BLE connection interval in one message, so it fits one BLE packet.
 // Header: first sequence number, timestamps of the first and last sample, count, accelerometer (top 8 bits per
 // axis, once per batch: enough for tilt), flags. Per sample: pressure (12 bits, as USB) and the nine holes with
 // 8 bits (the top 8 of the 10-bit reading). No gyro.
 constexpr size_t kBatchHeaderBits = kSeqBits + 2 * kTimestampBits + 5 + 3 * 8 + 7;
-constexpr size_t kBatchSampleBits = 12 + kNumHoles * 8;
+constexpr size_t batchSampleBits (uint8_t version) { return (size_t) pressureBits (version) + kNumHoles * 8; }
+constexpr size_t kBatchSampleBits = batchSampleBits (kProtocolVersion);
 constexpr int kMaxBatchSamples = 31;
 
 // The message type of a WARBL stream SysEx (data without F0/F7), or nothing if it isn't one.
 inline std::optional<uint8_t> messageType (const uint8_t* data, size_t size)
 {
-    if (size < kHeaderSize || data[0] != kSysExId1 || data[1] != kSysExId2 || data[2] != kProtocolVersion)
+    if (size < kHeaderSize || data[0] != kSysExId1 || data[1] != kSysExId2 || data[2] < 1 || data[2] > kProtocolVersion)
         return std::nullopt;
     return data[3];
+}
+
+// A pressure as sent in this version, at 14 bits.
+inline uint16_t readPressure (BitReader& r, uint8_t version)
+{
+    return version >= 2 ? (uint16_t) r.get (14) : (uint16_t) (r.get (12) << 2);
 }
 
 inline std::optional<SensorFrame> decodeFrame (const uint8_t* data, size_t size)
@@ -178,8 +192,9 @@ inline std::optional<SensorFrame> decodeFrame (const uint8_t* data, size_t size)
     if (messageType (data, size) != kFrame)
         return std::nullopt;
 
+    const uint8_t version = data[2];
     BitReader r (data + kHeaderSize, size - kHeaderSize);
-    if (! r.canRead (kFrameBits))
+    if (! r.canRead (frameBits (version)))
         return std::nullopt;
 
     SensorFrame f;
@@ -187,7 +202,7 @@ inline std::optional<SensorFrame> decodeFrame (const uint8_t* data, size_t size)
     f.timestamp = r.get (kTimestampBits);
     for (auto& h : f.holes)
         h = (uint16_t) r.get (10);
-    f.pressure = (uint16_t) r.get (12);
+    f.pressure = readPressure (r, version);
     for (auto& a : f.accel)
         a = (int16_t) (uint16_t) r.get (16);
     for (auto& g : f.gyro)
@@ -204,6 +219,7 @@ inline std::vector<SensorFrame> decodeBatch (const uint8_t* data, size_t size)
     if (messageType (data, size) != kBatch)
         return frames;
 
+    const uint8_t version = data[2];
     BitReader r (data + kHeaderSize, size - kHeaderSize);
     if (! r.canRead (kBatchHeaderBits))
         return frames;
@@ -214,7 +230,7 @@ inline std::vector<SensorFrame> decodeBatch (const uint8_t* data, size_t size)
     for (auto& a : accel)
         a = (int16_t) ((int8_t) (uint8_t) r.get (8) * 256);
     const auto flags = (uint8_t) r.get (7);
-    if (count < 1 || ! r.canRead (kBatchSampleBits * (size_t) count))
+    if (count < 1 || ! r.canRead (batchSampleBits (version) * (size_t) count))
         return frames;
 
     const uint32_t span = (last - first) & ((1u << kTimestampBits) - 1);
@@ -223,7 +239,7 @@ inline std::vector<SensorFrame> decodeBatch (const uint8_t* data, size_t size)
         SensorFrame f;
         f.seq = (uint16_t) ((seq + (uint32_t) i) & ((1u << kSeqBits) - 1));
         f.timestamp = (first + (count > 1 ? span * (uint32_t) i / (uint32_t) (count - 1) : 0)) & ((1u << kTimestampBits) - 1);
-        f.pressure = (uint16_t) r.get (12);
+        f.pressure = readPressure (r, version);
         for (auto& h : f.holes)
             h = (uint16_t) (r.get (8) * 4 + 2);  // Middle of the 8-bit step
         f.accel = accel;
@@ -238,8 +254,9 @@ inline std::optional<DeviceInfo> decodeInfo (const uint8_t* data, size_t size)
     if (messageType (data, size) != kInfo)
         return std::nullopt;
 
+    const uint8_t version = data[2];
     BitReader r (data + kHeaderSize, size - kHeaderSize);
-    if (! r.canRead (kInfoValues * 16))
+    if (! r.canRead ((kInfoValues + (version >= 2 ? 1 : 0)) * 16))
         return std::nullopt;
 
     DeviceInfo info;
@@ -248,10 +265,12 @@ inline std::optional<DeviceInfo> decodeInfo (const uint8_t* data, size_t size)
         b = (uint16_t) r.get (16);
     for (auto& c : info.covered)
         c = (uint16_t) r.get (16);
-    info.ambientPressure = (uint16_t) r.get (16);
+    info.ambientPressure = (uint16_t) (r.get (16) << 4);  // The firmware's 10-bit value
     info.accelRange = (uint16_t) r.get (16);
     info.gyroRange = (uint16_t) r.get (16);
     info.loopPeriodMs = (uint16_t) r.get (16);
+    if (version >= 2)
+        info.ambientPressure = (uint16_t) r.get (16);  // The same reading at 14 bits
     return info;
 }
 
@@ -263,7 +282,7 @@ inline std::vector<uint8_t> encodeFramePayload (const SensorFrame& f)
     w.put (f.timestamp & ((1u << kTimestampBits) - 1), kTimestampBits);
     for (auto h : f.holes)
         w.put (h & 0x3FFu, 10);
-    w.put (f.pressure & 0xFFFu, 12);
+    w.put (f.pressure & 0x3FFFu, 14);
     for (auto a : f.accel)
         w.put ((uint16_t) a, 16);
     for (auto g : f.gyro)
@@ -288,7 +307,7 @@ inline std::vector<uint8_t> encodeBatchPayload (const std::vector<SensorFrame>& 
     w.put (frames.back().flags & 0x7Fu, 7);
     for (const auto& f : frames)
     {
-        w.put (f.pressure & 0xFFFu, 12);
+        w.put (f.pressure & 0x3FFFu, 14);
         for (auto h : f.holes)
             w.put ((uint32_t) std::min<uint16_t> (h, 1023) >> 2, 8);
     }
@@ -303,23 +322,24 @@ inline std::vector<uint8_t> encodeInfoPayload (const DeviceInfo& info)
         w.put (b, 16);
     for (auto c : info.covered)
         w.put (c, 16);
-    w.put (info.ambientPressure, 16);
+    w.put ((uint32_t) info.ambientPressure >> 4, 16);
     w.put (info.accelRange, 16);
     w.put (info.gyroRange, 16);
     w.put (info.loopPeriodMs, 16);
+    w.put (info.ambientPressure, 16);
     return w.bytes;
 }
 
 // Host -> WARBL commands (SysEx data without F0/F7).
 inline std::vector<uint8_t> makeConfig (bool streamOn, bool suppressNotes)
 {
-    return { kSysExId1, kSysExId2, kProtocolVersion, kConfig,
+    return { kSysExId1, kSysExId2, kCommandVersion, kConfig,
              (uint8_t) ((streamOn ? kStreamOn : 0) | (suppressNotes ? kSuppressNotes : 0)) };
 }
 
 inline std::vector<uint8_t> makeRequestInfo()
 {
-    return { kSysExId1, kSysExId2, kProtocolVersion, kRequestInfo };
+    return { kSysExId1, kSysExId2, kCommandVersion, kRequestInfo };
 }
 
 // Extends wrapping device timestamps and sequence numbers to continuous counters.

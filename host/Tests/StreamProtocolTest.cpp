@@ -20,9 +20,9 @@ static int failures = 0;
         }                                                                   \
     } while (0)
 
-static std::vector<uint8_t> withHeader (uint8_t type, const std::vector<uint8_t>& payload)
+static std::vector<uint8_t> withHeader (uint8_t type, const std::vector<uint8_t>& payload, uint8_t version = kProtocolVersion)
 {
-    std::vector<uint8_t> data { kSysExId1, kSysExId2, kProtocolVersion, type };
+    std::vector<uint8_t> data { kSysExId1, kSysExId2, version, type };
     data.insert (data.end(), payload.begin(), payload.end());
     return data;
 }
@@ -37,7 +37,7 @@ int main()
         const uint16_t holes[9] = { 0, 1023, 512, 1, 2, 3, 4, 5, 1000 };
         for (auto h : holes)
             w.put (h, 10);
-        w.put (4095, 12);
+        w.put (16383, 14);
         const int16_t imu[6] = { -2048, 100, -1, 0, 32767, -32768 };
         for (auto v : imu)
             w.put ((uint16_t) v, 16);
@@ -57,11 +57,28 @@ int main()
             CHECK (f->timestamp == 0x1FFFFF);
             for (int i = 0; i < 9; ++i)
                 CHECK (f->holes[(size_t) i] == holes[i]);
-            CHECK (f->pressure == 4095);
+            CHECK (f->pressure == 16383);
             CHECK (f->accel[0] == -2048 && f->accel[1] == 100 && f->accel[2] == -1);
             CHECK (f->gyro[0] == 0 && f->gyro[1] == 32767 && f->gyro[2] == -32768);
             CHECK (f->holeCovered == 0x155);
             CHECK (f->holesUpdated());
+        }
+
+        // Version 1 (12-bit pressure): decoded at 14 bits.
+        {
+            BitWriter v1;
+            v1.put (5, 14);
+            v1.put (6, 21);
+            for (int i = 0; i < 9; ++i)
+                v1.put (100, 10);
+            v1.put (1000, 12);
+            for (int i = 0; i < 6; ++i)
+                v1.put (0, 16);
+            v1.put (0, 9);
+            v1.put (1, 7);
+            const auto old = withHeader (kFrame, v1.bytes, 1);
+            const auto f1 = decodeFrame (old.data(), old.size());
+            CHECK (f1 && f1->pressure == 4000 && f1->holes[8] == 100 && f1->holesUpdated());
         }
 
         // Truncated or foreign messages are rejected.
@@ -81,7 +98,7 @@ int main()
             in.timestamp = (uint32_t) std::rand() & 0x1FFFFF;
             for (auto& h : in.holes)
                 h = (uint16_t) (std::rand() & 0x3FF);
-            in.pressure = (uint16_t) (std::rand() & 0xFFF);
+            in.pressure = (uint16_t) (std::rand() & 0x3FFF);
             for (auto& a : in.accel)
                 a = (int16_t) std::rand();
             for (auto& g : in.gyro)
@@ -94,7 +111,7 @@ int main()
             w.put (in.timestamp, 21);
             for (auto h : in.holes)
                 w.put (h, 10);
-            w.put (in.pressure, 12);
+            w.put (in.pressure, 14);
             for (auto a : in.accel)
                 w.put ((uint16_t) a, 16);
             for (auto g : in.gyro)
@@ -125,6 +142,13 @@ int main()
         w.put (0b1100, 16);
         w.put (2, 16);
 
+        // Version 1: the 10-bit ambient only.
+        const auto old = withHeader (kInfo, w.bytes, 1);
+        const auto oldInfo = decodeInfo (old.data(), old.size());
+        CHECK (oldInfo && oldInfo->ambientPressure == 260 * 16 && oldInfo->loopPeriodMs == 2);
+
+        // Version 2 adds the 14-bit ambient.
+        w.put (4170, 16);
         CHECK (w.bytes.size() + kHeaderSize <= 64 - 2);  // Fits the firmware's SysEx buffer.
 
         const auto data = withHeader (kInfo, w.bytes);
@@ -134,9 +158,9 @@ int main()
         {
             CHECK (info->firmwareVersion == 47);
             CHECK (info->baseline[8] == 18 && info->covered[0] == 500);
-            CHECK (info->ambientPressure == 260);
+            CHECK (info->ambientPressure == 4170);
             CHECK (info->loopPeriodMs == 2);
-            CHECK (info->pressureAboveAmbient (1100) == 60);
+            CHECK (info->pressureAboveAmbient (4410) == 240);
             CHECK (info->holeCoverage (0, 10) == 0.0f && info->holeCoverage (0, 500) == 1.0f);
             CHECK (std::abs (info->gyroToDps (1000) - 70.0f) < 0.001f);
             CHECK (std::abs (info->accelToG (8197) - 1.0f) < 0.001f);
@@ -147,6 +171,7 @@ int main()
     {
         const auto config = makeConfig (true, true);
         CHECK (config.size() == 5 && config[3] == kConfig && config[4] == (kStreamOn | kSuppressNotes));
+        CHECK (config[2] == 1 && makeRequestInfo()[2] == 1);  // As version 1: every firmware accepts it
         CHECK (makeRequestInfo().size() == 4);
     }
 
@@ -172,6 +197,7 @@ int main()
         const auto infoData = withHeader (kInfo, encodeInfoPayload (info));
         const auto decoded = decodeInfo (infoData.data(), infoData.size());
         CHECK (decoded && decoded->covered[8] == 600 && decoded->gyroRange == 0b1100);
+        CHECK (out && out->pressure == 2000);
     }
 
     // Bluetooth batch: 8 samples (one 15 ms connection interval), round trip and size.

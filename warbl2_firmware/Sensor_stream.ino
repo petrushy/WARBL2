@@ -13,17 +13,20 @@
 //   STREAM_FRAME (0x01), one per loop:
 //     seq 14 bits, timestamp 21 bits (RTC2 ticks, 1/32768 s, wraps every 64 s),
 //     9 x 10-bit tone hole readings (ambient-light corrected by the ATmega, before smoothing and baseline subtraction),
-//     12-bit raw pressure (before smoothing), 3 x 16-bit raw accelerometer, 3 x 16-bit raw gyro (signed, two's complement),
+//     14-bit raw pressure (before smoothing), 3 x 16-bit raw accelerometer, 3 x 16-bit raw gyro (signed, two's complement),
 //     9-bit holeCovered (the firmware's own covered/uncovered decision, as a hint), 7 flag bits (bit 0: tone holes updated this frame).
 //   STREAM_BATCH (0x02), BLE only, once per connection interval: first seq 14 bits, timestamps of the first and last
 //     sample 2 x 21 bits, count 5 bits, accelerometer top 8 bits x 3 (once per batch), 7 flag bits; then per sample
-//     12-bit raw pressure and 9 x 8-bit tone hole readings (the top 8 of the 10). No gyro.
+//     14-bit raw pressure and 9 x 8-bit tone hole readings (the top 8 of the 10). No gyro.
 //   STREAM_INFO (0x10): sequence of 16-bit values: firmware version, 9 tone hole baselines, 9 tone hole covered thresholds,
-//     ambient pressure (10-bit, as used by the firmware), accelerometer range code, gyro range code (Adafruit lsm6ds range enums), loop period in ms.
+//     ambient pressure (10-bit, as used by the firmware), accelerometer range code, gyro range code (Adafruit lsm6ds range enums), loop period in ms,
+//     ambient pressure at 14 bits (the startup reading the host subtracts from the frames' pressure).
+// Version 1 (before 2026-11-06) sent the pressure at 12 bits and no 14-bit ambient; host commands are the same in both.
 
 #define STREAM_SYSEX_ID_1 0x7D
 #define STREAM_SYSEX_ID_2 0x57
-#define STREAM_PROTOCOL_VERSION 1
+#define STREAM_PROTOCOL_VERSION 2  // 2: pressure at 14 bits, and the 14-bit ambient pressure in STREAM_INFO
+#define STREAM_COMMAND_VERSION_MIN 1  // Host commands are unchanged since version 1
 
 #define STREAM_FRAME 0x01
 #define STREAM_BATCH 0x02
@@ -56,6 +59,19 @@ struct SysExBitWriter {
 
 
 
+// Reads the pressure sensor at 14 bits and gives the firmware's own logic its usual 12-bit reading (the top 12 bits:
+// MIDI behaviour is unchanged). The SAADC already averages 8 samples, so the two extra bits are real resolution
+// (~0.4 Pa per count) for the stream; the resolution is set back to 12 bits at once for every other analogRead.
+void readPressure() {
+    analogReadResolution(14);
+    fourteenBitPressure = analogRead(PRESSURE_PIN);
+    analogReadResolution(12);
+    twelveBitPressure = fourteenBitPressure >> 2;
+    analogPressure.update(twelveBitPressure);
+}
+
+
+
 void sendStreamSysEx(byte type, const byte* payload, byte payloadLength) {
     // The whole message in one write, straight to TinyUSB: the MIDI library writes a SysEx byte by byte, and
     // TinyUSB starts a USB transfer after every write, so the first 4-byte packet left alone and the rest waited
@@ -80,7 +96,7 @@ void sendStreamSysEx(byte type, const byte* payload, byte payloadLength) {
 // Size of a batch of `samples` as one BLE MIDI packet: BLE header and two timestamps, F0, 4 header bytes, the payload
 // (7 bits per byte), F7.
 uint16_t batchPacketBytes(byte samples) {
-    const uint32_t bits = 14 + 21 + 21 + 5 + 24 + 7 + (12 + 9 * 8) * (uint32_t)samples;
+    const uint32_t bits = 14 + 21 + 21 + 5 + 24 + 7 + (14 + 9 * 8) * (uint32_t)samples;
     return 3 + 1 + 4 + (bits + 6) / 7 + 1;
 }
 
@@ -108,7 +124,7 @@ void addBatchSample(uint16_t& seq) {
     for (byte i = 0; i < 9; i++) {
         holes[count][i] = (byte)(constrain(toneholeRaw[i], 0, 1023) >> 2);
     }
-    pressures[count] = twelveBitPressure & 0xFFF;
+    pressures[count] = fourteenBitPressure & 0x3FFF;
     flags |= (toneholeRawUpdated ? 1 : 0) | (toneholeRawRejected ? 2 : 0);
     toneholeRawUpdated = false;
     toneholeRawRejected = false;
@@ -146,7 +162,7 @@ void addBatchSample(uint16_t& seq) {
     w.put((uint8_t)(sox.rawAccZ >> 8), 8);
     w.put(flags & 0x7F, 7);
     for (byte s = 0; s < count; s++) {
-        w.put(pressures[s], 12);
+        w.put(pressures[s], 14);
         for (byte i = 0; i < 9; i++) {
             w.put(holes[s][i], 8);
         }
@@ -185,7 +201,7 @@ void sendSensorFrame() {
     for (byte i = 0; i < 9; i++) {
         w.put(toneholeRaw[i] & 0x3FF, 10);
     }
-    w.put(twelveBitPressure & 0xFFF, 12);
+    w.put(fourteenBitPressure & 0x3FFF, 14);
     w.put((uint16_t)sox.rawAccX, 16);
     w.put((uint16_t)sox.rawAccY, 16);
     w.put((uint16_t)sox.rawAccZ, 16);
@@ -218,6 +234,7 @@ void sendSensorStreamInfo() {
     w.put(sox.getAccelRange(), 16);
     w.put(sox.getGyroRange(), 16);
     w.put((connIntvl == 0 || (sensorStreamOn && USBstatus == USB_HOST)) ? 2 : 3, 16);  // Loop period in ms (see calculateDelayTime()).
+    w.put(ambientPressure14 & 0x3FFF, 16);
 
     sendStreamSysEx(STREAM_INFO, payload, w.length);
 }
@@ -260,7 +277,8 @@ void handleSysExFromBLE(byte* data, unsigned size) {
 }
 
 void handleStreamSysEx(byte* data, unsigned size, bool fromBLE) {
-    if (size < 6 || data[1] != STREAM_SYSEX_ID_1 || data[2] != STREAM_SYSEX_ID_2 || data[3] != STREAM_PROTOCOL_VERSION) {
+    if (size < 6 || data[1] != STREAM_SYSEX_ID_1 || data[2] != STREAM_SYSEX_ID_2 || data[3] < STREAM_COMMAND_VERSION_MIN
+        || data[3] > STREAM_PROTOCOL_VERSION) {
         return;
     }
 

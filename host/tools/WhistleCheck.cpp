@@ -1395,6 +1395,88 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "jitter")  // jitter [preset] [fingering] [p=<Pa>]: breath-sensor noise (new reading every 2 ms) against tone and noise
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        auto voicing = presetVoicing (index);
+        int which = 0;
+        double pressure = 170.0;
+        for (int i = 3; i < argc; ++i)
+        {
+            const juce::String arg (argv[i]);
+            if (arg.containsOnly ("0123456789")) which = arg.getIntValue();
+            if (arg.startsWith ("p=")) pressure = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        }
+        jetVoicingArgs (argc, argv, 3, voicing);
+        const auto fingerings = lowRegister (g);
+        const auto& c = fingerings[(size_t) juce::jlimit (0, (int) fingerings.size() - 1, which)];
+        std::printf ("%s, %s at %.0f Pa: breath reading noise (stdev, Pa at the model, a new reading every 2 ms, ramped)\n"
+                     "  noise      level   between the harmonics, 0.3-4 kHz (dB re the tone)   pitch wobble\n", g.name.toRawUTF8(), c.holePattern (g).c_str(), pressure);
+        constexpr double rate = 48000.0;
+        for (double sigma : { 0.0, 1.0, 3.0, 6.0, 12.0 })
+        {
+            WhistleModel model;
+            model.setGeometry (g);
+            model.prepare (rate);
+            model.setVoicing (voicing);
+            std::mt19937 rng (7);
+            std::normal_distribution<double> gauss (0.0, 1.0);
+            auto controls = controlsFor (c.openness (g));
+            std::vector<float> out ((size_t) (1.2 * rate), 0.0f);
+            const int block = (int) (rate * 0.002);
+            for (int start = 0; start < (int) out.size(); start += block)
+            {
+                const double ramp = std::min (1.0, start / (rate * 0.04));
+                controls.mouthPressure = (float) std::max (0.0, pressure * ramp + (ramp >= 1.0 ? sigma * gauss (rng) : 0.0));
+                model.setControls (controls);
+                model.render (out.data() + start, std::min (block, (int) out.size() - start));
+            }
+            const std::vector<float> tail (out.end() - (long) (0.8 * rate), out.end());
+            double clarity = 0.0;
+            const double f0 = measurePitch (tail, rate, clarity);
+            // Power spectrum (Hann, 8192) averaged; tone = bins within 15 Hz of a harmonic, noise = the rest in 0.3-4 kHz.
+            constexpr int n = 8192;
+            double tone = 0.0, between = 0.0;
+            for (size_t from = 0; from + n <= tail.size(); from += n / 2)
+            {
+                std::vector<std::complex<double>> x (n);
+                for (int i = 0; i < n; ++i)
+                    x[(size_t) i] = tail[from + (size_t) i] * (0.5 - 0.5 * std::cos (2.0 * juce::MathConstants<double>::pi * i / n));
+                for (int k = (int) (300.0 * n / rate); k < (int) (4000.0 * n / rate); ++k)
+                {
+                    std::complex<double> sum = 0.0;
+                    for (int i = 0; i < n; i += 1)
+                        sum += x[(size_t) i] * std::polar (1.0, -2.0 * juce::MathConstants<double>::pi * k * i / n);
+                    const double power = std::norm (sum), hz = k * rate / n;
+                    const double h = f0 > 0.0 ? hz / f0 : 0.0;
+                    if (f0 > 0.0 && std::abs (h - std::round (h)) * f0 < 15.0) tone += power;
+                    else between += power;
+                }
+            }
+            // Pitch wobble: zero-crossing periods' spread
+            std::vector<double> periods;
+            double last = -1.0;
+            for (size_t i = 1; i < tail.size(); ++i)
+                if (tail[i - 1] < 0.0f && tail[i] >= 0.0f)
+                {
+                    const double t = (double) i - 1.0 + tail[i - 1] / (tail[i - 1] - tail[i]);
+                    if (last >= 0.0) periods.push_back (t - last);
+                    last = t;
+                }
+            double mean = 0.0, var = 0.0;
+            for (double v : periods) mean += v;
+            mean /= std::max<size_t> (1, periods.size());
+            for (double v : periods) var += (v - mean) * (v - mean);
+            const double wobble = periods.empty() ? 0.0 : 1200.0 * std::log2 (1.0 + std::sqrt (var / periods.size()) / mean);
+            double rms = 0.0;
+            for (auto v : tail) rms += (double) v * v;
+            std::printf ("  %5.1f Pa  %5.1f dB   %6.1f dB                                        %5.1f c\n", sigma,
+                         10.0 * std::log10 (rms / tail.size() + 1e-12), 10.0 * std::log10 (between / std::max (tone, 1e-30) + 1e-12), wobble);
+        }
+        return 0;
+    }
+
     if (mode == "inside")  // inside [preset] [fingering index] [edge= vortex= st=]: the jet and the window flow while a note plays
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);

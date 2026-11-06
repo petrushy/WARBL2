@@ -56,10 +56,11 @@ Adafruit_USBD_MIDI usb_midi;
 Adafruit_LSM6DSOX sox;
 SF sfusion;
 #if defined(PROTOTYPE46)
-ResponsiveAnalogRead analogPressure(A0, true);
+#define PRESSURE_PIN A0
 #else
-ResponsiveAnalogRead analogPressure(A1, true);
+#define PRESSURE_PIN A1
 #endif
+ResponsiveAnalogRead analogPressure(PRESSURE_PIN, true);
 
 // Filtering
 ResponsiveAnalogRead filterToneholes[9];
@@ -238,6 +239,8 @@ unsigned long pressureTimer = 0;
 int sensorValue = 0;                   // Current pressure sensor reading
 int prevSensorValue = 0;               // Previous sensor reading, used to tell if the pressure has changed and should be sent.
 int twelveBitPressure;                 // Raw 12-bit reading
+int fourteenBitPressure = 0;           // The same reading at 14 bits (for the sensor stream; see readPressure())
+int ambientPressure14 = 0;             // 14-bit reading at startup (the sensor stream's breath zero)
 int smoothed_pressure;                 // Smoothed 12-bit pressure for mapping to CC, aftertouch, etc.
 int sensorCalibration = 0;             // The sensor reading at startup
 byte offset = 15;                      // Called "threshold" in the Configuration Tool-- used along with the multiplier for calculating the transition to the second register.
@@ -517,8 +520,8 @@ void setup() {
     loadFingering();
     loadSettingsForAllPresets();
     preset = defaultPreset;   // Set the startup preset.
-    analogPressure.update();  // Read the pressure sensor for calibration to ambient pressure.
-    twelveBitPressure = analogPressure.getRawValue();
+    readPressure();  // Read the pressure sensor for calibration to ambient pressure.
+    ambientPressure14 = fourteenBitPressure;     // For the sensor stream (the host's breath zero)
     sensorCalibration = twelveBitPressure >> 2;  // Reduce the reading to 10 bits and use it to calibrate.
     loadPrefs();                                 // Load the correct user settings based on current preset.
     powerDownTimer = millis();                   // Reset the powerDown timer.

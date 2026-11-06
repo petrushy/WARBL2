@@ -82,8 +82,7 @@ byte calculateDelayTime(void) {
 // Read the pressure sensor and get latest tone hole readings from the ATmega.
 void getSensors(void) {
 
-    analogPressure.update();  //  Read the pressure sensor now while the ATmega is still asleep and the board is very quiet.
-    twelveBitPressure = analogPressure.getRawValue();
+    readPressure();  //  Read the pressure sensor now while the ATmega is still asleep and the board is very quiet. Also sets twelveBitPressure.
     smoothed_pressure = analogPressure.getValue();  // Use an adaptively smoothed 12-bit reading to map to CC, aftertouch, poly.
     sensorValue = twelveBitPressure >> 2;           // Reduce the reading to stable 10 bits for state machine.
 
@@ -139,8 +138,7 @@ void getSensors(void) {
 
 void getSensors(void) {
 
-    analogPressure.update();  //  Read the pressure sensor now while the ATmega is still asleep and the board is very quiet.
-    twelveBitPressure = analogPressure.getRawValue();
+    readPressure();  //  Read the pressure sensor now while the ATmega is still asleep and the board is very quiet. Also sets twelveBitPressure.
     smoothed_pressure = analogPressure.getValue();  // Use an adaptively-smoothed 12-bit reading to map to CC, aftertouch, poly.
     sensorValue = twelveBitPressure >> 2;           // Reduce the reading to stable 10 bits for state machine.
 
