@@ -20,6 +20,18 @@ Voicing presetVoicing (size_t index)
     // lower breath (top C at ~3 kPa, C6 at ~0.6 kPa; at 0.035 the low C goes sharp); the whistles' defaults give
     // their register changes at ~1 and ~4 kPa. One band-pass stage: no silent pressures between the registers.
     Voicing v;
+    if (index < presets().size() && presets()[index].name.startsWith ("D whistle, Goldie style"))
+    {
+        // Fitted to Real-examples/High-D-Goldie.wav (WhistleCheck analyse): the thin windway wants a lower jet band,
+        // one band-pass stage (no silent pressures between registers), and the jet settings that make a softly blown
+        // low note swing far across the edge (rich, as the recording's bottom D) while the hard-blown second octave
+        // stays nearly pure.
+        v.jetStrouhal = 0.017f;
+        v.jetStages = 1;
+        v.slowJetGrowth = 0.5f;
+        v.jetGain = 1.3f;
+        v.breathNoise = 0.025f;  // Half the default: the recording's second octave is clean (noise ~-70 dB)
+    }
     if (index < presets().size() && presets()[index].name.startsWith ("Low D"))
     {
         // The low whistle (see its geometry): a jet band low enough for its registers to sit where a low D is
@@ -131,6 +143,19 @@ const std::vector<Geometry>& presets()
                   { { { false, 0.0, 0.0 }, { true, 0.11835, 0.00672 }, { true, 0.14030, 0.00850 }, { true, 0.15909, 0.00800 },
                       { true, 0.18208, 0.00700 }, { true, 0.19543, 0.00920 }, { true, 0.21689, 0.00720 }, { false, 0.0, 0.0 } } },
                   0.0040, 1.3, 0.0010, 0.0050, 0.0085),
+            [&]
+            {
+                // In the style of a Goldie high D (not measured): a thin aluminium tube, a narrow head (as the
+                // narrow-head preset), a low windway ceiling (Goldie's "medium" is ~0.87 mm) and a short window.
+                auto g = make ("D whistle, Goldie style", 0.26324, 0.0120, 0.0120,
+                               { { { false, 0.0, 0.0 }, { true, 0.11715, 0.00449 }, { true, 0.14123, 0.00700 }, { true, 0.16070, 0.00650 },
+                                   { true, 0.18684, 0.00720 }, { true, 0.19674, 0.00680 }, { true, 0.22180, 0.00580 }, { false, 0.0, 0.0 } } },
+                               0.0010, 1.0, 0.00087, 0.0042, 0.0080);
+                g.headLength = 0.030;
+                g.headDiameter = 0.0115;  // Narrow, but less than the narrow-head preset's 10.5 mm: its octave played 20-30 c sharp
+                g.edgeOffset = 0.0002;    // Into the pipe: the strong second harmonic of the recorded Goldie's low notes
+                return g;
+            }(),
             [&]
             {
                 // Low D whistle: a 22 mm cylindrical bore (a Goldie low D measures ~21.8), a 1.0 mm windway (Goldie
