@@ -1257,6 +1257,7 @@ int main (int argc, char* argv[])
         windwayArgs (argc, argv, 3, g);
         auto voicing = presetVoicing (index);
         windwayNoiseArg (argc, argv, voicing);
+        jetVoicingArgs (argc, argv, 3, voicing);
         double pressure = 600.0, rampMs = 10.0;
         for (int i = 3; i < argc; ++i)
         {
@@ -1501,6 +1502,68 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "onset")  // onset [preset] [fingering] [p=<Pa>] [seed=<n>] [voicing options]: pitch and level every 10 ms as a note starts
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        windwayArgs (argc, argv, 3, g);
+        auto voicing = presetVoicing (index);
+        jetVoicingArgs (argc, argv, 3, voicing);
+        voicing.vortexLoss *= vortexArg;
+        int which = 0;
+        double pressure = 500.0;
+        for (int i = 3; i < argc; ++i)
+        {
+            const juce::String arg (argv[i]);
+            if (arg.containsOnly ("0123456789")) which = arg.getIntValue();
+            if (arg.startsWith ("p=")) pressure = arg.fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        }
+        const auto fingerings = lowRegister (g);
+        const auto& c = fingerings[(size_t) juce::jlimit (0, (int) fingerings.size() - 1, which)];
+        const double target = lowestNote (g) * std::pow (2.0, c.semitones / 12.0);
+        constexpr double rate = 48000.0;
+        WhistleModel model;
+        model.setGeometry (g);
+        model.prepare (rate);
+        model.setVoicing (voicing);
+        auto controls = controlsFor (c.openness (g));
+        std::vector<float> out ((size_t) (0.35 * rate), 0.0f);
+        const int block = (int) (rate * 0.002);
+        for (int start = 0; start < (int) out.size(); start += block)
+        {
+            controls.mouthPressure = (float) (pressure * std::min (1.0, start / (rate * 0.04)));
+            model.setControls (controls);
+            model.render (out.data() + start, std::min (block, (int) out.size() - start));
+        }
+        std::printf ("%s, %s at %.0f Pa (blown up over 40 ms), breath noise %.3f: per 10 ms, level (dBFS) and pitch (cents from %s)\n  ",
+                     g.name.toRawUTF8(), c.name, pressure, voicing.breathNoise, c.name);
+        const int window = (int) (0.01 * rate);
+        for (int w = 0; w + window <= (int) out.size(); w += window)
+        {
+            double sum = 0.0, periodSum = 0.0, last = -1.0;
+            int periods = 0;
+            for (int i = w; i < w + window; ++i)
+            {
+                sum += (double) out[(size_t) i] * out[(size_t) i];
+                if (i > 0 && out[(size_t) i - 1] < 0.0f && out[(size_t) i] >= 0.0f)
+                {
+                    const double t = i - 1 + out[(size_t) i - 1] / (out[(size_t) i - 1] - out[(size_t) i]);
+                    if (last >= 0.0) { periodSum += t - last; ++periods; }
+                    last = t;
+                }
+            }
+            const double db = 10.0 * std::log10 (sum / window + 1e-12);
+            if (periods > 0 && db > -60.0)
+                std::printf ("%3d ms %5.0f dB %+5.0f c   ", w * 1000 / (int) rate, db, 1200.0 * std::log2 (rate * periods / periodSum / target));
+            else
+                std::printf ("%3d ms %5.0f dB    -     ", w * 1000 / (int) rate, db);
+            if ((w / window) % 5 == 4)
+                std::printf ("\n  ");
+        }
+        std::printf ("\n");
+        return 0;
+    }
+
     if (mode == "inside")  // inside [preset] [fingering index] [edge= vortex= st=]: the jet and the window flow while a note plays
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
@@ -1514,8 +1577,8 @@ int main (int argc, char* argv[])
             const juce::String arg (argv[i]);
             if (arg.containsOnly ("0123456789")) which = arg.getIntValue();
         }
+        voicing.breathNoise = 0.0f;  // Off unless noise= is given
         jetVoicingArgs (argc, argv, 3, voicing);
-        voicing.breathNoise = 0.0f;
         voicing.vortexLoss *= vortexArg;
         const auto fingerings = lowRegister (g);
         const auto& c = fingerings[(size_t) juce::jlimit (0, (int) fingerings.size() - 1, which)];

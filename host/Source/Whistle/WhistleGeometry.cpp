@@ -28,8 +28,8 @@ Voicing presetVoicing (size_t index)
         // stays nearly pure.
         v.jetStrouhal = 0.017f;
         v.jetStages = 1;
-        v.slowJetGrowth = 0.5f;
-        v.jetGain = 1.3f;
+        v.slowJetGrowth = 0.25f;
+        v.jetGain = 1.1f;  // 1.3 chirped through another register as a hole opened gradually (WhistleCheck glide)
         v.breathNoise = 0.025f;  // Half the default: the recording's second octave is clean (noise ~-70 dB)
     }
     if (index < presets().size() && presets()[index].name.startsWith ("Low D"))
@@ -153,7 +153,7 @@ const std::vector<Geometry>& presets()
                                0.0010, 1.0, 0.00087, 0.0042, 0.0080);
                 g.headLength = 0.030;
                 g.headDiameter = 0.0115;  // Narrow, but less than the narrow-head preset's 10.5 mm: its octave played 20-30 c sharp
-                g.edgeOffset = 0.0002;    // Into the pipe: the strong second harmonic of the recorded Goldie's low notes
+                g.edgeOffset = 0.00015;   // Into the pipe: the second harmonic of the recorded Goldie's low notes
                 return g;
             }(),
             [&]

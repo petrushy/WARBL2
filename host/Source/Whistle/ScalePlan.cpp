@@ -21,7 +21,7 @@ std::string noteName (double hz)
 // Plays one fingering at one pressure (blown up over 40 ms, like a player) and returns the pitch, or 0 if it
 // doesn't sound clearly as a note: periodic, and at least -40 dBFS (~60 dB SPL at the listener), not a whisper
 // right at the threshold that may not start at all when played.
-double play (const Geometry& g, const Voicing& v, const Openness& open, double pressure)
+double play (const Geometry& g, const Voicing& v, const Openness& open, double pressure, double* levelDb = nullptr)
 {
     constexpr double rate = 48000.0;
     WhistleModel model;
@@ -47,11 +47,16 @@ double play (const Geometry& g, const Voicing& v, const Openness& open, double p
     const auto tail = (size_t) (0.1 * rate);
     for (size_t i = out.size() - tail; i < out.size(); ++i)
         sum += (double) out[i] * out[i];
+    if (levelDb != nullptr)
+        *levelDb = 10.0 * std::log10 (sum / (double) tail + 1.0e-20);
     if (sum / (double) tail < 1.0e-8)  // -40 dBFS
         return 0.0;
 
+    // The pitch once the note has settled (the last 0.2 s): a note that starts with some breath noise before the
+    // tone takes over is still a clear note.
+    const std::vector<float> settled (out.end() - (long) (0.2 * rate), out.end());
     double clarity = 0.0;
-    const double f = measurePitch (out, rate, clarity);
+    const double f = measurePitch (settled, rate, clarity);
     return clarity > 0.8 ? f : 0.0;
 }
 } // namespace
@@ -105,24 +110,34 @@ std::vector<ScaleStep> planScale (const Geometry& g, const Voicing& v, double lo
         // note is unreliable, and the breath noise can decide whether it starts at all.
         const double from = c.reg == 1 ? 150.0 : c.reg == 2 ? 600.0 : 1200.0;
         const double to = c.reg == 1 ? 3000.0 : 5000.0;
-        ScaleStep best;
-        best.cents = 1.0e9f;
+        // Among pressures about as well in tune as the best (within 5 cents), the loudest: right at the threshold a
+        // fingering can give a quiet tone that happens to be in tune, which isn't the note as played.
+        struct Candidate { float pressure, cents; double levelDb; };
+        std::vector<Candidate> candidates;
         bool softerSounds = play (g, v, open, from / 1.15) > 0.0;
         for (double pressure = from; pressure <= to; pressure *= 1.15)
         {
-            const double f = play (g, v, open, pressure);
+            double levelDb = -200.0;
+            const double f = play (g, v, open, pressure, &levelDb);
             const bool sounds = f > 0.0;
             const bool reliable = sounds && softerSounds;
             softerSounds = sounds;
-            if (! reliable)
-                continue;
-            const auto cents = (float) (1200.0 * std::log2 (f / target));
-            if (std::abs (cents) < std::abs (best.cents))
-            {
-                best.cents = cents;
-                best.pressure = (float) pressure;
-            }
+            if (reliable)
+                candidates.push_back ({ (float) pressure, (float) (1200.0 * std::log2 (f / target)), levelDb });
         }
+        ScaleStep best;
+        best.cents = 1.0e9f;
+        float closest = 1.0e9f;
+        for (const auto& k : candidates)
+            closest = std::min (closest, std::abs (k.cents));
+        double loudest = -1.0e9;
+        for (const auto& k : candidates)
+            if (std::abs (k.cents) <= closest + 5.0f && k.levelDb > loudest)
+            {
+                loudest = k.levelDb;
+                best.cents = k.cents;
+                best.pressure = k.pressure;
+            }
 
         if (std::abs (best.cents) <= 60.0f)
         {
