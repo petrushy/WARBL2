@@ -59,6 +59,23 @@ private:
     std::array<float, 11> harmonicsDb {};  // H1..H10 re H1 (index 1..10)
     double slowMotion = 0.0;  // 0..1, the phase shown within a period
 
+    // Showing a note only once it has been found a few frames running, and keeping the last one for a moment after
+    // it stops being found (breath noise between notes, a register change), so the views don't flicker on and off.
+    struct Held
+    {
+        Snapshot snap;
+        bool playing = false;
+        double period = 0.0, cycleStart = 0.0;
+        float swingMin = 0.0f, swingMax = 0.0f, switched = 0.0f, driveRms = 0.0f, vortexRms = 0.0f, levelDb = -100.0f;
+        std::array<float, 11> harmonicsDb {};
+    };
+    Held hold() const;
+    void restore (const Held&);
+    bool showingNote = false;
+    int framesFound = 0, framesMissed = 0;
+    static constexpr int kFramesToShow = 3;   // ~0.1 s at 30 frames/s
+    static constexpr int kFramesToHide = 12;  // ~0.4 s
+
     // Bore impedance at the window for the current fingering (refreshed when holes move)
     std::array<double, whistle::kNumHoles> impedanceOpenness {};
     double impedanceFoot = -1.0;

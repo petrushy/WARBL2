@@ -61,10 +61,42 @@ void ModelPage::visibilityChanged()
 
 void ModelPage::timerCallback()
 {
+    const auto before = hold();
     takeSnapshot();
     analyse();
+    const bool found = playing;
+    framesFound = found ? framesFound + 1 : 0;
+    framesMissed = found ? 0 : framesMissed + 1;
+    const bool show = showingNote ? framesMissed < kFramesToHide : framesFound >= kFramesToShow;
+    if (show && ! found)
+        restore (before);  // Keep showing the last note, still in slow motion
+    else if (! show)
+        playing = false;
+    showingNote = show;
     updateImpedance();
     repaint();
+}
+
+ModelPage::Held ModelPage::hold() const
+{
+    return { snap, playing, period, cycleStart, swingMin, swingMax, switched, driveRms, vortexRms, levelDb, harmonicsDb };
+}
+
+void ModelPage::restore (const Held& h)
+{
+    snap = h.snap;
+    playing = h.playing;
+    period = h.period;
+    cycleStart = h.cycleStart;
+    swingMin = h.swingMin;
+    swingMax = h.swingMax;
+    switched = h.switched;
+    driveRms = h.driveRms;
+    vortexRms = h.vortexRms;
+    levelDb = h.levelDb;
+    harmonicsDb = h.harmonicsDb;
+    slowMotion = std::fmod (juce::Time::getMillisecondCounterHiRes() * 0.001 * kSlowMotionHz, 1.0);
+    shownTime = cycleStart + slowMotion * period;
 }
 
 void ModelPage::takeSnapshot()
