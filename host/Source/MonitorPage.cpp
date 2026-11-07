@@ -409,7 +409,9 @@ void MonitorPage::timerCallback()
         audioLabel.setText (device->getName() + "   " + juce::String (rate / 1000.0, 1) + " kHz   buffer " + juce::String (buffer)
                                 + " (" + juce::String (buffer * 1000.0 / rate, 2) + " ms)   output latency "
                                 + juce::String ((buffer + outLatency) * 1000.0 / rate, 2) + " ms   max frames/block "
-                                + juce::String (audio.maxFramesPerBlock.load()) + "   blocks " + juce::String ((juce::int64) audio.blocksProcessed.load()),
+                                + juce::String (audio.maxFramesPerBlock.load()) + "   blocks " + juce::String ((juce::int64) audio.blocksProcessed.load())
+                                + (audio.limiterReductionDb.load() > 0.5f ? "   limiting -" + juce::String (audio.limiterReductionDb.load(), 1) + " dB (too loud: lower Output level)"
+                                                                          : juce::String()),
                             juce::dontSendNotification);
     }
     else

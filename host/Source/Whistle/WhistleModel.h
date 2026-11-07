@@ -86,6 +86,7 @@ public:
     // For display.
     std::atomic<float> jetVelocity { 0.0f };   // m/s
     std::atomic<float> level { 0.0f };         // Output RMS, linear
+    std::atomic<int> instabilityResets { 0 };  // Times the simulation went unstable and restarted from rest
 
     // A live look inside, for the Model tab: written by the audio thread only while `enabled` (it costs a little),
     // read by the message thread. Relaxed atomics: a view that mixes two neighbouring samples is harmless.

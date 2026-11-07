@@ -774,6 +774,7 @@ void WhistleModel::render (float* windowOut, float* bodyOut, int numSamples)
         if (! std::isfinite (sample[0] + sample[1]))  // Extreme settings can make the simulation unstable: start again from rest.
         {
             resetState();
+            instabilityResets.fetch_add (1, std::memory_order_relaxed);
             sample[0] = sample[1] = 0.0f;
         }
         const float sum = sample[0] + sample[1];

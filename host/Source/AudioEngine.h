@@ -105,6 +105,8 @@ public:
 
     // Most frames taken from the queue in one audio block (shows whether frames bunch up).
     std::atomic<int> maxFramesPerBlock { 0 };
+    // Output limiter: how far it turned the sound down (dB, the most in the last ~2 s; 0 = not limiting).
+    std::atomic<float> limiterReductionDb { 0.0f };
     std::atomic<uint64_t> blocksProcessed { 0 };  // Shows whether audio is running.
 
 private:
@@ -129,6 +131,9 @@ private:
     bool scaleCacheValid = false;
     std::atomic<bool> scalePlanning { false }, scalePlaying { false };
     juce::SpinLock scaleAudioLock;
+    float limiterEnvelope = 0.0f;  // Audio thread: the output's peak, falling back slowly
+    float limiterHeldDb = 0.0f;
+    int limiterHoldSamples = 0;
     std::vector<whistle::ScaleStep> scaleSteps;  // Audio thread copy
     std::atomic<int> scaleSample { 0 }, scaleStepIndex { -1 };
     std::shared_ptr<bool> alive = std::make_shared<bool> (true);

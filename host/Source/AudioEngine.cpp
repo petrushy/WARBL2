@@ -443,6 +443,35 @@ void AudioEngine::audioDeviceIOCallbackWithContext (const float* const*, int, fl
     juce::FloatVectorOperations::add (outputs[1], ears[1].get(), ears[3].get(), numSamples);
     reverb.process (ears[0].get(), ears[1].get(), ears[2].get(), ears[3].get(), outputs[0], outputs[1], numSamples);
 
+    // Output limiter: the model can get louder than full scale (a hard-blown upper register, plus the reverb), and
+    // the device would cut the peaks off, which sounds broken. Instead the level is turned down at once when a peak
+    // would pass -1 dBFS and comes back over ~150 ms.
+    {
+        constexpr float ceiling = 0.89f;  // -1 dBFS
+        const float release = 1.0f - std::exp (-1.0f / (0.15f * (float) sampleRate));
+        float* left = outputs[0];
+        float* right = numOutputs > 1 ? outputs[1] : nullptr;
+        float leastGain = 1.0f;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float peak = std::max (std::abs (left[i]), right != nullptr ? std::abs (right[i]) : 0.0f);
+            limiterEnvelope = peak > limiterEnvelope ? peak : limiterEnvelope + release * (peak - limiterEnvelope);
+            const float gain = limiterEnvelope > ceiling ? ceiling / limiterEnvelope : 1.0f;
+            left[i] *= gain;
+            if (right != nullptr)
+                right[i] *= gain;
+            leastGain = std::min (leastGain, gain);
+        }
+        const float reductionDb = -20.0f * std::log10 (leastGain);
+        limiterHoldSamples -= numSamples;
+        if (reductionDb >= limiterHeldDb || limiterHoldSamples <= 0)
+        {
+            limiterHeldDb = reductionDb;
+            limiterHoldSamples = (int) (2.0 * sampleRate);
+        }
+        limiterReductionDb.store (limiterHeldDb, std::memory_order_relaxed);
+    }
+
     recorder.addAudio (outputs, numOutputs, numSamples);
 
     if (silent)

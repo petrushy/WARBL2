@@ -1588,6 +1588,59 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "stress")  // stress [preset] [seconds=30] [windowloss=0] [voicing options]: random fingering and breath; counts instability resets
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        windwayArgs (argc, argv, 3, g);
+        auto voicing = presetVoicing (index);
+        jetVoicingArgs (argc, argv, 3, voicing);
+        voicing.vortexLoss *= vortexArg;
+        double seconds = 30.0;
+        for (int i = 3; i < argc; ++i)
+            if (juce::String (argv[i]).startsWith ("seconds="))
+                seconds = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getDoubleValue();
+        constexpr double rate = 48000.0;
+        WhistleModel model;
+        model.setGeometry (g);
+        model.prepare (rate);
+        model.setVoicing (voicing);
+        model.testWindowLoss = windowLossArg;
+        std::mt19937 rng (3);
+        std::uniform_real_distribution<double> uni (0.0, 1.0);
+        Controls controls;
+        double nextChange = 0.0, pressureTarget = 500.0, pressure = 0.0;
+        std::vector<float> block ((size_t) (rate * 0.002));
+        double peak = 0.0;
+        int silentBlocksAfterSound = 0;
+        for (double t = 0.0; t < seconds; t += 0.002)
+        {
+            if (t >= nextChange)
+            {
+                nextChange = t + 0.02 + 0.15 * uni (rng);
+                for (int h = 0; h < kNumHoles; ++h)  // Mostly covered or open, sometimes partly (a finger on its way)
+                {
+                    const double r = uni (rng);
+                    controls.openness[(size_t) h] = (float) (r < 0.45 ? 0.0 : r < 0.9 ? 1.0 : uni (rng));
+                }
+                pressureTarget = uni (rng) < 0.1 ? 0.0 : 100.0 * std::pow (60.0, uni (rng));  // 100 Pa .. 6 kPa
+            }
+            pressure += 0.2 * (pressureTarget - pressure);
+            controls.mouthPressure = (float) pressure;
+            std::fill (block.begin(), block.end(), 0.0f);
+            model.setControls (controls);
+            model.render (block.data(), (int) block.size());
+            double rms = 0.0;
+            for (auto v : block) { rms += (double) v * v; peak = std::max (peak, (double) std::abs (v)); }
+            rms = std::sqrt (rms / (double) block.size());
+            if (rms < 1.0e-7 && pressure > 300.0) ++silentBlocksAfterSound;
+        }
+        std::printf ("%s, %.0f s of random fingering (changes every 20-170 ms, some partly open holes) and breath (0-6 kPa):\n"
+                     "  instability resets %d, peak output %.2f, 2 ms blocks silent while blowing > 300 Pa: %d\n",
+                     g.name.toRawUTF8(), seconds, model.instabilityResets.load(), peak, silentBlocksAfterSound);
+        return 0;
+    }
+
     if (mode == "inside")  // inside [preset] [fingering index] [edge= vortex= st=]: the jet and the window flow while a note plays
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
