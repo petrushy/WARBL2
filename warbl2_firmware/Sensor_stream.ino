@@ -183,7 +183,8 @@ void sendSensorFrame() {
         addBatchSample(seq);
         return;
     }
-    if (USBstatus != USB_HOST) {  // Otherwise the stream only goes over USB.
+    if (!tud_ready()) {  // The USB host has gone (cable pulled, computer asleep): stop, which also brings Bluetooth back.
+        setSensorStream(false, false, false);
         return;
     }
 
@@ -251,6 +252,19 @@ void setSensorStream(bool on, bool suppressNotes, bool overBLE) {
     sensorStreamOn = on;
     sensorStreamSuppressNotes = on && suppressNotes;
     sensorStreamOverBLE = on && overBLE;
+
+    // Streaming over USB, Bluetooth is paused: a phone or tablet nearby that connects (and reconnects) would interrupt
+    // the loop and the sensor readings, and could take some of the MIDI. It comes back when the stream stops.
+    static bool bluetoothPausedByStream = false;
+    if (on && !overBLE) {
+        if (bleEnabled && !bluetoothPausedByStream) {
+            bluetoothPausedByStream = true;
+            setBluetooth(false);
+        }
+    } else if (bluetoothPausedByStream) {
+        bluetoothPausedByStream = false;
+        setBluetooth(true);
+    }
 
     if (on) {
         sox.setAccelDataRate(LSM6DS_RATE_1_66K_HZ);  // Faster than the stream loop, so each frame has a fresh reading.
