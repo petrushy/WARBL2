@@ -21,7 +21,7 @@ std::string noteName (double hz)
 // Plays one fingering at one pressure (blown up over 40 ms, like a player) and returns the pitch, or 0 if it
 // doesn't sound clearly as a note: periodic, and at least -40 dBFS (~60 dB SPL at the listener), not a whisper
 // right at the threshold that may not start at all when played.
-double play (const Geometry& g, const Voicing& v, const Openness& open, double pressure, double* levelDb = nullptr)
+double play (const Geometry& g, const Voicing& v, const Openness& open, double pressure)
 {
     constexpr double rate = 48000.0;
     WhistleModel model;
@@ -47,8 +47,6 @@ double play (const Geometry& g, const Voicing& v, const Openness& open, double p
     const auto tail = (size_t) (0.1 * rate);
     for (size_t i = out.size() - tail; i < out.size(); ++i)
         sum += (double) out[i] * out[i];
-    if (levelDb != nullptr)
-        *levelDb = 10.0 * std::log10 (sum / (double) tail + 1.0e-20);
     if (sum / (double) tail < 1.0e-8)  // -40 dBFS
         return 0.0;
 
@@ -110,33 +108,32 @@ std::vector<ScaleStep> planScale (const Geometry& g, const Voicing& v, double lo
         // note is unreliable, and the breath noise can decide whether it starts at all.
         const double from = c.reg == 1 ? 150.0 : c.reg == 2 ? 600.0 : 1200.0;
         const double to = c.reg == 1 ? 3000.0 : 5000.0;
-        // Among pressures about as well in tune as the best (within 5 cents), the loudest: right at the threshold a
-        // fingering can give a quiet tone that happens to be in tune, which isn't the note as played.
-        struct Candidate { float pressure, cents; double levelDb; };
+        // The closest in tune among pressures where the pitch moves smoothly (within 20 cents of the next softer
+        // and harder pressure): right at the threshold a fingering can give a quiet tone that happens to be in tune,
+        // and where it crosses over to the next register the pitch reading can land on the note by chance.
+        struct Candidate { float pressure, cents; bool reliable; };
         std::vector<Candidate> candidates;
         bool softerSounds = play (g, v, open, from / 1.15) > 0.0;
         for (double pressure = from; pressure <= to; pressure *= 1.15)
         {
-            double levelDb = -200.0;
-            const double f = play (g, v, open, pressure, &levelDb);
+            const double f = play (g, v, open, pressure);
             const bool sounds = f > 0.0;
-            const bool reliable = sounds && softerSounds;
+            candidates.push_back ({ (float) pressure, sounds ? (float) (1200.0 * std::log2 (f / target)) : 1.0e9f, sounds && softerSounds });
             softerSounds = sounds;
-            if (reliable)
-                candidates.push_back ({ (float) pressure, (float) (1200.0 * std::log2 (f / target)), levelDb });
         }
         ScaleStep best;
         best.cents = 1.0e9f;
-        float closest = 1.0e9f;
-        for (const auto& k : candidates)
-            closest = std::min (closest, std::abs (k.cents));
-        double loudest = -1.0e9;
-        for (const auto& k : candidates)
-            if (std::abs (k.cents) <= closest + 5.0f && k.levelDb > loudest)
+        for (int pick = 0; pick < 2 && best.cents > 1.0e8f; ++pick)  // Smooth ones first, then any reliable one
+            for (size_t k = 0; k < candidates.size(); ++k)
             {
-                loudest = k.levelDb;
-                best.cents = k.cents;
-                best.pressure = k.pressure;
+                const auto& here = candidates[k];
+                const bool smooth = k > 0 && k + 1 < candidates.size() && std::abs (candidates[k - 1].cents - here.cents) <= 20.0f
+                                    && std::abs (candidates[k + 1].cents - here.cents) <= 20.0f;
+                if (here.reliable && (smooth || pick == 1) && std::abs (here.cents) < std::abs (best.cents))
+                {
+                    best.cents = here.cents;
+                    best.pressure = here.pressure;
+                }
             }
 
         if (std::abs (best.cents) <= 60.0f)

@@ -69,6 +69,7 @@ public:
     std::atomic<float> jetGain { 1.0f };  // See Voicing
     std::atomic<float> slowJetGrowth { 0.0f };  // See Voicing
     std::atomic<float> breathScale { 1.0f };  // See Voicing (applied by the caller to WARBL's breath)
+    std::atomic<float> jetSpreading { 0.0f };  // See Voicing
 
     // Sets all of the above that a Voicing holds, or reads them back.
     void setVoicing (const Voicing&);
@@ -79,7 +80,8 @@ public:
     float testSource = 0.0f;
     std::vector<float>* windowFlowLog = nullptr;
     std::vector<float>* jetLog = nullptr;  // Per sample: deflection minus edge (m), jet flow (m^3/s), jet drive, vortex drop (Pa)
-    float testWindowRadiation = 1.0f, testBodyRadiation = 1.0f;  // Scale what the window / the holes and foot radiate
+    float testWindowRadiation = 1.0f, testBodyRadiation = 1.0f;
+    bool testWindowLoss = true;  // The window's radiation loss (off: a lossless air mass, as before 2026-11-06)  // Scale what the window / the holes and foot radiate
 
     // For display.
     std::atomic<float> jetVelocity { 0.0f };   // m/s
@@ -103,6 +105,7 @@ public:
         std::atomic<float> bandCentre { 0.0f };     // Hz, the jet's preferred frequency
         std::atomic<float> slowBoost { 0.0f };      // Extra growth for long waves (see Voicing::slowJetGrowth)
         std::atomic<float> edge { 0.0f };           // m, edge position incl. tilt
+        std::atomic<float> halfWidth { 0.0004f };   // m, the jet's half-width at the edge
         // Pressure in the bore at each junction (window = 0 ... foot): RMS (Pa) and the sign of its correlation
         // with the pressure at the window (+1 in phase, -1 opposite).
         static constexpr int maxJunctions = 65;
@@ -160,7 +163,9 @@ private:
         std::array<double, kNumHoles> holeGapHeight {}, holeGapViscous {};
 
         float windowArea = 0.0f;
-        float windowMass = 0.0f;     // Inertance of the air in the window, as M * 2 * rate / Z0 (trapezoidal rule).
+        float windowMass = 0.0f;     // Inertance of the air in the window, as M * 2 * rate / Z0 (trapezoidal rule), its outer part excluded.
+        float windowMassFull = 0.0f; // The same with the outer part (when the window's radiation is off, for comparison)
+        float windowRadB0 = 0.0f, windowRadA1 = 0.0f;  // The radiating outer part (mass parallel rho c / Aw), bilinear
         float boreImpedance = 0.0f;  // Z0 of the top section, rho c / S.
         float footB = 0.0f, footA = 0.0f;  // Open foot reflection lowpass.
         bool bellClosesFoot = false;
@@ -190,6 +195,7 @@ private:
     std::array<Biquad, kMaxSegments> lossRight {}, lossLeft {};
     std::array<std::array<double, 9>, kMaxSegments + 1> holeState {};  // Hole junction filters: sum, p, open flow; 3 samples each
     float topPressure = 0.0f, lastSource = 0.0f;  // At the top of the bore, previous sample.
+    float windowRadPressure = 0.0f;  // Pressure across the window's radiating outer part, previous sample
     float footX1 = 0.0f, footY1 = 0.0f;
 
     // Jet state

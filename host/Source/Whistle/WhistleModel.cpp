@@ -166,7 +166,7 @@ void WhistleModel::resetState()
     for (auto& d : decimatorBuffer)
         d.fill (0.0f);
     lastRadiatedFlow = dcX1 = dcY1 = {};
-    topPressure = lastSource = footX1 = footY1 = flowIntoBore = lastJetFlow = 0.0f;
+    topPressure = lastSource = footX1 = footY1 = flowIntoBore = lastJetFlow = windowRadPressure = 0.0f;
     windwaySpeed = slowJetSpeed = jetLock = 0.0f;
     levelState = 0.0f;
 }
@@ -187,6 +187,7 @@ void WhistleModel::setVoicing (const Voicing& v)
     slowJetGrowth = v.slowJetGrowth;
     jetStages = juce::jlimit (1, 2, v.jetStages);
     breathScale = v.breathScale;
+    jetSpreading = v.jetSpreading;
 }
 
 Voicing WhistleModel::getVoicing() const
@@ -206,6 +207,7 @@ Voicing WhistleModel::getVoicing() const
     v.slowJetGrowth = slowJetGrowth.load();
     v.jetStages = jetStages.load();
     v.breathScale = breathScale.load();
+    v.jetSpreading = jetSpreading.load();
     return v;
 }
 
@@ -307,8 +309,17 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
     // move, in series with the bore. Open-end-like at low frequencies, nearly closed at high ones.
     out.windowArea = (float) g.windowArea();
     out.boreImpedance = (float) (kAirDensity * kSpeedOfSound / out.area[0]);
+    // The window radiates like the holes: the outer part of its air mass (half its equivalent radius) in parallel
+    // with rho c / Aw, which takes energy out (radiation resistance ~ rho w^2 / (4 pi c), growing with frequency
+    // squared: it damps the high resonances that would otherwise ring at the harmonics of the second octave).
+    const double windowRadius = std::sqrt (g.windowArea() / kPi);
+    const double outerMass = kAirDensity * 0.5 * windowRadius / g.windowArea();
     const double inertance = kAirDensity * g.windowEffectiveLength() / g.windowArea();
-    out.windowMass = (float) (inertance * 2.0 * rate / out.boreImpedance);
+    out.windowMassFull = (float) (inertance * 2.0 * rate / out.boreImpedance);
+    out.windowMass = (float) ((inertance - outerMass) * 2.0 * rate / out.boreImpedance);
+    const double windowR = kAirDensity * kSpeedOfSound / g.windowArea(), km = 2.0 * rate * outerMass;
+    out.windowRadB0 = (float) (km * windowR / (windowR + km));  // Parallel mass and resistance, bilinear: (b0, -b0; 1, a1)
+    out.windowRadA1 = (float) ((windowR - km) / (windowR + km));
 
     // Open foot: reflection -1 at low frequencies, falling above ka ~ 1.
     const double kf = std::tan (kSpeedOfSound / footRadius / (2.0 * rate));
@@ -484,7 +495,9 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
         filtered = y;
     }
 
-    const float jetHalfWidth = 0.4f * h;
+    // The jet's half-width where it meets the edge: 0.4 h leaving the flue, widening across the window as it becomes
+    // turbulent (plane turbulent jet: ~0.1 per unit distance).
+    const float jetHalfWidth = 0.4f * h + jetSpreading.load (std::memory_order_relaxed) * turbulent * 0.1f * cfg.windowLength;
     // The slow jet's extra growth is for long waves (at and below the band centre), not for high resonances.
     jetBoostLow += jetBoostA * (filtered - jetBoostLow);
     const float deflection = jetAmplification * h * (filtered + jetSlowBoost * jetBoostLow) / speed + turbulence * jetHalfWidth * std::min (1.0f, jetSpeed / 20.0f);
@@ -512,12 +525,20 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
     //    p_top = source - M dU/dt, with p_top = p+ + p- and U = (p+ - p-) / Z0, solved for the outgoing p+
     //    with the trapezoidal rule.
     const float arrivingTop = arriveLeft[0];
-    const float m = cfg.windowMass, z0 = cfg.boreImpedance;
-    const float outgoing = (source + lastSource - topPressure - (1.0f - m) * arrivingTop + m * z0 * flowIntoBore) / (1.0f + m);
+    //    The radiating outer part adds p_rad = b0 U[n] + w (w from the previous sample) to the window's pressure drop.
+    const bool windowRadiates = testWindowLoss;
+    const float m = windowRadiates ? cfg.windowMass : cfg.windowMassFull, z0 = cfg.boreImpedance;
+    const float b0 = windowRadiates ? cfg.windowRadB0 : 0.0f;
+    const float radiationShare = b0 / z0;
+    const float radiationState = -b0 * flowIntoBore - cfg.windowRadA1 * windowRadPressure;
+    const float outgoing = (source + lastSource - topPressure - (1.0f - m) * arrivingTop + m * z0 * flowIntoBore
+                            - (windowRadiates ? radiationState + windowRadPressure : 0.0f) + radiationShare * arrivingTop)
+                           / (1.0f + m + radiationShare);
     sendRight[0] = outgoing;
     topPressure = outgoing + arrivingTop;
     lastSource = source;
     flowIntoBore = (outgoing - arrivingTop) / z0;
+    windowRadPressure = windowRadiates ? b0 * flowIntoBore + radiationState : 0.0f;
     if (windowFlowLog != nullptr)
         windowFlowLog->push_back (flowIntoBore);
 
@@ -670,6 +691,7 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
             scope.bandCentre.store (jetStrouhal.load (std::memory_order_relaxed) * speed / h, std::memory_order_relaxed);
             scope.slowBoost.store (jetSlowBoost, std::memory_order_relaxed);
             scope.edge.store (edge, std::memory_order_relaxed);
+            scope.halfWidth.store (jetHalfWidth, std::memory_order_relaxed);
             const int count = std::min (n + 1, Scope::maxJunctions);
             for (int j = 0; j < count; ++j)
             {

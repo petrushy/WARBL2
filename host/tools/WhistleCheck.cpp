@@ -88,7 +88,8 @@ Controls controlsFor (const Openness& open)
 // Plays a breath gesture through one fingering: the pressure is sent every 2 ms, like WARBL's frames.
 // Returns the sound at `rate`.
 static float vortexArg = 1.0f;
-static bool geometryArgs = false;  // window=, width=, flue=, top=, foot= given: retune before playing  // vortex=: the edge vortex loss (playGesture, radiation)
+static bool geometryArgs = false;
+static bool windowLossArg = true;  // windowloss=0: the window as a lossless air mass (as before 2026-11-06)  // window=, width=, flue=, top=, foot= given: retune before playing  // vortex=: the edge vortex loss (playGesture, radiation)
 
 static std::vector<float> playGesture (const Geometry& g, const Voicing& v, const Openness& open,
                                        const std::function<double (double)>& pressureAt, double seconds, double rate)
@@ -178,6 +179,7 @@ static void jetVoicingArgs (int argc, char* argv[], int from, Voicing& v)
         if (arg.startsWith ("gain=")) v.jetGain = value;
         if (arg.startsWith ("slow=")) v.slowJetGrowth = value;
         if (arg.startsWith ("stages=")) v.jetStages = (int) value;
+        if (arg.startsWith ("spread=")) v.jetSpreading = value;
     }
 }
 
@@ -194,6 +196,7 @@ static void windwayArgs (int argc, char* argv[], int from, Geometry& g)
         if (arg.startsWith ("windway=")) g.windwayLength = value * 0.001;
         if (arg.startsWith ("edge=")) g.edgeOffset = value * 0.001;
         if (arg.startsWith ("vortex=")) vortexArg = (float) value;
+        if (arg.startsWith ("windowloss=")) windowLossArg = value > 0.5;
         // The fipple's size (mm); the instrument is retuned afterwards where it matters (analyse).
         if (arg.startsWith ("window=")) { g.windowLength = value * 0.001; geometryArgs = true; }
         if (arg.startsWith ("width=")) { g.windowWidth = value * 0.001; geometryArgs = true; }
@@ -1564,6 +1567,27 @@ int main (int argc, char* argv[])
         return 0;
     }
 
+    if (mode == "res")  // res [preset]: every scale fingering's resonances up to 8 kHz, and how far each is from a harmonic of the 2nd
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        windwayArgs (argc, argv, 3, g);
+        std::printf ("%s: resonances (Hz), and in brackets cents from k x the second resonance (the second octave's harmonics)\n", g.name.toRawUTF8());
+        for (const auto& c : lowRegister (g))
+        {
+            const auto r = resonances (g, c.openness (g), lowestNote (g) * 0.6, 8000.0);
+            std::printf ("  %-6s", c.name);
+            for (size_t k = 0; k < r.size() && k < 8; ++k)
+            {
+                std::printf (" %6.0f", r[k]);
+                if (r.size() > 1 && k >= 1 && (k + 1) % 2 == 0)
+                    std::printf (" (%+4.0f)", 1200.0 * std::log2 (r[k] / (r[1] * (double) ((k + 1) / 2))));
+            }
+            std::printf ("\n");
+        }
+        return 0;
+    }
+
     if (mode == "inside")  // inside [preset] [fingering index] [edge= vortex= st=]: the jet and the window flow while a note plays
     {
         const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
@@ -1595,6 +1619,7 @@ int main (int argc, char* argv[])
             model.setGeometry (g);
             model.prepare (rate);
             model.setVoicing (voicing);
+            model.testWindowLoss = windowLossArg;
             std::vector<float> flowLog, jetLog;
             auto controls = controlsFor (c.openness (g));
             std::vector<float> out ((size_t) (0.6 * rate), 0.0f);

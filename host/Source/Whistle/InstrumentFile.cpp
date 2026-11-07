@@ -93,6 +93,7 @@ juce::var toVar (const Instrument& instrument)
     set (voicing, "slowJetGrowth", v.slowJetGrowth);
     set (voicing, "jetStages", v.jetStages);
     set (voicing, "breathScale", v.breathScale);
+    set (voicing, "jetSpreading", v.jetSpreading);
     root.getDynamicObject()->setProperty ("voicing", voicing);
 
     return root;
@@ -179,6 +180,7 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     read (voicing, "jetGain", instrument.voicing.jetGain);
     read (voicing, "slowJetGrowth", instrument.voicing.slowJetGrowth);
     read (voicing, "breathScale", instrument.voicing.breathScale);
+    read (voicing, "jetSpreading", instrument.voicing.jetSpreading);
     if (voicing.hasProperty ("jetStages"))
         instrument.voicing.jetStages = juce::jlimit (1, 2, (int) voicing["jetStages"]);
 

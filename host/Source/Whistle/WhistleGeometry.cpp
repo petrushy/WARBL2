@@ -30,7 +30,11 @@ Voicing presetVoicing (size_t index)
         v.jetStages = 1;
         v.slowJetGrowth = 0.25f;
         v.jetGain = 1.1f;  // 1.3 chirped through another register as a hole opened gradually (WhistleCheck glide)
-        v.breathNoise = 0.025f;  // Half the default: the recording's second octave is clean (noise ~-70 dB)
+        // The jet widens as it turns turbulent (the second octave's faster jet more): that octave comes out louder
+        // and purer, as on the recorded tune (second-octave H2 -30 dB, was -17; tune -34). Less vortex loss gives
+        // the softer first octave back its odd harmonics.
+        v.jetSpreading = 3.0f;
+        v.vortexLoss = 0.6f;
     }
     if (index < presets().size() && presets()[index].name.startsWith ("Low D"))
     {

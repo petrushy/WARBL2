@@ -42,7 +42,7 @@ private:
     {
         std::vector<float> deflection, jetFlow, windowFlow, drive, vortex, sound;
         float rate = 96000.0f, pressure = 0.0f, jetSpeed = 0.0f, flowShare = 1.0f, travel = 0.0f, exponent = 0.0f;
-        float bandCentre = 0.0f, slowBoost = 0.0f, edge = 0.0f, jetGain = 1.0f, jetQ = 0.7f;
+        float bandCentre = 0.0f, slowBoost = 0.0f, edge = 0.0f, halfWidth = 0.0004f, jetGain = 1.0f, jetQ = 0.7f;
         int stages = 2;
         std::vector<float> junctionX, junctionRms, junctionSign;
     } snap;

@@ -101,7 +101,11 @@ Complex windowImpedance (const Geometry& g, const Openness& open, double hz)
     travelTo (0.0);
 
     // The window: a short opening the air moves through, in series as seen by the jet.
-    const Complex zWindow = j * omega * kAirDensity * g.windowEffectiveLength() / g.windowArea();
+    // Its outer part radiates (as in WhistleModel): that air mass in parallel with rho c / Aw.
+    const double windowRadius = std::sqrt (g.windowArea() / kPi);
+    const double outerMass = kAirDensity * 0.5 * windowRadius / g.windowArea(), windowR = kAirDensity * kSpeedOfSound / g.windowArea();
+    const Complex outer = j * omega * outerMass * windowR / (windowR + j * omega * outerMass);
+    const Complex zWindow = j * omega * (kAirDensity * g.windowEffectiveLength() / g.windowArea() - outerMass) + outer;
     return z + zWindow;
 }
 

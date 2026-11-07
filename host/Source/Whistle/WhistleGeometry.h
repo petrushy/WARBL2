@@ -144,6 +144,11 @@ struct Voicing
     // Band-pass stages in the jet's response (its preference for frequencies near the Strouhal number): each adds
     // selectivity but also phase shift, which narrows each register's pressure range.
     int jetStages = 2;
+    // The jet widens on its way across the window, much more once it is turbulent (Reynolds number U h / nu above
+    // ~1000, fully above ~3000): a turbulent plane jet's half-width grows by ~0.1 x the distance. As a multiple of
+    // that, 0 = a jet of constant width (0.4 h). A wider jet at the edge switches less abruptly and carries more
+    // flow: fast-blown notes (the second octave) come out louder and purer, as on real whistles.
+    float jetSpreading = 0.0f;
     // How hard this instrument is blown, as a share of WARBL's breath response (Sensors tab): a recorder is blown
     // about half as hard as a whistle, but WARBL's mouthpiece feels the same for both. Only WARBL's breath is
     // scaled (not Play scale or playing from the screen, which give the model's own pressures).

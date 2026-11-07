@@ -125,6 +125,7 @@ void ModelPage::takeSnapshot()
     snap.bandCentre = scope.bandCentre.load();
     snap.slowBoost = scope.slowBoost.load();
     snap.edge = scope.edge.load();
+    snap.halfWidth = scope.halfWidth.load();
     snap.jetGain = audio.whistleModel.jetGain.load();
     snap.jetQ = audio.whistleModel.jetQ.load();
     snap.stages = audio.whistleModel.jetStages.load();
@@ -210,7 +211,7 @@ void ModelPage::analyse()
     const int periods = std::max (1, (int) ((double) n * 0.45 / period));
     const double from = cycleStart - periods * period + period;
     const double to = cycleStart + period;
-    const float halfWidth = 0.4f * (float) geometry.windwayHeight;
+    const float halfWidth = std::max (1.0e-5f, snap.halfWidth);
     swingMin = 1.0e9f;
     swingMax = -1.0e9f;
     int count = 0, across = 0;
@@ -391,7 +392,7 @@ void ModelPage::paintWindow (juce::Graphics& g, juce::Rectangle<float> area)
            "The sound's flow in and out of the window (orange) pushes the jet as it leaves the flue; the push grows on the way "
            "and arrives at the edge a moment later, where the jet goes into the pipe or out of it.");
 
-    const float h = (float) geometry.windwayHeight, halfWidth = 0.4f * h, W = (float) geometry.windowLength;
+    const float h = (float) geometry.windwayHeight, halfWidth = std::max (1.0e-5f, snap.halfWidth), W = (float) geometry.windowLength;
     if (h <= 0.0f || W <= 0.0f)
         return;
 
@@ -505,7 +506,7 @@ void ModelPage::paintEdgeSignals (juce::Graphics& g, juce::Rectangle<float> area
     if (! playing)
         return;
 
-    const float halfWidth = 0.4f * (float) geometry.windwayHeight;
+    const float halfWidth = std::max (1.0e-5f, snap.halfWidth);
     const double from = cycleStart - period, to = cycleStart + period;
     const float maxJetFlow = (float) geometry.windowWidth * halfWidth * std::max (snap.jetSpeed, 0.5f) * snap.flowShare;
     float flowMax = 1.0e-12f;
