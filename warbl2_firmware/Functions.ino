@@ -198,14 +198,14 @@ void getSensors(void) {
 
         unpacked[8] |= ((toneholePacked[11] & 0x03) << 8);
 
-        // Sensor stream (1 kHz loop): the ATmega sometimes hasn't finished its reading when we fetch, and the 4-bit
-        // checksum lets about 1 in 16 garbled transfers through. A finger can't move a reading by more than ~half
-        // its range in a millisecond, so reject a transfer with such a jump (keep the previous readings). After a
-        // few rejections in a row, accept it anyway, so a real change can never be locked out.
+        // Sensor stream: the 4-bit checksum lets some garbled transfers through, and a garbled one usually jumps. A
+        // transfer with a jump of more than ~400 counts in one hole is held back once (the previous readings stay);
+        // if the next transfer still has it, it was real and is accepted: a real finger change is delayed by one
+        // loop (2 ms), a one-off glitch is dropped. (Holding three times delayed real changes by 6 ms.)
         static int lastAccepted[9];
         static byte rejectedInRow = 0;
         bool plausible = true;
-        if (sensorStreamOn && rejectedInRow < 3) {
+        if (sensorStreamOn && rejectedInRow < 1) {
             for (byte i = 0; i < 9; i++) {
                 if (abs(unpacked[i] - lastAccepted[i]) > 400) {
                     plausible = false;
@@ -3962,8 +3962,8 @@ void loadPrefs() {
     }
 
     // Calculate upper and lower bounds for IMU pitch (elevation) register mapping.
+    IMUsettings[preset][PITCH_REGISTER_NUMBER] = constrain(IMUsettings[preset][PITCH_REGISTER_NUMBER], 2, 5);                                                                  // Sanity check if uninitialized (before dividing by it). Higher values will result in writing outside of the pitchRegisterBounds[i] array.
     byte pitchPerRegister = (IMUsettings[preset][PITCH_REGISTER_INPUT_MAX] - IMUsettings[preset][PITCH_REGISTER_INPUT_MIN]) * 5 / IMUsettings[preset][PITCH_REGISTER_NUMBER];  // Number of degrees per register
-    IMUsettings[preset][PITCH_REGISTER_NUMBER] = constrain(IMUsettings[preset][PITCH_REGISTER_NUMBER], 2, 5);                                                                  // Sanity check if uninitialized. Higher values will result in writing outside of the pitchRegisterBounds[i] array.
     for (byte i = 0; i < IMUsettings[preset][PITCH_REGISTER_NUMBER] + 1; i++) {
         pitchRegisterBounds[i] = ((i * pitchPerRegister) + IMUsettings[preset][PITCH_REGISTER_INPUT_MIN] * 5) - 90;  // Upper/lower bounds for each register
     }
@@ -4494,10 +4494,7 @@ void connect_callback(uint16_t conn_handle) {
 
     BLEConnection* connection = Bluefruit.Connection(conn_handle);
 
-    char central_name[32] = { 0 };
-    connection->getPeerName(central_name, sizeof(central_name));
-
-    //Serial.println(central_name);
+    // (The central's name isn't read: that's a GATT request that can wait up to 500 ms, delaying everything here.)
 
     // Read the initial connection interval
     uint16_t connUnits = connection->getConnectionInterval();  // units of 1.25 ms

@@ -8,9 +8,10 @@
 //
 // Host -> WARBL:
 //   STREAM_CONFIG (0x20), one byte: bit 0 stream on, bit 1 suppress notes/pitchbend/CC output while streaming,
-//     bit 2 keep-alive: the host repeats this command (every second) and WARBL stops the stream if it hasn't for
-//     STREAM_KEEPALIVE_MS, so a host that crashed or was killed can't leave it streaming. Without bit 2 the stream
-//     runs until turned off (older hosts, stream_monitor.py).
+//     bit 2 keep-alive (set by current hosts). Every stream needs renewing: the host repeats this command (every
+//     second) and WARBL stops the stream if it hasn't for STREAM_KEEPALIVE_MS, so a host that crashed or was
+//     killed can't leave it streaming to every app on the MIDI port. (Until 2026-11-08 a stream without bit 2 ran
+//     until turned off.)
 //   STREAM_REQUEST_INFO (0x21), no payload: WARBL answers with STREAM_INFO.
 // WARBL -> host:
 //   STREAM_FRAME (0x01), one per loop:
@@ -44,6 +45,7 @@
 
 bool streamKeepAlive = false;          // The host renews the stream (STREAM_CONFIG_KEEPALIVE)
 unsigned long streamRenewedMs = 0;     // When it last did
+bool streamBatchReset = true;          // Start the next BLE batch afresh (the stream started, stopped or changed transport)
 
 #define STREAM_MAX_SYSEX 64  // Large enough for a frame (42 bytes) or the info message (~53 bytes).
 #define STREAM_BATCH_MAX_SAMPLES 16  // 16 x 2 ms covers a 30 ms connection interval; ~212 bytes as SysEx
@@ -83,7 +85,7 @@ void readPressure() {
 void sendStreamSysEx(byte type, const byte* payload, byte payloadLength) {
     // The whole message in one write, straight to TinyUSB: the MIDI library writes a SysEx byte by byte, and
     // TinyUSB starts a USB transfer after every write, so the first 4-byte packet left alone and the rest waited
-    // for the host's next poll (1 ms): at most 500 frames/s. A frame is 60 bytes as USB-MIDI packets, so it
+    // for the host's next poll (1 ms): at most 500 frames/s. A frame is 42 MIDI bytes, 56 as USB-MIDI packets, so it
     // fits one 64-byte transfer.
     byte message[240] = { 0xF0, STREAM_SYSEX_ID_1, STREAM_SYSEX_ID_2, STREAM_PROTOCOL_VERSION, type };
     if (payloadLength + 6 > sizeof(message)) {
@@ -117,6 +119,13 @@ void addBatchSample(uint16_t& seq) {
     static uint32_t firstTime = 0, lastTime = 0;
     static uint8_t flags = 0;
     static unsigned long lastSendMs = 0;
+
+    if (streamBatchReset) {  // No samples or timestamps left over from an earlier session
+        streamBatchReset = false;
+        count = 0;
+        flags = 0;
+        lastSendMs = 0;
+    }
 
     if (connIntvl == 0 || !blemidi.notifyEnabled()) {
         count = 0;
@@ -247,7 +256,7 @@ void sendSensorStreamInfo() {
     w.put(sensorCalibration, 16);
     w.put(sox.getAccelRange(), 16);
     w.put(sox.getGyroRange(), 16);
-    w.put((connIntvl == 0 || (sensorStreamOn && USBstatus == USB_HOST)) ? 2 : 3, 16);  // Loop period in ms (see calculateDelayTime()).
+    w.put((connIntvl == 0 || (sensorStreamOn && (USBstatus == USB_HOST || sensorStreamOverBLE))) ? 2 : 3, 16);  // Loop period in ms, as calculateDelayTime() aims for (a prediction, not a measurement).
     w.put(ambientPressure14 & 0x3FFF, 16);
 
     sendStreamSysEx(STREAM_INFO, payload, w.length);
@@ -265,6 +274,7 @@ void setSensorStream(bool on, bool suppressNotes, bool overBLE) {
     sensorStreamOn = on;
     sensorStreamSuppressNotes = on && suppressNotes;
     sensorStreamOverBLE = on && overBLE;
+    streamBatchReset = true;
 
     // Streaming over USB, Bluetooth is paused: a phone or tablet nearby that connects (and reconnects) would interrupt
     // the loop and the sensor readings, and could take some of the MIDI. It comes back when the stream stops.
@@ -313,7 +323,7 @@ void handleStreamSysEx(byte* data, unsigned size, bool fromBLE) {
         case STREAM_CONFIG:
             if (size >= 7) {
                 const bool on = data[5] & STREAM_CONFIG_ON, suppress = data[5] & STREAM_CONFIG_SUPPRESS_NOTES;
-                streamKeepAlive = on && (data[5] & STREAM_CONFIG_KEEPALIVE);
+                streamKeepAlive = on;  // Every stream needs renewing, with or without the (older) keep-alive bit
                 streamRenewedMs = millis();
                 if (on != sensorStreamOn || suppress != sensorStreamSuppressNotes || (on && fromBLE != sensorStreamOverBLE)) {
                     setSensorStream(on, suppress, fromBLE);  // A renewal of the same stream only resets the timer above

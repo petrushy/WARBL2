@@ -72,11 +72,17 @@ def main():
         out.send(mido.Message("sysex", data=ID + [COMMAND_VERSION, type_] + list(payload)))
 
     send(REQUEST_INFO)
-    send(CONFIG, [0x01 | (0x02 if args.suppress else 0)])
+    send(CONFIG, [0x01 | (0x02 if args.suppress else 0) | 0x04])
 
     last_seq, frames, gaps, start = None, 0, 0, time.monotonic()
+    config = [0x01 | (0x02 if args.suppress else 0) | 0x04]  # 0x04: keep-alive, renewed below
+    last_renewal = time.monotonic()
     try:
         for msg in inp:
+            # WARBL stops a stream that isn't renewed within 3 s (so a killed monitor can't leave it streaming).
+            if time.monotonic() - last_renewal > 1.0:
+                send(CONFIG, config)
+                last_renewal = time.monotonic()
             if msg.type != "sysex" or list(msg.data[:2]) != ID or msg.data[2] not in (1, 2):
                 continue
             version, kind, payload = msg.data[2], msg.data[3], msg.data[4:]

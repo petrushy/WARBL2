@@ -185,29 +185,27 @@ void WarblBLEMidi::blemidi_write_cb(uint16_t conn_hdl, BLECharacteristic* chr, u
 
 void WarblBLEMidi::_write_handler(uint16_t conn_hdl, uint8_t* data, uint16_t len)
 {
+  // WARBL: bounds-checked (Adafruit's original read data[1] past the end when a packet ended in a single byte
+  // with bit 7 set, and then let len wrap around), and a full FIFO drops the rest of the packet.
+  if (len < 2) return;  // A header and nothing else, or malformed
+
   // drop the BLE MIDI header byte
   data++;
   len--;
 
   while (len)
   {
-    // timestamp low byte followed by a MIDI status,
-    // so we drop the timestamp low byte
-    if ( isStatusByte(data[0]) && isStatusByte(data[1]) )
+    // A byte with bit 7 set followed by another byte is a timestamp (before a status byte, or on its own before
+    // running-status data): drop it. A lone one at the end of the packet is dropped too.
+    if ( isStatusByte(data[0]) )
     {
       data++;
       len--;
-    }
-    // timestamp low byte on it's own (running status),
-    // so we drop the timestamp low byte
-    else if ( isStatusByte(data[0]) && ! isStatusByte(data[1]) )
-    {
-      data++;
-      len--;
+      if (len == 0) break;
     }
 
     // write the status or MIDI data to the FIFO
-    _rxd_fifo.write(data++, 1);
+    if ( !_rxd_fifo.write(data++, 1) ) break;  // Full: drop the rest of the packet
     len--;
   }
 

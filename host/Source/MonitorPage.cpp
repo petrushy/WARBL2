@@ -399,7 +399,7 @@ void MonitorPage::timerCallback()
     timingView.update (stats);
     statsLabel.setText (juce::String (stats.framesPerSecond, 0) + " frames/s   lost " + juce::String (stats.lostFrames)
                             + "   new hole readings in " + juce::String (juce::roundToInt (stats.freshHoles * 100.0)) + " % of frames"
-                            + "   garbled ones rejected " + juce::String (stats.rejectedHoleReadings)
+                            + "   hole jumps held back " + juce::String (stats.rejectedHoleReadings)
                             + (stats.bluetooth ? "   Bluetooth: " + juce::String (stats.framesPerBatch, 1) + " frames per batch every "
                                                      + juce::String (stats.batchIntervalMs, 1) + " ms"
                                                      + (audio.smoothBluetooth.load() ? ", smoothing +" + juce::String (audio.bluetoothDelayMs.load(), 1) + " ms"
