@@ -187,6 +187,14 @@ SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
                            "sensor, so WARBL still reads it as mostly covered. With its own response the thumb's open area follows "
                            "the coverage in a straight line (curve 64) instead of the fingers' S-curve, which hears a pinch as "
                            "nearly closed. The chart is tuned for a pinch 25 % open.");
+    holeJumpToggle.setColour (juce::ToggleButton::textColourId, text);
+    holeJumpToggle.setToggleState (audio.holdHoleJumps.load(), juce::dontSendNotification);
+    holeJumpToggle.setTooltip ("A garbled reading from WARBL's tone-hole chip can slip past its checksum and shows as a sudden "
+                               "jump in one hole. With this on, such a jump waits one reading (2 ms): if it's still there it was "
+                               "your finger and is taken, otherwise it was a glitch and is dropped. Only that hole waits. Off: "
+                               "every reading at once.");
+    holeJumpToggle.onClick = [this] { audio.holdHoleJumps = holeJumpToggle.getToggleState(); };
+    addAndMakeVisible (holeJumpToggle);
     thumbToggle.setColour (juce::ToggleButton::textColourId, text);
     thumbToggle.setToggleState (audio.thumbOwn.load(), juce::dontSendNotification);
     thumbToggle.onClick = [this] { audio.thumbOwn = thumbToggle.getToggleState(); };
@@ -356,4 +364,5 @@ void SensorsPage::resized()
     thumbInfo.setBounds (thumbArea);
 
     layout (right, holeTitle, holeDefaults, holeRows, holeInfo, holeCurve, &holeShape);
+    holeJumpToggle.setBounds (holeShape.getBounds().withX (holeShape.getRight() + 12).withWidth (260));
 }

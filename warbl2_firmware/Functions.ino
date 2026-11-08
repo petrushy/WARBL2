@@ -198,30 +198,10 @@ void getSensors(void) {
 
         unpacked[8] |= ((toneholePacked[11] & 0x03) << 8);
 
-        // Sensor stream: the 4-bit checksum lets some garbled transfers through, and a garbled one usually jumps. A
-        // transfer with a jump of more than ~400 counts in one hole is held back once (the previous readings stay);
-        // if the next transfer still has it, it was real and is accepted: a real finger change is delayed by one
-        // loop (2 ms), a one-off glitch is dropped. (Holding three times delayed real changes by 6 ms.)
-        static int lastAccepted[9];
-        static byte rejectedInRow = 0;
-        bool plausible = true;
-        if (sensorStreamOn && rejectedInRow < 1) {
-            for (byte i = 0; i < 9; i++) {
-                if (abs(unpacked[i] - lastAccepted[i]) > 400) {
-                    plausible = false;
-                }
-            }
-        }
-        if (!plausible) {
-            rejectedInRow++;
-            toneholeRawRejected = true;  // Keep the previous readings and try again next loop.
-            return;
-        }
-        rejectedInRow = 0;
-
+        // (A garbled transfer that passes the 4-bit checksum is the host's to catch: the sensor stream sends every
+        // reading at once and WARBL Stream holds back a sudden jump in one hole for one frame; see AudioEngine.)
         for (byte i = 0; i < 9; i++) {
             toneholeRead[i] = unpacked[i];
-            lastAccepted[i] = unpacked[i];
             toneholeRaw[i] = unpacked[i];  // Keep the unfiltered readings for the sensor stream.
         }
         toneholeRawUpdated = true;

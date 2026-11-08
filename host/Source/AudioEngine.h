@@ -47,6 +47,14 @@ public:
     std::atomic<bool> holeSCurve { response::Hole().sCurve };
     std::atomic<bool> holeFingerHeight { response::Hole().fingerHeight };
     std::atomic<float> holeFingerRange { response::Hole().fingerRange };
+    // A garbled tone-hole transfer can pass WARBL's 4-bit checksum; it shows as a sudden jump. With this on, a hole
+    // whose reading jumps by more than kHoleJumpCounts in one fresh reading keeps its previous one for that frame;
+    // if the next fresh reading still has the jump it was real and is taken (2 ms later), otherwise it was a glitch.
+    // Only the jumping hole waits; the others and the breath don't. (Done in WARBL until 2026-11-08, for all holes.)
+    std::atomic<bool> holdHoleJumps { true };
+    std::atomic<uint64_t> heldHoleJumps { 0 };  // How many were held back (for display)
+    std::atomic<bool> resetHoleJumpFilter { true };  // Message thread: new calibration or connection
+    static constexpr int kHoleJumpCounts = 400;    // Of the 10-bit reading
     // The thumb hole's own response (see response::Thumb); set on the message thread.
     std::atomic<bool> thumbOwn { response::Thumb().own };
     std::atomic<float> thumbOpenBelow { response::Thumb().openBelow }, thumbClosedAt { response::Thumb().closedAt },
@@ -131,6 +139,8 @@ private:
     bool scaleCacheValid = false;
     std::atomic<bool> scalePlanning { false }, scalePlaying { false };
     juce::SpinLock scaleAudioLock;
+    std::array<int, warbl::kNumHoles> acceptedHole {};  // Audio thread: the hole jump filter's last accepted readings
+    std::array<bool, warbl::kNumHoles> holeJumpPending {};
     float limiterEnvelope = 0.0f;  // Audio thread: the output's peak, falling back slowly
     float limiterHeldDb = 0.0f;
     int limiterHoldSamples = 0;

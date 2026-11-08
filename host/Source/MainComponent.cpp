@@ -18,6 +18,7 @@ juce::var sensorsToVar (const AudioEngine& a)
     d->setProperty ("holeFingerHeight", a.holeFingerHeight.load());
     d->setProperty ("holeFingerRange_mm", a.holeFingerRange.load());
     d->setProperty ("thumbOwn", a.thumbOwn.load());
+    d->setProperty ("holdHoleJumps", a.holdHoleJumps.load());
     d->setProperty ("thumbOpenBelow", a.thumbOpenBelow.load());
     d->setProperty ("thumbClosedAt", a.thumbClosedAt.load());
     d->setProperty ("thumbCurve", a.thumbCurve.load());
@@ -51,6 +52,8 @@ void sensorsFromVar (const juce::var& o, AudioEngine& a)
     read ("thumbCurve", a.thumbCurve);
     if (o.hasProperty ("thumbOwn"))
         a.thumbOwn = (bool) o["thumbOwn"];
+    if (o.hasProperty ("holdHoleJumps"))
+        a.holdHoleJumps = (bool) o["holdHoleJumps"];
     read ("tiltZero_deg", a.tiltZero);
     read ("tiltDeadZone_deg", a.tiltDeadZone);
     read ("tiltRange_deg", a.tiltRange);

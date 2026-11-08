@@ -156,6 +156,7 @@ void AudioEngine::setCalibration (const warbl::DeviceInfo& info)
         covered[(size_t) i] = info.covered[(size_t) i];
     }
     ambient14 = info.ambientPressure;
+    resetHoleJumpFilter = true;
 }
 
 juce::String AudioEngine::calibrationText() const
@@ -186,11 +187,48 @@ whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& fram
     const auto holes = holeResponse();
     const auto thumb = thumbResponse();
     whistle::Controls c;
+
+    // The hole jump filter (see holdHoleJumps), on fresh hole readings only: a frame without new readings repeats
+    // the last ones and can neither confirm nor refute a jump.
+    auto frameHoles = frame.holes;
+    if (resetHoleJumpFilter.exchange (false))
+    {
+        for (int s = 0; s < warbl::kNumHoles; ++s)
+            acceptedHole[(size_t) s] = frame.holes[(size_t) s];
+        holeJumpPending.fill (false);
+    }
+    else if (holdHoleJumps.load())
+    {
+        for (int s = 0; s < warbl::kNumHoles; ++s)
+        {
+            auto& accepted = acceptedHole[(size_t) s];
+            auto& pending = holeJumpPending[(size_t) s];
+            if (frame.holesUpdated())
+            {
+                if (std::abs ((int) frame.holes[(size_t) s] - accepted) > kHoleJumpCounts && ! pending)
+                {
+                    pending = true;  // Hold it this once
+                    heldHoleJumps.fetch_add (1, std::memory_order_relaxed);
+                }
+                else
+                {
+                    pending = false;
+                    accepted = frame.holes[(size_t) s];
+                }
+            }
+            frameHoles[(size_t) s] = (uint16_t) accepted;
+        }
+    }
+    else
+    {
+        for (int s = 0; s < warbl::kNumHoles; ++s)
+            acceptedHole[(size_t) s] = frame.holes[(size_t) s];
+    }
     for (int hole = 0; hole < whistle::kNumHoles; ++hole)
     {
         const auto sensor = (size_t) whistle::kSensorForHole[(size_t) hole];
         const float span = (float) std::max (1, covered[sensor].load() - baseline[sensor].load());
-        const float coverage = ((float) frame.holes[sensor] - (float) baseline[sensor].load()) / span;
+        const float coverage = ((float) frameHoles[sensor] - (float) baseline[sensor].load()) / span;
         measuredCoverage[(size_t) hole] = coverage;
         c.openness[(size_t) hole] = 1.0f - (hole == 0 && thumb.own ? thumb.closedness (coverage) : holes.closedness (coverage, fingerHole (hole)));
     }
@@ -199,7 +237,7 @@ whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& fram
     {
         const auto sensor = (size_t) whistle::kBellSensor;
         const float span = (float) std::max (1, covered[sensor].load() - baseline[sensor].load());
-        const float coverage = ((float) frame.holes[sensor] - (float) baseline[sensor].load()) / span;
+        const float coverage = ((float) frameHoles[sensor] - (float) baseline[sensor].load()) / span;
         measuredBellCoverage = coverage;
         c.footOpenness = 1.0f - holes.closedness (coverage);
     }

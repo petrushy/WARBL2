@@ -58,6 +58,7 @@ private:
     std::vector<Row> breathRows, holeRows, tiltRows, thumbRows;
     juce::Label thumbTitle { {}, "Thumb hole (recorder pinch)" }, thumbInfo;
     juce::ToggleButton thumbToggle { "Own response" };
+    juce::ToggleButton holeJumpToggle { "Hold back sudden jumps (2 ms)" };
     juce::Label tiltTitle { {}, "Tilt aims the jet" }, tiltInfo;
     juce::ToggleButton tiltToggle { "On" }, tiltInvertToggle { "Invert" };
     juce::TextButton tiltZeroButton { "Set zero now" };
