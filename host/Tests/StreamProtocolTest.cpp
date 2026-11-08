@@ -170,7 +170,8 @@ int main()
     // Commands match what the firmware's handleSysExFromUSB() expects.
     {
         const auto config = makeConfig (true, true);
-        CHECK (config.size() == 5 && config[3] == kConfig && config[4] == (kStreamOn | kSuppressNotes));
+        CHECK (config.size() == 5 && config[3] == kConfig && config[4] == (kStreamOn | kSuppressNotes | kKeepAlive));
+        CHECK (makeConfig (false, false)[4] == 0 && makeConfig (true, false, false)[4] == kStreamOn);
         CHECK (config[2] == 1 && makeRequestInfo()[2] == 1);  // As version 1: every firmware accepts it
         CHECK (makeRequestInfo().size() == 4);
     }

@@ -37,7 +37,8 @@ enum MessageType : uint8_t
 enum ConfigFlags : uint8_t
 {
     kStreamOn = 0x01,
-    kSuppressNotes = 0x02
+    kSuppressNotes = 0x02,
+    kKeepAlive = 0x04  // The host repeats the command every second; WARBL stops the stream ~3 s after it stops doing so
 };
 
 constexpr int kNumHoles = 9;
@@ -331,10 +332,12 @@ inline std::vector<uint8_t> encodeInfoPayload (const DeviceInfo& info)
 }
 
 // Host -> WARBL commands (SysEx data without F0/F7).
-inline std::vector<uint8_t> makeConfig (bool streamOn, bool suppressNotes)
+// With keepAlive the host must repeat it at least every ~3 s (the app: every second), or WARBL stops the stream by
+// itself: a crashed or killed host can't leave it streaming. Firmware before the keep-alive ignores the bit.
+inline std::vector<uint8_t> makeConfig (bool streamOn, bool suppressNotes, bool keepAlive = true)
 {
     return { kSysExId1, kSysExId2, kCommandVersion, kConfig,
-             (uint8_t) ((streamOn ? kStreamOn : 0) | (suppressNotes ? kSuppressNotes : 0)) };
+             (uint8_t) ((streamOn ? kStreamOn : 0) | (suppressNotes ? kSuppressNotes : 0) | (streamOn && keepAlive ? kKeepAlive : 0)) };
 }
 
 inline std::vector<uint8_t> makeRequestInfo()

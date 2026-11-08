@@ -7,7 +7,10 @@
 // Payloads are bit-packed MSB-first, 7 bits per SysEx data byte, so every sensor bit gets through.
 //
 // Host -> WARBL:
-//   STREAM_CONFIG (0x20), one byte: bit 0 stream on, bit 1 suppress notes/pitchbend/CC output while streaming.
+//   STREAM_CONFIG (0x20), one byte: bit 0 stream on, bit 1 suppress notes/pitchbend/CC output while streaming,
+//     bit 2 keep-alive: the host repeats this command (every second) and WARBL stops the stream if it hasn't for
+//     STREAM_KEEPALIVE_MS, so a host that crashed or was killed can't leave it streaming. Without bit 2 the stream
+//     runs until turned off (older hosts, stream_monitor.py).
 //   STREAM_REQUEST_INFO (0x21), no payload: WARBL answers with STREAM_INFO.
 // WARBL -> host:
 //   STREAM_FRAME (0x01), one per loop:
@@ -36,6 +39,11 @@
 
 #define STREAM_CONFIG_ON 0x01
 #define STREAM_CONFIG_SUPPRESS_NOTES 0x02
+#define STREAM_CONFIG_KEEPALIVE 0x04
+#define STREAM_KEEPALIVE_MS 3000  // A keep-alive stream stops this long after the host's last STREAM_CONFIG
+
+bool streamKeepAlive = false;          // The host renews the stream (STREAM_CONFIG_KEEPALIVE)
+unsigned long streamRenewedMs = 0;     // When it last did
 
 #define STREAM_MAX_SYSEX 64  // Large enough for a frame (42 bytes) or the info message (~53 bytes).
 #define STREAM_BATCH_MAX_SAMPLES 16  // 16 x 2 ms covers a 30 ms connection interval; ~212 bytes as SysEx
@@ -179,6 +187,11 @@ void sendSensorFrame() {
     if (!sensorStreamOn) {
         return;
     }
+    if (streamKeepAlive && millis() - streamRenewedMs > STREAM_KEEPALIVE_MS) {  // The host has gone quiet: back to normal
+        streamKeepAlive = false;
+        setSensorStream(false, false, false);
+        return;
+    }
     if (sensorStreamOverBLE) {
         addBatchSample(seq);
         return;
@@ -299,7 +312,12 @@ void handleStreamSysEx(byte* data, unsigned size, bool fromBLE) {
     switch (data[4]) {
         case STREAM_CONFIG:
             if (size >= 7) {
-                setSensorStream(data[5] & STREAM_CONFIG_ON, data[5] & STREAM_CONFIG_SUPPRESS_NOTES, fromBLE);
+                const bool on = data[5] & STREAM_CONFIG_ON, suppress = data[5] & STREAM_CONFIG_SUPPRESS_NOTES;
+                streamKeepAlive = on && (data[5] & STREAM_CONFIG_KEEPALIVE);
+                streamRenewedMs = millis();
+                if (on != sensorStreamOn || suppress != sensorStreamSuppressNotes || (on && fromBLE != sensorStreamOverBLE)) {
+                    setSensorStream(on, suppress, fromBLE);  // A renewal of the same stream only resets the timer above
+                }
             }
             break;
 

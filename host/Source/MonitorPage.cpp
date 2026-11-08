@@ -372,6 +372,12 @@ void MonitorPage::timerCallback()
     if (! receiver.isConnected() && ++retry % 30 == 0)
         tryConnect();
 
+    // Renew the stream every second: WARBL stops it by itself ~3 s after the renewals stop (the app crashed or was
+    // killed), so it never keeps streaming to other MIDI apps.
+    static int renew = 0;
+    if (receiver.isConnected() && ! receiver.isSimulating() && streamButton.getToggleState() && ++renew % 30 == 0)
+        receiver.setStream (true, suppressButton.getToggleState());
+
     ReceivedFrame received;
     while (receiver.uiQueue.pop (received))
     {
