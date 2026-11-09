@@ -230,6 +230,25 @@ whistle::Controls AudioEngine::controlsFromFrame (const warbl::SensorFrame& fram
         const float span = (float) std::max (1, covered[sensor].load() - baseline[sensor].load());
         const float coverage = ((float) frameHoles[sensor] - (float) baseline[sensor].load()) / span;
         measuredCoverage[(size_t) hole] = coverage;
+
+        // A finger landing: its height above the hole from the same infrared law as the finger-height response
+        // (d = range x (1 / sqrt(coverage) - 1)), its speed over the last three fresh readings, once per landing: it
+        // must lift (coverage under 0.7) before it can land again, so a resting finger's sensor noise can't.
+        if (frame.holesUpdated() && holeRadius[(size_t) hole].load() > 0.0f)
+        {
+            const float closedAt = hole == 0 && thumb.own ? thumb.closedAt : holes.closedAt;
+            const float x = std::clamp (coverage / std::max (0.1f, closedAt), 0.02f, 1.0f);
+            const float height = holeFingerRange.load() * 0.001f * (1.0f / std::sqrt (x) - 1.0f);
+            auto& past = fingerHeights[(size_t) hole];
+            if (x < 0.7f)
+                fingerArmed[(size_t) hole] = true;
+            else if (x >= 0.95f && fingerArmed[(size_t) hole])
+            {
+                fingerArmed[(size_t) hole] = false;
+                whistleModel.fingerLands (hole, std::min (2.0f, (past[2] - height) / (3.0f * (float) frameInterval)));
+            }
+            past = { height, past[0], past[1], past[2] };
+        }
         c.openness[(size_t) hole] = 1.0f - (hole == 0 && thumb.own ? thumb.closedness (coverage) : holes.closedness (coverage, fingerHole (hole)));
     }
 

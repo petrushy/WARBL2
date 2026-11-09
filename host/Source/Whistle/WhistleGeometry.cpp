@@ -82,6 +82,17 @@ Voicing presetVoicing (size_t index)
         // (WARBL's full breath gives ~5.5 kPa).
         v.breathScale = 0.7f;
     }
+    // A finger landing: the air it pushes in as computed, and the body's resonances by material (first guesses until
+    // measured: wood low and short, thin metal higher and ringing).
+    if (index < presets().size())
+    {
+        const auto& name = presets()[index].name;
+        const bool wooden = name.contains ("wood") || name.contains ("recorder") || name.contains ("traditional scale");
+        v.fingerTap = 1.0f;
+        v.bodyKnock = 1.0f;
+        v.bodyPitch = wooden ? 900.0f : 2300.0f;
+        v.bodyRing = wooden ? 12.0f : 50.0f;
+    }
     return v;
 }
 

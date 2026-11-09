@@ -454,6 +454,24 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
                      "through: 1 = that physical resistance (a just-lifted finger changes little at first), 0 = off (the hole "
                      "acts as soon as the finger lifts).");
 
+    addHeading ("Finger impact (works without breath)");
+    addRow ("Finger tap (air)", 0.0, 20.0, 0.1, "", [&model] { return (double) model.fingerTap.load(); },
+            [&model] (double v) { model.fingerTap = (float) v; }, false)
+        .setTooltip ("A finger landing on a hole pushes a short puff of air into the tube, which rings at whatever note the holes make: "
+                     "tapping different fingers gives different pitches, even without blowing. 1 = the physical amount for the "
+                     "finger's speed (quiet, as on a real whistle), more to hear it better, 0 = off.");
+    addRow ("Body knock", 0.0, 20.0, 0.1, "", [&model] { return (double) model.bodyKnock.load(); },
+            [&model] (double v) { model.bodyKnock = (float) v; }, false)
+        .setTooltip ("The same impact shakes the instrument's body: the short knock you hear from the wood or metal itself, not from "
+                     "the air inside. 0 = off.");
+    addRow ("Body pitch", 300.0, 6000.0, 10.0, "Hz", [&model] { return (double) model.bodyPitch.load(); },
+            [&model] (double v) { model.bodyPitch = (float) v; }, false)
+        .setTooltip ("The lowest of the body's three resonances (the others are about 2.3 and 3.9 times higher). Wood is low and dull, thin "
+                     "metal high and bright.");
+    addRow ("Body ring", 3.0, 150.0, 1.0, "", [&model] { return (double) model.bodyRing.load(); },
+            [&model] (double v) { model.bodyRing = (float) v; }, false)
+        .setTooltip ("How long the body rings after the impact (a Q factor). Wood damps it almost at once (10-20), thin metal keeps ringing (50 or more).");
+
     addHeading ("Output (breath and hole response: Sensors tab)");
     addRow ("Breath scale", 0.2, 2.0, 0.01, "x", [&model] { return (double) model.breathScale.load(); },
             [&model] (double v) { model.breathScale = (float) v; }, false)

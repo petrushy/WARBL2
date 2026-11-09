@@ -167,6 +167,9 @@ void WhistleModel::resetState()
         d.fill (0.0f);
     lastRadiatedFlow = dcX1 = dcY1 = {};
     topPressure = lastSource = footX1 = footY1 = flowIntoBore = lastJetFlow = windowRadPressure = 0.0f;
+    tapSamplesLeft.fill (0);
+    for (auto& st : bodyState)
+        st.fill (0.0f);
     windwaySpeed = slowJetSpeed = jetLock = 0.0f;
     levelState = 0.0f;
 }
@@ -188,6 +191,10 @@ void WhistleModel::setVoicing (const Voicing& v)
     jetStages = juce::jlimit (1, 2, v.jetStages);
     breathScale = v.breathScale;
     jetSpreading = v.jetSpreading;
+    fingerTap = v.fingerTap;
+    bodyKnock = v.bodyKnock;
+    bodyPitch = v.bodyPitch;
+    bodyRing = v.bodyRing;
 }
 
 Voicing WhistleModel::getVoicing() const
@@ -208,6 +215,10 @@ Voicing WhistleModel::getVoicing() const
     v.jetStages = jetStages.load();
     v.breathScale = breathScale.load();
     v.jetSpreading = jetSpreading.load();
+    v.fingerTap = fingerTap.load();
+    v.bodyKnock = bodyKnock.load();
+    v.bodyPitch = bodyPitch.load();
+    v.bodyRing = bodyRing.load();
     return v;
 }
 
@@ -336,6 +347,18 @@ void WhistleModel::buildConfig (const Geometry& g, Config& out) const
     out.jetGrowth = std::exp (out.jetGrowthExponent);
     out.referenceJetSpeed = (float) (presetLowestNote (g) * g.windwayHeight / 0.02);
     out.dipoleLength = (float) (4.0 / kPi * std::sqrt (2.0 * g.windwayHeight * g.windowLength));
+}
+
+void WhistleModel::fingerLands (int hole, float speed)
+{
+    if (hole < 0 || hole >= kNumHoles || speed <= 0.0f)
+        return;
+    // The finger's pad sweeps the hole's area at its speed until it stops against the rim, within about 0.5 ms.
+    const double radius = 0.5 * geometry.holes[(size_t) hole].diameter;
+    tapPeakFlow[(size_t) hole] = (float) (kPi * radius * radius * speed);
+    tapSpeed[(size_t) hole] = speed;
+    tapLength = std::max (2, (int) (0.0005 * rate));
+    tapSamplesLeft[(size_t) hole] = tapLength;
 }
 
 void WhistleModel::setControls (const Controls& controls, double rampSeconds)
@@ -611,7 +634,15 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
             bilinear (gj * d0 + open * r, gj * d1 + compliance * d0 + open * mr, gj * d2 + compliance * d1, compliance * d2, den);
 
             auto& st = holeState[(size_t) jn];  // sum x1 x2 x3, p y1 y2 y3, flow f1 f2 f3
-            const double x0 = sum;
+            // A finger landing pushes air in: a flow into the junction, which the hole's own admittance lets
+            // escape while it is still open and which goes into the bore once it is shut.
+            double x0 = sum;
+            if (tapSamplesLeft[(size_t) hole] > 0)
+            {
+                const double phase = (double) tapSamplesLeft[(size_t) hole] / (double) tapLength;
+                const double shape = std::sin (kPi * phase) * std::sin (kPi * phase);
+                x0 += fingerTap.load (std::memory_order_relaxed) * tapPeakFlow[(size_t) hole] * shape / gj;
+            }
             const double pNew = (num[0] * x0 + num[1] * st[0] + num[2] * st[1] + num[3] * st[2]
                                  - den[1] * st[3] - den[2] * st[4] - den[3] * st[5]) / den[0];
             const double flow = (flowNum[0] * x0 + flowNum[1] * st[0] + flowNum[2] * st[1] + flowNum[3] * st[2]
@@ -656,6 +687,45 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
         lastRadiatedFlow[part] = radiated;
     }
     radiationRead = (radiationRead + 1) & (kRadiationSize - 1);
+    // The impact also rings the instrument's body, heard straight from it. 0.033 Pa at the listener per m/s: a tap at
+    // an everyday 0.3 m/s is about -46 dBFS at Body knock 1.
+    {
+        const float pitch = bodyPitch.load (std::memory_order_relaxed), ring = bodyRing.load (std::memory_order_relaxed);
+        if (! juce::exactlyEqual (pitch, bodyCoeffPitch) || ! juce::exactlyEqual (ring, bodyCoeffRing))
+        {
+            bodyCoeffPitch = pitch;
+            bodyCoeffRing = ring;
+            constexpr std::array<float, kBodyModes> ratio { 1.0f, 2.3f, 3.9f }, damping { 1.0f, 0.8f, 0.6f }, strength { 1.0f, 0.6f, 0.35f };
+            for (size_t bodyMode = 0; bodyMode < kBodyModes; ++bodyMode)
+            {
+                const float w = std::min (3.0f, 2.0f * (float) kPi * pitch * ratio[bodyMode] / (float) rate);
+                const float q = std::max (1.0f, ring * damping[bodyMode]);
+                const float pole = std::exp (-0.5f * w / q);
+                // The gain makes a pulse much shorter than a period ring at its own peak height.
+                bodyCoeffs[bodyMode] = { strength[bodyMode] * std::sin (w) * 2.0f / (float) std::max (2, tapLength), 2.0f * pole * std::cos (w), -pole * pole };
+            }
+        }
+        float impact = 0.0f;
+        for (size_t fingerHole = 0; fingerHole < kNumHoles; ++fingerHole)
+            if (tapSamplesLeft[fingerHole] > 0)
+            {
+                const float progress = (float) tapSamplesLeft[fingerHole] / (float) tapLength;
+                const float bump = std::sin ((float) kPi * progress);
+                impact += tapSpeed[fingerHole] * bump * bump;
+                --tapSamplesLeft[fingerHole];
+            }
+        impact *= bodyKnock.load (std::memory_order_relaxed) * 0.033f;
+        for (size_t bodyMode = 0; bodyMode < kBodyModes; ++bodyMode)
+        {
+            auto& mode = bodyState[bodyMode];
+            const auto& k = bodyCoeffs[bodyMode];
+            const float ringing = k[0] * impact + k[1] * mode[0] + k[2] * mode[1];
+            mode[1] = mode[0];
+            mode[0] = ringing;
+            out[1] += ringing;
+        }
+    }
+
     windowOut = out[0];
     bodyOut = out[1];
 

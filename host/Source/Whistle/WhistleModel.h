@@ -43,6 +43,9 @@ public:
     // New target controls; reached with a short ramp (by default the sensor frame period) to avoid steps.
     void setControls (const Controls&, double rampSeconds = 0.002);
 
+    // A finger has just landed on this hole at this speed (m/s). Audio thread; plugged holes are the caller's to skip.
+    void fingerLands (int hole, float speed);
+
     // Adds the radiated sound (mono) to out.
     void render (float* out, int numSamples);
     // The same as two sources, so they can be placed apart: what comes out of the window, and what comes out of
@@ -70,6 +73,7 @@ public:
     std::atomic<float> slowJetGrowth { 0.0f };  // See Voicing
     std::atomic<float> breathScale { 1.0f };  // See Voicing (applied by the caller to WARBL's breath)
     std::atomic<float> jetSpreading { 0.0f };  // See Voicing
+    std::atomic<float> fingerTap { 0.0f }, bodyKnock { 0.0f }, bodyPitch { 1000.0f }, bodyRing { 15.0f };  // See Voicing
 
     // Sets all of the above that a Voicing holds, or reads them back.
     void setVoicing (const Voicing&);
@@ -197,6 +201,16 @@ private:
     std::array<std::array<double, 9>, kMaxSegments + 1> holeState {};  // Hole junction filters: sum, p, open flow; 3 samples each
     float topPressure = 0.0f, lastSource = 0.0f;  // At the top of the bore, previous sample.
     float windowRadPressure = 0.0f;  // Pressure across the window's radiating outer part, previous sample
+
+    // Fingers landing: a short pulse per hole (samples left, peak flow in m^3/s at fingerTap 1, and its speed in m/s)
+    std::array<int, kNumHoles> tapSamplesLeft {};
+    std::array<float, kNumHoles> tapPeakFlow {}, tapSpeed {};
+    int tapLength = 48;  // Samples: 0.5 ms
+    // The body: three damped resonances (y1, y2 each), rung by the impact; coefficients are remade when the settings move.
+    static constexpr int kBodyModes = 3;
+    std::array<std::array<float, 2>, kBodyModes> bodyState {};
+    std::array<std::array<float, 3>, kBodyModes> bodyCoeffs {};  // b, a1, a2
+    float bodyCoeffPitch = -1.0f, bodyCoeffRing = -1.0f;
     float footX1 = 0.0f, footY1 = 0.0f;
 
     // Jet state

@@ -180,6 +180,10 @@ static void jetVoicingArgs (int argc, char* argv[], int from, Voicing& v)
         if (arg.startsWith ("slow=")) v.slowJetGrowth = value;
         if (arg.startsWith ("stages=")) v.jetStages = (int) value;
         if (arg.startsWith ("spread=")) v.jetSpreading = value;
+        if (arg.startsWith ("tap=")) v.fingerTap = value;
+        if (arg.startsWith ("knock=")) v.bodyKnock = value;
+        if (arg.startsWith ("bodypitch=")) v.bodyPitch = value;
+        if (arg.startsWith ("bodyring=")) v.bodyRing = value;
     }
 }
 
@@ -1624,6 +1628,9 @@ int main (int argc, char* argv[])
                     controls.openness[(size_t) h] = (float) (r < 0.45 ? 0.0 : r < 0.9 ? 1.0 : uni (rng));
                 }
                 pressureTarget = uni (rng) < 0.1 ? 0.0 : 100.0 * std::pow (60.0, uni (rng));  // 100 Pa .. 6 kPa
+                for (int h = 0; h < kNumHoles; ++h)  // Fingers landing on the holes that have just closed
+                    if (g.holes[(size_t) h].enabled && controls.openness[(size_t) h] < 0.05f)
+                        model.fingerLands (h, (float) (2.0 * uni (rng)));
             }
             pressure += 0.2 * (pressureTarget - pressure);
             controls.mouthPressure = (float) pressure;
@@ -1638,6 +1645,70 @@ int main (int argc, char* argv[])
         std::printf ("%s, %.0f s of random fingering (changes every 20-170 ms, some partly open holes) and breath (0-6 kPa):\n"
                      "  instability resets %d, peak output %.2f, 2 ms blocks silent while blowing > 300 Pa: %d\n",
                      g.name.toRawUTF8(), seconds, model.instabilityResets.load(), peak, silentBlocksAfterSound);
+        return 0;
+    }
+
+    if (mode == "tap")  // tap [preset] [speed=<m/s>] [wav=<prefix>] [tap= knock= bodypitch= bodyring=]: a finger landing with no breath
+    {
+        const auto index = (size_t) (argc > 2 ? presetArg (argv[2]) : 0);
+        auto g = presets()[index];
+        auto voicing = presetVoicing (index);
+        jetVoicingArgs (argc, argv, 3, voicing);
+        float speed = 0.3f;
+        for (int i = 3; i < argc; ++i)
+            if (juce::String (argv[i]).startsWith ("speed="))
+                speed = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+        constexpr double rate = 48000.0;
+        std::printf ("%s, no breath: the lowest covered hole of each fingering tapped at %.2f m/s (tap %.1f, knock %.1f, body %.0f Hz, ring %.0f)\n"
+                     "  note   fingering  peak dBFS  strongest Hz  bore resonance Hz  ms to -20 dB\n",
+                     g.name.toRawUTF8(), speed, voicing.fingerTap, voicing.bodyKnock, voicing.bodyPitch, voicing.bodyRing);
+        std::vector<float> all;
+        for (const auto& c : lowRegister (g))
+        {
+            const auto open = c.openness (g);
+            int hole = -1;
+            for (int h = 0; h < kNumHoles; ++h)
+                if (g.holes[(size_t) h].enabled && open.holes[(size_t) h] < 0.5)
+                    hole = h;
+            if (hole < 0)
+                continue;
+            WhistleModel model;
+            model.setGeometry (g);
+            model.prepare (rate);
+            model.setVoicing (voicing);
+            auto controls = controlsFor (open);
+            controls.mouthPressure = 0.0f;
+            std::vector<float> out ((size_t) (0.35 * rate), 0.0f);
+            model.setControls (controls);
+            model.render (out.data(), 2400);          // Settle
+            model.fingerLands (hole, speed);
+            model.render (out.data() + 2400, (int) out.size() - 2400);
+            all.insert (all.end(), out.begin(), out.end());
+            float peak = 0.0f;
+            size_t peakAt = 0;
+            for (size_t i = 0; i < out.size(); ++i)
+                if (std::abs (out[i]) > peak) { peak = std::abs (out[i]); peakAt = i; }
+            size_t quiet = peakAt;
+            for (size_t i = peakAt; i < out.size(); ++i)
+                if (std::abs (out[i]) > 0.1f * peak)
+                    quiet = i;
+            double bestHz = 0.0, best = 0.0;
+            for (double hz = 200.0; hz < 8000.0; hz *= 1.003)
+            {
+                double re = 0.0, im = 0.0;
+                for (size_t i = 2400; i < out.size(); ++i)
+                {
+                    const double ph = 2.0 * juce::MathConstants<double>::pi * hz * (double) i / rate;
+                    re += out[i] * std::cos (ph);
+                    im += out[i] * std::sin (ph);
+                }
+                if (std::hypot (re, im) > best) { best = std::hypot (re, im); bestHz = hz; }
+            }
+            const auto res = resonances (g, open, lowestNote (g) * 0.6, lowestNote (g) * 6.0);
+            std::printf ("  %-6s %s   %6.1f    %8.0f      %8.0f        %6.1f\n", c.name, c.holePattern (g).c_str(), 20.0 * std::log10 (peak + 1e-12), bestHz,
+                         res.empty() ? 0.0 : res.front(), (double) (quiet - peakAt) * 1000.0 / rate);
+        }
+        saveWavArg (argc, argv, "taps", all, rate);
         return 0;
     }
 

@@ -141,6 +141,9 @@ private:
     juce::SpinLock scaleAudioLock;
     std::array<int, warbl::kNumHoles> acceptedHole {};  // Audio thread: the hole jump filter's last accepted readings
     std::array<bool, warbl::kNumHoles> holeJumpPending {};
+    // Fingers landing (audio thread): each hole's last heights above the hole (m, newest first), and whether it has lifted since it last landed.
+    std::array<std::array<float, 4>, whistle::kNumHoles> fingerHeights {};
+    std::array<bool, whistle::kNumHoles> fingerArmed {};
     float limiterEnvelope = 0.0f;  // Audio thread: the output's peak, falling back slowly
     float limiterHeldDb = 0.0f;
     int limiterHoldSamples = 0;

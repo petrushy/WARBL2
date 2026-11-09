@@ -153,6 +153,14 @@ struct Voicing
     // about half as hard as a whistle, but WARBL's mouthpiece feels the same for both. Only WARBL's breath is
     // scaled (not Play scale or playing from the screen, which give the model's own pressures).
     float breathScale = 1.0f;
+    // A finger landing on a hole, with or without breath. fingerTap: the air it pushes into the bore, as a multiple
+    // of the physical amount (the hole's area x the finger's speed); the tube rings at its current resonances.
+    // bodyKnock: how strongly the impact shakes the instrument's body, whose resonances (pitch in Hz, ring as a Q
+    // factor) are what tells wood (low, short) from thin metal (high, ringing). 0 = off.
+    float fingerTap = 0.0f;
+    float bodyKnock = 0.0f;
+    float bodyPitch = 1000.0f;
+    float bodyRing = 15.0f;
 };
 
 // Starting points, tuned (see WhistleGeometry.cpp).
