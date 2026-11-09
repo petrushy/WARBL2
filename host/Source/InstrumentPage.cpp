@@ -325,26 +325,37 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     tuneStatus.setColour (juce::Label::textColourId, text);
 
     auto mm = [] (double& v) { return std::make_pair ([&v] { return v * 1000.0; }, [&v] (double x) { v = x / 1000.0; }); };
-    auto addLength = [&] (juce::String name, double& v, double min, double max, double step = 0.1, RowKind kind = RowKind::normal)
+    auto addLength = [&] (juce::String name, double& v, double min, double max, double step = 0.1, RowKind kind = RowKind::normal) -> juce::Slider&
     {
         auto [get, set] = mm (v);
-        addRow (std::move (name), min, max, step, "mm", get, set, true, kind);
+        return addRow (std::move (name), min, max, step, "mm", get, set, true, kind);
     };
 
     addHeading ("Bore");
-    addLength ("Length (window to foot)", geometry.boreLength, 100.0, 700.0);
-    addLength ("Diameter at top", geometry.boreDiameterTop, 6.0, 30.0);
-    addLength ("Diameter at foot", geometry.boreDiameterFoot, 6.0, 30.0);
-    addLength ("Head section length (0 = none)", geometry.headLength, 0.0, 150.0, 0.5);
-    addLength ("Head diameter at the window", geometry.headDiameter, 4.0, 30.0);
-    addLength ("Wall thickness", geometry.wallThickness, 0.2, 8.0);
-    addRow ("Wall roughness (losses)", 1.0, 2.0, 0.01, "x", [this] { return geometry.wallLoss; }, [this] (double v) { geometry.wallLoss = v; });
+    addLength ("Length (window to foot)", geometry.boreLength, 100.0, 700.0)
+        .setTooltip ("The tube's length from the window's edge to the open foot. Longer plays lower. Tune holes sets it from the key you choose.");
+    addLength ("Diameter at top", geometry.boreDiameterTop, 6.0, 30.0)
+        .setTooltip ("The inside diameter of the tube at the window end. The bore changes in a straight line from here to the foot: the same at both ends is a cylinder, narrower at the foot is a recorder's reverse cone.");
+    addLength ("Diameter at foot", geometry.boreDiameterFoot, 6.0, 30.0)
+        .setTooltip ("The inside diameter of the tube at the foot end. Together with the diameter at the top it sets the taper, which mostly changes how the octaves line up.");
+    addLength ("Head section length (0 = none)", geometry.headLength, 0.0, 150.0, 0.5)
+        .setTooltip ("An optional section just below the window whose diameter differs from the rest of the bore, blending into it over this length. 0 = no head section.");
+    addLength ("Head diameter at the window", geometry.headDiameter, 4.0, 30.0)
+        .setTooltip ("The bore's diameter right at the window, when there is a head section. Narrower than the bore makes the second octave sharper against the first, wider makes it flatter.");
+    addLength ("Wall thickness", geometry.wallThickness, 0.2, 8.0)
+        .setTooltip ("The tube wall's thickness, which is the height of the short chimney each tone hole makes. Thicker walls put more air in every hole, which lowers the notes it vents.");
+    addRow ("Wall roughness (losses)", 1.0, 2.0, 0.01, "x", [this] { return geometry.wallLoss; }, [this] (double v) { geometry.wallLoss = v; })
+        .setTooltip ("Sound lost at the bore's wall, as a multiple of a smooth metal tube (1). Rougher walls, such as wood, lose more: the resonances are weaker and the tone a little softer.");
 
     addHeading ("Tone holes (unticked = plugged): position from the window, diameter");
     for (int i = 0; i < whistle::kNumHoles; ++i)
     {
         holeRow[(size_t) i] = rows.size();
-        addLength (kHoleNames[(size_t) i], geometry.holes[(size_t) i].position, 10.0, 690.0, 0.1, RowKind::holePosition);
+        addLength (kHoleNames[(size_t) i], geometry.holes[(size_t) i].position, 10.0, 690.0, 0.1, RowKind::holePosition)
+            .setTooltip (juce::String (i == 0 ? "The left thumb's hole, on the back of the tube. " : "A front finger hole. ")
+                         + "The tick box uses it; unticked it is plugged and its sensor is ignored. The left slider is the distance from "
+                           "the window's edge to the hole's centre, the right one its diameter. Nearer the window or larger: the notes it vents "
+                           "are higher. Tune holes sets these.");
         addLength ({}, geometry.holes[(size_t) i].diameter, 2.0, 16.0, 0.1, RowKind::holeDiameter);
 
         auto toggle = std::make_unique<juce::ToggleButton>();
@@ -376,18 +387,25 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     });
 
     addHeading ("Fipple");
-    addLength ("Windway height (jet thickness)", geometry.windwayHeight, 0.4, 3.0, 0.01);
-    addLength ("Windway length", geometry.windwayLength, 5.0, 50.0, 0.5);
-    addLength ("Window length (flue to edge)", geometry.windowLength, 2.0, 14.0, 0.05);
-    addLength ("Window width", geometry.windowWidth, 3.0, 25.0);
-    addLength ("Edge offset (into the pipe)", geometry.edgeOffset, -0.5, 0.5, 0.01);
+    addLength ("Windway height (jet thickness)", geometry.windwayHeight, 0.4, 3.0, 0.01)
+        .setTooltip ("The height of the narrow channel the air leaves, which is the thickness of the jet. With the other settings unchanged, a thinner jet changes register at a lower breath.");
+    addLength ("Windway length", geometry.windwayLength, 5.0, 50.0, 0.5)
+        .setTooltip ("The channel's length from the mouth end to the exit. It sets how much air the breath has to accelerate and how much friction it meets: longer responds a little slower and loses more when blown softly.");
+    addLength ("Window length (flue to edge)", geometry.windowLength, 2.0, 14.0, 0.05)
+        .setTooltip ("The distance the jet crosses from the windway's exit to the edge. Shorter: the jet grows less on the way (a purer tone) and the registers change at a lower breath.");
+    addLength ("Window width", geometry.windowWidth, 3.0, 25.0)
+        .setTooltip ("The width of the window and of the jet. A wider jet carries more air and drives the tube harder.");
+    addLength ("Edge offset (into the pipe)", geometry.edgeOffset, -0.5, 0.5, 0.01)
+        .setTooltip ("Where the edge sits relative to the jet's centre line; positive is into the pipe. At 0 the jet splits evenly and the even harmonics nearly vanish. More offset gives a stronger second harmonic, and too much stops some notes speaking.");
 
     addHeading ("Voicing (jet behaviour)");
     auto& model = audio.whistleModel;
     addRow ("Jet response (Strouhal f h/U)", 0.008, 0.05, 0.001, "", [&model] { return (double) model.jetStrouhal.load(); },
-            [&model] (double v) { model.jetStrouhal = (float) v; }, false);
+            [&model] (double v) { model.jetStrouhal = (float) v; }, false)
+        .setTooltip ("The frequency the jet amplifies most, as a Strouhal number (frequency x windway height / jet speed). Higher: the registers change at a lower breath, so the upper notes need less air. Lower: they need more.");
     addRow ("Jet wave speed (x jet speed)", 0.3, 0.9, 0.01, "", [&model] { return (double) model.jetConvection.load(); },
-            [&model] (double v) { model.jetConvection = (float) v; }, false);
+            [&model] (double v) { model.jetConvection = (float) v; }, false)
+        .setTooltip ("How fast a disturbance travels along the jet, as a share of the jet's speed. It sets the delay across the window, which decides which register sounds at a given breath. Lower: a longer delay, so changing register takes more breath.");
     addRow ("Jet gain", 0.5, 2.5, 0.01, "", [&model] { return (double) model.jetGain.load(); },
             [&model] (double v) { model.jetGain = (float) v; }, false)
         .setTooltip ("How much the jet amplifies the sound's push on its way across the window (1 = the textbook growth). Higher: "
@@ -443,10 +461,12 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
                      "about half a whistle's pressure (0.7 for the recorder: gentle low notes, top C near full breath), but WARBL's "
                      "mouthpiece feels the same for both. Only WARBL's breath is scaled, not Play scale or the screen.");
     addRow ("Output level", -30.0, 12.0, 0.5, "dB", [&model] { return (double) model.outputGainDb.load(); },
-            [&model] (double v) { model.outputGainDb = (float) v; }, false);
+            [&model] (double v) { model.outputGainDb = (float) v; }, false)
+        .setTooltip ("The instrument's overall volume. If the Monitor tab says it is limiting, turn this down.");
 
     // The rows don't all fit the window: they scroll (the sliders leave the wheel to the view).
     settingsContent.addAndMakeVisible (bellButton);
+    settingsContent.addAndMakeVisible (bellHelp);
     settingsView.setViewedComponent (&settingsContent, false);
     settingsView.setScrollBarsShown (true, false);
     addAndMakeVisible (settingsView);
@@ -524,6 +544,11 @@ juce::Slider& InstrumentPage::addRow (juce::String name, double min, double max,
 
     settingsContent.addAndMakeVisible (*row.label);
     settingsContent.addAndMakeVisible (*row.slider);
+    if (kind != RowKind::holeDiameter)
+    {
+        row.help = std::make_unique<HelpDot> (kind == RowKind::holePosition ? name + " hole" : name, [slider] { return slider->getTooltip(); });
+        settingsContent.addAndMakeVisible (*row.help);
+    }
     leftColumn.push_back (row.label.get());
     rows.push_back (std::move (row));
     return *slider;
@@ -922,6 +947,7 @@ void InstrumentPage::resized()
         }
 
         auto line = left.removeFromTop (rowHeight);
+        row.help->setBounds (line.removeFromRight (20));
         if (row.kind == RowKind::holePosition)
         {
             auto& diameter = rows[rowIndex + 1];
@@ -935,7 +961,11 @@ void InstrumentPage::resized()
 
             // The bell isn't a hole (no position or size) but is switched on and off with them, after R4.
             if (rowIndex == holeRow[whistle::kNumHoles - 1])
-                bellButton.setBounds (left.removeFromTop (rowHeight));
+            {
+                auto bellLine = left.removeFromTop (rowHeight);
+                bellHelp.setBounds (bellLine.removeFromRight (20));
+                bellButton.setBounds (bellLine);
+            }
         }
         else
         {

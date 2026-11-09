@@ -232,6 +232,7 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
     preDelaySlider.setTextValueSuffix (" ms");
     preDelaySlider.setValue (audio.reverb.preDelayMs.load(), juce::dontSendNotification);
     preDelaySlider.setTextBoxStyle (juce::Slider::TextBoxRight, false, 70, 20);
+    preDelaySlider.setTooltip ("A silence before the reverb starts. A little separates the direct sound from the room and makes a large room feel larger; 0 is the room as modelled.");
     preDelaySlider.onValueChange = [this] { audio.reverb.preDelayMs = (float) preDelaySlider.getValue(); };
     addAndMakeVisible (preDelaySlider);
 
@@ -244,6 +245,8 @@ MonitorPage::MonitorPage (StreamReceiver& r, AudioEngine& a) : receiver (r), aud
                              "direction and its own reflections in the room. 0 = one source, as before.");
     spreadSlider.onValueChange = [this] { audio.reverb.setSpread ((float) spreadSlider.getValue()); };
     addAndMakeVisible (spreadSlider);
+    for (auto* dot : { &wetHelp, &preDelayHelp, &spreadHelp })
+        addAndMakeVisible (dot);
 
     playButton.onClick = [this] { audio.playScale(); };
     recordButton.setTooltip ("Records what you play: the sound (WAV) and every sensor frame with your settings (CSV), into "
@@ -498,11 +501,14 @@ void MonitorPage::resized()
     roomBox.setBounds (reverbRow.removeFromLeft (180).reduced (2));
     loadIrButton.setBounds (reverbRow.removeFromLeft (120).reduced (2));
     wetLabel.setBounds (reverbRow.removeFromLeft (45));
-    wetSlider.setBounds (reverbRow.removeFromLeft (170));
+    wetSlider.setBounds (reverbRow.removeFromLeft (152));
+    wetHelp.setBounds (reverbRow.removeFromLeft (18));
     preDelayLabel.setBounds (reverbRow.removeFromLeft (70));
-    preDelaySlider.setBounds (reverbRow.removeFromLeft (160));
+    preDelaySlider.setBounds (reverbRow.removeFromLeft (142));
+    preDelayHelp.setBounds (reverbRow.removeFromLeft (18));
     spreadLabel.setBounds (reverbRow.removeFromLeft (52));
-    spreadSlider.setBounds (reverbRow.removeFromLeft (160));
+    spreadSlider.setBounds (reverbRow.removeFromLeft (142));
+    spreadHelp.setBounds (reverbRow.removeFromLeft (18));
     playButton.setBounds (reverbRow.removeFromLeft (130).reduced (2));
     reverbStatus.setBounds (area.removeFromTop (22));
     area.removeFromTop (6);

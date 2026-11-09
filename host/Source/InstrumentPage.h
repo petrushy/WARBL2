@@ -6,6 +6,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "AudioEngine.h"
+#include "HelpDot.h"
 #include "Whistle/Acoustics.h"
 #include "Whistle/InstrumentFile.h"
 
@@ -68,6 +69,7 @@ private:
     {
         std::unique_ptr<juce::Label> label;
         std::unique_ptr<juce::Slider> slider;
+        std::unique_ptr<HelpDot> help;  // Explains the setting; none on a hole's diameter (its position row has it)
         RowKind kind = RowKind::normal;
     };
 
@@ -104,6 +106,7 @@ private:
     void deletePreset();
     juce::ToggleButton crossButton { "Also tune cross-fingerings with hole size (whistle: C natural sets L1)" };
     juce::ToggleButton bellButton { "Bell   (the bell sensor closes the open foot)" };
+    HelpDot bellHelp { "Bell", [this] { return bellButton.getTooltip(); } };
     juce::ComboBox chartBox;
     std::array<std::unique_ptr<juce::ToggleButton>, whistle::kNumHoles> holeToggles;
     std::array<size_t, whistle::kNumHoles> holeRow {};  // Index in rows of each hole's position slider.

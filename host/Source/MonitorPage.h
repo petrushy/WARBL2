@@ -3,6 +3,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 
 #include "AudioEngine.h"
+#include "HelpDot.h"
 #include "StreamReceiver.h"
 
 #include <deque>
@@ -99,6 +100,9 @@ private:
         reverbStatus;
     juce::ComboBox roomBox;
     juce::Slider wetSlider, preDelaySlider, spreadSlider;
+    HelpDot wetHelp { "Reverb level", [this] { return wetSlider.getTooltip(); } };
+    HelpDot preDelayHelp { "Pre-delay", [this] { return preDelaySlider.getTooltip(); } };
+    HelpDot spreadHelp { "Spread", [this] { return spreadSlider.getTooltip(); } };
     void toggleRecording();
     juce::String recordingMessage;  // Shown instead of the streaming status for a few seconds after saving
     double recordingMessageUntilMs = 0.0;

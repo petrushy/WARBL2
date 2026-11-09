@@ -195,6 +195,8 @@ SensorsPage::SensorsPage (AudioEngine& a) : audio (a)
                                "every reading at once.");
     holeJumpToggle.onClick = [this] { audio.holdHoleJumps = holeJumpToggle.getToggleState(); };
     addAndMakeVisible (holeJumpToggle);
+    for (auto* dot : { &holeJumpHelp, &holeShapeHelp, &thumbHelp, &tiltHelp })
+        addAndMakeVisible (dot);
     thumbToggle.setColour (juce::ToggleButton::textColourId, text);
     thumbToggle.setToggleState (audio.thumbOwn.load(), juce::dontSendNotification);
     thumbToggle.onClick = [this] { audio.thumbOwn = thumbToggle.getToggleState(); };
@@ -252,6 +254,8 @@ juce::Slider& SensorsPage::addRow (std::vector<Row>& rows, juce::String name, do
     slider->onValueChange = [slider, &target] { target = (float) slider->getValue(); };
     addAndMakeVisible (*row.label);
     addAndMakeVisible (*row.slider);
+    row.help = std::make_unique<HelpDot> (name, [slider] { return slider->getTooltip(); });
+    addAndMakeVisible (*row.help);
     rows.push_back (std::move (row));
     return *slider;
 }
@@ -324,6 +328,7 @@ void SensorsPage::resized()
     for (auto& row : tiltRows)
     {
         auto line = tiltArea.removeFromTop (26);
+        row.help->setBounds (line.removeFromRight (20));
         row.label->setBounds (line.removeFromLeft (190));
         row.slider->setBounds (line);
     }
@@ -338,6 +343,7 @@ void SensorsPage::resized()
         for (auto& row : rows)
         {
             auto line = column.removeFromTop (26);
+            row.help->setBounds (line.removeFromRight (20));
             row.label->setBounds (line.removeFromLeft (190));
             row.slider->setBounds (line);
         }
@@ -358,11 +364,16 @@ void SensorsPage::resized()
     for (auto& row : thumbRows)
     {
         auto line = thumbArea.removeFromTop (26);
+        row.help->setBounds (line.removeFromRight (20));
         row.label->setBounds (line.removeFromLeft (190));
         row.slider->setBounds (line);
     }
     thumbInfo.setBounds (thumbArea);
 
     layout (right, holeTitle, holeDefaults, holeRows, holeInfo, holeCurve, &holeShape);
-    holeJumpToggle.setBounds (holeShape.getBounds().withX (holeShape.getRight() + 12).withWidth (260));
+    holeShapeHelp.setBounds (holeShape.getBounds().withX (holeShape.getRight() + 2).withWidth (20));
+    holeJumpToggle.setBounds (holeShape.getBounds().withX (holeShapeHelp.getRight() + 10).withWidth (230));
+    holeJumpHelp.setBounds (holeShape.getBounds().withX (holeJumpToggle.getRight()).withWidth (20));
+    thumbHelp.setBounds (thumbTitle.getBounds().withX (thumbTitle.getX() + 215).withWidth (20));
+    tiltHelp.setBounds (tiltTitle.getBounds().withX (tiltTitle.getX() + 135).withWidth (20));
 }

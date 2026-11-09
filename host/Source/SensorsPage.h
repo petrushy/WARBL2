@@ -6,6 +6,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "AudioEngine.h"
+#include "HelpDot.h"
 
 // A response curve with the current inputs drawn on it.
 class CurveView : public juce::Component
@@ -44,6 +45,7 @@ private:
     {
         std::unique_ptr<juce::Label> label;
         std::unique_ptr<juce::Slider> slider;
+        std::unique_ptr<HelpDot> help;
     };
 
     juce::Slider& addRow (std::vector<Row>& rows, juce::String name, double min, double max, double step, juce::String unit,
@@ -59,6 +61,10 @@ private:
     juce::Label thumbTitle { {}, "Thumb hole (recorder pinch)" }, thumbInfo;
     juce::ToggleButton thumbToggle { "Own response" };
     juce::ToggleButton holeJumpToggle { "Hold back sudden jumps (2 ms)" };
+    HelpDot holeJumpHelp { "Hold back sudden jumps", [this] { return holeJumpToggle.getTooltip(); } };
+    HelpDot holeShapeHelp { "Hole response shape", [this] { return holeShape.getTooltip(); } };
+    HelpDot thumbHelp { "Thumb hole (recorder pinch)", [this] { return thumbTitle.getTooltip(); } };
+    HelpDot tiltHelp { "Tilt aims the jet", [this] { return tiltTitle.getTooltip(); } };
     juce::Label tiltTitle { {}, "Tilt aims the jet" }, tiltInfo;
     juce::ToggleButton tiltToggle { "On" }, tiltInvertToggle { "Invert" };
     juce::TextButton tiltZeroButton { "Set zero now" };
