@@ -73,7 +73,7 @@ public:
     std::atomic<float> slowJetGrowth { 0.0f };  // See Voicing
     std::atomic<float> breathScale { 1.0f };  // See Voicing (applied by the caller to WARBL's breath)
     std::atomic<float> jetSpreading { 0.0f };  // See Voicing
-    std::atomic<float> fingerTap { 0.0f }, bodyKnock { 0.0f }, bodyPitch { 1000.0f }, bodyRing { 15.0f };  // See Voicing
+    std::atomic<float> fingerTap { 0.0f }, fingerSoftness { 4.0f }, bodyKnock { 0.0f }, bodyPitch { 1000.0f }, bodyRing { 15.0f };  // See Voicing
 
     // Sets all of the above that a Voicing holds, or reads them back.
     void setVoicing (const Voicing&);
@@ -202,10 +202,11 @@ private:
     float topPressure = 0.0f, lastSource = 0.0f;  // At the top of the bore, previous sample.
     float windowRadPressure = 0.0f;  // Pressure across the window's radiating outer part, previous sample
 
-    // Fingers landing: a short pulse per hole (samples left, peak flow in m^3/s at fingerTap 1, and its speed in m/s)
-    std::array<int, kNumHoles> tapSamplesLeft {};
+    // Fingers landing: per hole, the push's position and its rise and fall (samples; finished when position >= rise +
+    // fall), its peak flow in m^3/s at fingerTap 1, and the finger's speed in m/s.
+    std::array<int, kNumHoles> tapPosition {}, tapRise {}, tapFall {};
     std::array<float, kNumHoles> tapPeakFlow {}, tapSpeed {};
-    int tapLength = 48;  // Samples: 0.5 ms
+    float tapShape (size_t hole) const;  // 0..1: a smooth rise as the finger approaches, then a quicker stop
     // The body: three damped resonances (y1, y2 each), rung by the impact; coefficients are remade when the settings move.
     static constexpr int kBodyModes = 3;
     std::array<std::array<float, 2>, kBodyModes> bodyState {};

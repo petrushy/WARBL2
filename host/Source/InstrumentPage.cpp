@@ -460,6 +460,10 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
         .setTooltip ("A finger landing on a hole pushes a short puff of air into the tube, which rings at whatever note the holes make: "
                      "tapping different fingers gives different pitches, even without blowing. 1 = the physical amount for the "
                      "finger's speed (quiet, as on a real whistle), more to hear it better, 0 = off.");
+    addRow ("Finger softness", 0.5, 15.0, 0.1, "ms", [&model] { return (double) model.fingerSoftness.load(); },
+            [&model] (double v) { model.fingerSoftness = (float) v; }, false)
+        .setTooltip ("How gradually a finger's push of air builds up as it comes down (at an everyday tap; a faster finger takes less time). "
+                     "Then it stops in a third of that as the fingertip meets the rim. Short: a sharper tick. Long: a soft, rounded thump.");
     addRow ("Body knock", 0.0, 20.0, 0.1, "", [&model] { return (double) model.bodyKnock.load(); },
             [&model] (double v) { model.bodyKnock = (float) v; }, false)
         .setTooltip ("The same impact shakes the instrument's body: the short knock you hear from the wood or metal itself, not from "

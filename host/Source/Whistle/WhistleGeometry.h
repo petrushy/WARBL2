@@ -158,6 +158,7 @@ struct Voicing
     // bodyKnock: how strongly the impact shakes the instrument's body, whose resonances (pitch in Hz, ring as a Q
     // factor) are what tells wood (low, short) from thin metal (high, ringing). 0 = off.
     float fingerTap = 0.0f;
+    float fingerSoftness = 4.0f;  // ms: how long a finger's push builds up, at an everyday tap (0.3 m/s); it then stops in a third of that
     float bodyKnock = 0.0f;
     float bodyPitch = 1000.0f;
     float bodyRing = 15.0f;

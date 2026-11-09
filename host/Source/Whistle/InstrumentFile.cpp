@@ -95,6 +95,7 @@ juce::var toVar (const Instrument& instrument)
     set (voicing, "breathScale", v.breathScale);
     set (voicing, "jetSpreading", v.jetSpreading);
     set (voicing, "fingerTap", v.fingerTap);
+    set (voicing, "fingerSoftness_ms", v.fingerSoftness);
     set (voicing, "bodyKnock", v.bodyKnock);
     set (voicing, "bodyPitch_Hz", v.bodyPitch);
     set (voicing, "bodyRing", v.bodyRing);
@@ -186,6 +187,7 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     read (voicing, "breathScale", instrument.voicing.breathScale);
     read (voicing, "jetSpreading", instrument.voicing.jetSpreading);
     read (voicing, "fingerTap", instrument.voicing.fingerTap);
+    read (voicing, "fingerSoftness_ms", instrument.voicing.fingerSoftness);
     read (voicing, "bodyKnock", instrument.voicing.bodyKnock);
     read (voicing, "bodyPitch_Hz", instrument.voicing.bodyPitch);
     read (voicing, "bodyRing", instrument.voicing.bodyRing);

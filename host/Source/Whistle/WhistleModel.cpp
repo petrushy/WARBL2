@@ -167,7 +167,9 @@ void WhistleModel::resetState()
         d.fill (0.0f);
     lastRadiatedFlow = dcX1 = dcY1 = {};
     topPressure = lastSource = footX1 = footY1 = flowIntoBore = lastJetFlow = windowRadPressure = 0.0f;
-    tapSamplesLeft.fill (0);
+    tapPosition.fill (0);
+    tapRise.fill (0);
+    tapFall.fill (0);
     for (auto& st : bodyState)
         st.fill (0.0f);
     windwaySpeed = slowJetSpeed = jetLock = 0.0f;
@@ -192,6 +194,7 @@ void WhistleModel::setVoicing (const Voicing& v)
     breathScale = v.breathScale;
     jetSpreading = v.jetSpreading;
     fingerTap = v.fingerTap;
+    fingerSoftness = v.fingerSoftness;
     bodyKnock = v.bodyKnock;
     bodyPitch = v.bodyPitch;
     bodyRing = v.bodyRing;
@@ -216,6 +219,7 @@ Voicing WhistleModel::getVoicing() const
     v.breathScale = breathScale.load();
     v.jetSpreading = jetSpreading.load();
     v.fingerTap = fingerTap.load();
+    v.fingerSoftness = fingerSoftness.load();
     v.bodyKnock = bodyKnock.load();
     v.bodyPitch = bodyPitch.load();
     v.bodyRing = bodyRing.load();
@@ -353,12 +357,30 @@ void WhistleModel::fingerLands (int hole, float speed)
 {
     if (hole < 0 || hole >= kNumHoles || speed <= 0.0f)
         return;
-    // The finger's pad sweeps the hole's area at its speed until it stops against the rim, within about 0.5 ms.
+    // The push builds up over the finger's approach (a faster finger takes less time) and ends in a third of that as
+    // the soft fingertip stops against the rim: a smooth swell of air, not a click.
     const double radius = 0.5 * geometry.holes[(size_t) hole].diameter;
+    const double riseSeconds = 0.001 * fingerSoftness.load (std::memory_order_relaxed) * juce::jlimit (0.5, 2.0, 0.3 / (double) speed);
     tapPeakFlow[(size_t) hole] = (float) (kPi * radius * radius * speed);
     tapSpeed[(size_t) hole] = speed;
-    tapLength = std::max (2, (int) (0.0005 * rate));
-    tapSamplesLeft[(size_t) hole] = tapLength;
+    tapRise[(size_t) hole] = std::max (2, (int) (riseSeconds * rate));
+    tapFall[(size_t) hole] = std::max (2, (int) (riseSeconds * rate / 3.0));
+    tapPosition[(size_t) hole] = 0;
+}
+
+float WhistleModel::tapShape (size_t hole) const
+{
+    const int position = tapPosition[hole], rise = tapRise[hole], fall = tapFall[hole];
+    if (position >= rise + fall)
+        return 0.0f;
+    const float halfPi = 0.5f * (float) kPi;
+    if (position < rise)
+    {
+        const float riseShape = std::sin (halfPi * (float) (position + 1) / (float) rise);
+        return riseShape * riseShape;
+    }
+    const float fallShape = std::cos (halfPi * (float) (position - rise + 1) / (float) fall);
+    return fallShape * fallShape;
 }
 
 void WhistleModel::setControls (const Controls& controls, double rampSeconds)
@@ -636,13 +658,7 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
             auto& st = holeState[(size_t) jn];  // sum x1 x2 x3, p y1 y2 y3, flow f1 f2 f3
             // A finger landing pushes air in: a flow into the junction, which the hole's own admittance lets
             // escape while it is still open and which goes into the bore once it is shut.
-            double x0 = sum;
-            if (tapSamplesLeft[(size_t) hole] > 0)
-            {
-                const double phase = (double) tapSamplesLeft[(size_t) hole] / (double) tapLength;
-                const double shape = std::sin (kPi * phase) * std::sin (kPi * phase);
-                x0 += fingerTap.load (std::memory_order_relaxed) * tapPeakFlow[(size_t) hole] * shape / gj;
-            }
+            const double x0 = sum + fingerTap.load (std::memory_order_relaxed) * tapPeakFlow[(size_t) hole] * tapShape ((size_t) hole) / gj;
             const double pNew = (num[0] * x0 + num[1] * st[0] + num[2] * st[1] + num[3] * st[2]
                                  - den[1] * st[3] - den[2] * st[4] - den[3] * st[5]) / den[0];
             const double flow = (flowNum[0] * x0 + flowNum[1] * st[0] + flowNum[2] * st[1] + flowNum[3] * st[2]
@@ -701,18 +717,23 @@ void WhistleModel::tick (float& windowOut, float& bodyOut)
                 const float w = std::min (3.0f, 2.0f * (float) kPi * pitch * ratio[bodyMode] / (float) rate);
                 const float q = std::max (1.0f, ring * damping[bodyMode]);
                 const float pole = std::exp (-0.5f * w / q);
-                // The gain makes a pulse much shorter than a period ring at its own peak height.
-                bodyCoeffs[bodyMode] = { strength[bodyMode] * std::sin (w) * 2.0f / (float) std::max (2, tapLength), 2.0f * pole * std::cos (w), -pole * pole };
+                // With the impact normalised to unit area below, a push much shorter than a period rings at its peak height.
+                bodyCoeffs[bodyMode] = { strength[bodyMode] * std::sin (w), 2.0f * pole * std::cos (w), -pole * pole };
             }
         }
         float impact = 0.0f;
         for (size_t fingerHole = 0; fingerHole < kNumHoles; ++fingerHole)
-            if (tapSamplesLeft[fingerHole] > 0)
+            if (tapPosition[fingerHole] < tapRise[fingerHole] + tapFall[fingerHole])
             {
-                const float progress = (float) tapSamplesLeft[fingerHole] / (float) tapLength;
-                const float bump = std::sin ((float) kPi * progress);
-                impact += tapSpeed[fingerHole] * bump * bump;
-                --tapSamplesLeft[fingerHole];
+                // The air is pushed gradually, but the body is struck only when the fingertip stops against the
+                // rim: a short bump (a quarter of the rise) at the end of the approach, of unit area.
+                const int intoImpact = tapPosition[fingerHole] - tapRise[fingerHole], impactLength = std::max (2, tapRise[fingerHole] / 4);
+                if (intoImpact >= 0 && intoImpact < impactLength)
+                {
+                    const float bump = std::sin ((float) kPi * ((float) intoImpact + 0.5f) / (float) impactLength);
+                    impact += tapSpeed[fingerHole] * bump * bump * 2.0f / (float) impactLength;
+                }
+                ++tapPosition[fingerHole];
             }
         impact *= bodyKnock.load (std::memory_order_relaxed) * 0.033f;
         for (size_t bodyMode = 0; bodyMode < kBodyModes; ++bodyMode)

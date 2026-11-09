@@ -181,6 +181,7 @@ static void jetVoicingArgs (int argc, char* argv[], int from, Voicing& v)
         if (arg.startsWith ("stages=")) v.jetStages = (int) value;
         if (arg.startsWith ("spread=")) v.jetSpreading = value;
         if (arg.startsWith ("tap=")) v.fingerTap = value;
+        if (arg.startsWith ("soft=")) v.fingerSoftness = value;
         if (arg.startsWith ("knock=")) v.bodyKnock = value;
         if (arg.startsWith ("bodypitch=")) v.bodyPitch = value;
         if (arg.startsWith ("bodyring=")) v.bodyRing = value;
@@ -1660,7 +1661,7 @@ int main (int argc, char* argv[])
                 speed = juce::String (argv[i]).fromFirstOccurrenceOf ("=", false, false).getFloatValue();
         constexpr double rate = 48000.0;
         std::printf ("%s, no breath: the lowest covered hole of each fingering tapped at %.2f m/s (tap %.1f, knock %.1f, body %.0f Hz, ring %.0f)\n"
-                     "  note   fingering  peak dBFS  strongest Hz  bore resonance Hz  ms to -20 dB\n",
+                     "  note   fingering  peak dBFS  strongest Hz  bore resonance Hz  ms to -20 dB  ms to peak  sharpness\n",
                      g.name.toRawUTF8(), speed, voicing.fingerTap, voicing.bodyKnock, voicing.bodyPitch, voicing.bodyRing);
         std::vector<float> all;
         for (const auto& c : lowRegister (g))
@@ -1705,8 +1706,16 @@ int main (int argc, char* argv[])
                 if (std::hypot (re, im) > best) { best = std::hypot (re, im); bestHz = hz; }
             }
             const auto res = resonances (g, open, lowestNote (g) * 0.6, lowestNote (g) * 6.0);
-            std::printf ("  %-6s %s   %6.1f    %8.0f      %8.0f        %6.1f\n", c.name, c.holePattern (g).c_str(), 20.0 * std::log10 (peak + 1e-12), bestHz,
-                         res.empty() ? 0.0 : res.front(), (double) (quiet - peakAt) * 1000.0 / rate);
+            // How sharp the attack is: the sample-to-sample change against the level over the first 15 ms.
+            double change = 0.0, total = 0.0;
+            for (size_t i = 2401; i < 2400 + (size_t) (0.015 * rate); ++i)
+            {
+                total += (double) out[i] * out[i];
+                change += (double) (out[i] - out[i - 1]) * (out[i] - out[i - 1]);
+            }
+            std::printf ("  %-6s %s   %6.1f    %8.0f      %8.0f        %6.1f      %6.1f     %5.1f dB\n", c.name, c.holePattern (g).c_str(), 20.0 * std::log10 (peak + 1e-12), bestHz,
+                         res.empty() ? 0.0 : res.front(), (double) (quiet - peakAt) * 1000.0 / rate, ((double) peakAt - 2400.0) * 1000.0 / rate,
+                         10.0 * std::log10 (change / (total + 1e-20) + 1e-12));
         }
         saveWavArg (argc, argv, "taps", all, rate);
         return 0;
