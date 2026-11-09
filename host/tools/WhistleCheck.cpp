@@ -89,7 +89,7 @@ Controls controlsFor (const Openness& open)
 // Returns the sound at `rate`.
 static float vortexArg = 1.0f;
 static bool geometryArgs = false;
-static bool windowLossArg = true;  // windowloss=0: the window as a lossless air mass (as before 2026-11-06)  // window=, width=, flue=, top=, foot= given: retune before playing  // vortex=: the edge vortex loss (playGesture, radiation)
+static bool windowLossArg = true;  // windowloss=0: the window as a lossless air mass (as before 2026-11-06)
 
 static std::vector<float> playGesture (const Geometry& g, const Voicing& v, const Openness& open,
                                        const std::function<double (double)>& pressureAt, double seconds, double rate)
@@ -98,7 +98,7 @@ static std::vector<float> playGesture (const Geometry& g, const Voicing& v, cons
     model.setGeometry (g);
     model.prepare (rate);
     model.setVoicing (v);
-    model.vortexLoss = vortexArg;
+    model.vortexLoss = v.vortexLoss * vortexArg;  // vortex= scales the preset's, as in the other checks
     auto controls = controlsFor (open);
     std::vector<float> out ((size_t) (seconds * rate), 0.0f);
     const int block = (int) (rate * 0.002);
@@ -1285,7 +1285,7 @@ int main (int argc, char* argv[])
                 model.setGeometry (g);
                 model.prepare (rate);
                 model.setVoicing (voicing);
-                model.vortexLoss = vortexArg;
+                model.vortexLoss = voicing.vortexLoss * vortexArg;  // vortex= scales the preset's
                 std::vector<float> out ((size_t) (0.55 * rate), 0.0f);
                 const int block = (int) (rate * 0.002);
                 for (int start = 0; start < (int) out.size(); start += block)
@@ -1976,6 +1976,7 @@ int main (int argc, char* argv[])
         windwayArgs (argc, argv, 3, g);
         auto voicing = presetVoicing (index);
         windwayNoiseArg (argc, argv, voicing);
+        jetVoicingArgs (argc, argv, 3, voicing);
         voicing.windwayMass = windwayMass;
         voicing.windwayFriction = windwayFriction;
         double pressure = 700.0;
