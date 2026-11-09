@@ -353,7 +353,7 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
                             + "); unticked, it is plugged and its sensor is ignored");
         auto* t = toggle.get();
         toggle->onClick = [this, i, t] { setHoleEnabled (i, t->getToggleState()); };
-        addAndMakeVisible (*toggle);
+        settingsContent.addAndMakeVisible (*toggle);
         holeToggles[(size_t) i] = std::move (toggle);
     }
     refreshers.push_back ([this]
@@ -445,6 +445,12 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     addRow ("Output level", -30.0, 12.0, 0.5, "dB", [&model] { return (double) model.outputGainDb.load(); },
             [&model] (double v) { model.outputGainDb = (float) v; }, false);
 
+    // The rows don't all fit the window: they scroll (the sliders leave the wheel to the view).
+    settingsContent.addAndMakeVisible (bellButton);
+    settingsView.setViewedComponent (&settingsContent, false);
+    settingsView.setScrollBarsShown (true, false);
+    addAndMakeVisible (settingsView);
+
     // Right side
     addAndMakeVisible (whistleView);
     addAndMakeVisible (tuningTable);
@@ -516,8 +522,8 @@ juce::Slider& InstrumentPage::addRow (juce::String name, double min, double max,
     // Remember how to read the value back when the geometry changes as a whole (preset, material, tuning).
     refreshers.push_back ([slider, get] { slider->setValue (get(), juce::dontSendNotification); });
 
-    addAndMakeVisible (*row.label);
-    addAndMakeVisible (*row.slider);
+    settingsContent.addAndMakeVisible (*row.label);
+    settingsContent.addAndMakeVisible (*row.slider);
     leftColumn.push_back (row.label.get());
     rows.push_back (std::move (row));
     return *slider;
@@ -528,7 +534,7 @@ void InstrumentPage::addHeading (juce::String name)
     auto label = std::make_unique<juce::Label> (juce::String(), name);
     label->setColour (juce::Label::textColourId, accent);
     label->setFont (juce::FontOptions (14.0f, juce::Font::bold));
-    addAndMakeVisible (*label);
+    settingsContent.addAndMakeVisible (*label);
     leftColumn.push_back (label.get());
     headings.push_back (std::move (label));
 }
@@ -891,6 +897,11 @@ void InstrumentPage::resized()
     materialBox.setBounds (chartRow.removeFromLeft (220).reduced (2));
     left.removeFromTop (4);
 
+    // The rows are laid out inside the scrolling view, as tall as they need to be.
+    settingsView.setBounds (left);
+    constexpr int unlimitedHeight = 100000;
+    left = { 0, 0, settingsView.getWidth() - settingsView.getScrollBarThickness() - 2, unlimitedHeight };
+
     // Rows: holes get two sliders side by side to save space.
     const int rowHeight = 20;
     size_t rowIndex = 0;
@@ -933,6 +944,7 @@ void InstrumentPage::resized()
         }
         ++rowIndex;
     }
+    settingsContent.setSize (left.getWidth(), unlimitedHeight - left.getHeight() + 4);
 
     // Right: drawing, playing, table
     auto controls = area.removeFromTop (28);

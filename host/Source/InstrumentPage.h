@@ -115,7 +115,9 @@ private:
     std::vector<Row> rows;
     std::vector<std::function<void()>> refreshers;  // Read each slider's value back from the geometry.
     std::vector<std::unique_ptr<juce::Label>> headings;
-    std::vector<juce::Component*> leftColumn;  // In layout order.
+    std::vector<juce::Component*> leftColumn;  // In layout order, inside settingsContent.
+    juce::Component settingsContent;           // The rows and headings
+    juce::Viewport settingsView;               // Scrolls them
 
     WhistleView whistleView { audio };
     TuningTable tuningTable;
