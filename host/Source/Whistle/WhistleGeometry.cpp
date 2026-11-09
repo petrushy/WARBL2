@@ -20,6 +20,29 @@ Voicing presetVoicing (size_t index)
     // lower breath (top C at ~3 kPa, C6 at ~0.6 kPa; at 0.035 the low C goes sharp); the whistles' defaults give
     // their register changes at ~1 and ~4 kPa. One band-pass stage: no silent pressures between the registers.
     Voicing v;
+
+    // Searched against the recorded whistles (first octave H2/H3 about -17 dB, second octave -32/-28) and for steady
+    // playing. One band-pass stage is what steadies quick fingering changes: register jumps at soft breath went from
+    // 7 of 14 to 1, settling from ~200 ms to ~6 ms. Jet spreading makes the second octave purer and louder, less
+    // vortex loss gives the first octave back its odd harmonics, and slow-jet growth separates the two octaves.
+    // (Their edge offsets are set in presets().) The low D keeps its own: spreading didn't help it.
+    struct Fitted { const char* namePart; float spreading, slowGrowth, gain; };
+    static constexpr Fitted fitted[] = { { "cylindrical metal", 3.0f, 0.25f, 1.0f },
+                                         { "conical metal", 2.0f, 0.5f, 1.0f },
+                                         { "narrow head", 3.0f, 0.5f, 1.15f },
+                                         { "whistle, wood", 3.0f, 0.25f, 1.15f },
+                                         { "traditional scale", 2.0f, 0.25f, 1.0f } };
+    if (index < presets().size())
+        for (const auto& f : fitted)
+            if (presets()[index].name.contains (f.namePart))
+            {
+                v.jetSpreading = f.spreading;
+                v.slowJetGrowth = f.slowGrowth;
+                v.jetGain = f.gain;
+                v.vortexLoss = 0.6f;
+                v.jetStages = 1;
+            }
+
     if (index < presets().size() && presets()[index].name.startsWith ("D whistle, Goldie style"))
     {
         // Fitted to Real-examples/High-D-Goldie.wav (WhistleCheck analyse): the thin windway wants a lower jet band,
@@ -211,6 +234,15 @@ const std::vector<Geometry>& presets()
                 return g;
             }(),
         };
+
+        // Edge offsets found with the voicings in presetVoicing() (m, into the pipe).
+        for (auto& g : instruments)
+        {
+            if (g.name.contains ("cylindrical metal") || g.name.contains ("traditional scale"))
+                g.edgeOffset = 0.00015;
+            else if (g.name.contains ("conical metal") || g.name.contains ("narrow head") || g.name.contains ("whistle, wood"))
+                g.edgeOffset = 0.00025;
+        }
 
         // Each whistle comes twice: on WARBL's L1-R3 sensors and on L2-R4 (the same instrument, played with
         // the lower six fingers).
