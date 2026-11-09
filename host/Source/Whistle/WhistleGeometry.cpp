@@ -30,7 +30,6 @@ Voicing presetVoicing (size_t index)
     static constexpr Fitted fitted[] = { { "cylindrical metal", 3.0f, 0.25f, 1.0f },
                                          { "conical metal", 2.0f, 0.5f, 1.0f },
                                          { "narrow head", 3.0f, 0.5f, 1.15f },
-                                         { "whistle, wood", 3.0f, 0.25f, 1.15f },
                                          { "traditional scale", 2.0f, 0.25f, 1.0f } };
     if (index < presets().size())
         for (const auto& f : fitted)
@@ -43,7 +42,7 @@ Voicing presetVoicing (size_t index)
                 v.jetStages = 1;
             }
 
-    if (index < presets().size() && presets()[index].name.startsWith ("D whistle, Goldie style"))
+    if (index < presets().size() && (presets()[index].name.startsWith ("D whistle, Goldie style") || presets()[index].name.contains ("whistle, wood")))
     {
         // Fitted to Real-examples/High-D-Goldie.wav (WhistleCheck analyse): the thin windway wants a lower jet band,
         // one band-pass stage (no silent pressures between registers), and the jet settings that make a softly blown
@@ -166,10 +165,10 @@ const std::vector<Geometry>& presets()
                 g.headDiameter = 0.0105;
                 return g;
             }(),
-            make ("D whistle, wood", 0.25926, 0.0125, 0.0125,
-                  { { { false, 0.0, 0.0 }, { true, 0.11835, 0.00672 }, { true, 0.14030, 0.00850 }, { true, 0.15909, 0.00800 },
-                      { true, 0.18208, 0.00700 }, { true, 0.19543, 0.00920 }, { true, 0.21689, 0.00720 }, { false, 0.0, 0.0 } } },
-                  0.0040, 1.3, 0.0010, 0.0050, 0.0085),
+            make ("D whistle, wood", 0.25647, 0.0125, 0.0125,
+                  { { { false, 0.0, 0.0 }, { true, 0.11588, 0.00672 }, { true, 0.13773, 0.00850 }, { true, 0.15646, 0.00800 },
+                      { true, 0.17938, 0.00700 }, { true, 0.19271, 0.00920 }, { true, 0.21411, 0.00720 }, { false, 0.0, 0.0 } } },
+                  0.0040, 1.3, 0.00087, 0.0042, 0.0080),  // The Goldie style's fipple: the easiest to play
             [&]
             {
                 // In the style of a Goldie high D (not measured): a thin aluminium tube, a narrow head (as the
@@ -240,8 +239,10 @@ const std::vector<Geometry>& presets()
         {
             if (g.name.contains ("cylindrical metal") || g.name.contains ("traditional scale"))
                 g.edgeOffset = 0.00015;
-            else if (g.name.contains ("conical metal") || g.name.contains ("narrow head") || g.name.contains ("whistle, wood"))
+            else if (g.name.contains ("conical metal") || g.name.contains ("narrow head"))
                 g.edgeOffset = 0.00025;
+            else if (g.name.contains ("whistle, wood"))
+                g.edgeOffset = 0.00015;  // As the Goldie style, whose fipple it shares
         }
 
         // Each whistle comes twice: on WARBL's L1-R3 sensors and on L2-R4 (the same instrument, played with
