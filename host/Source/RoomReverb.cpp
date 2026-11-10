@@ -112,13 +112,14 @@ juce::String RoomReverb::loadFile (const juce::File& file)
     juce::AudioBuffer<float> ir (2, (int) reader->lengthInSamples);
     reader->read (&ir, 0, (int) reader->lengthInSamples, 0, true, true);  // Mono files are copied to both channels.
 
-    // Measured IRs start with the direct sound and have arbitrary level: trim the silence before it and normalise.
-    // One measured position only, so both sources share it.
+    // Measured IRs contain the direct sound (the dry signal already provides it) and have an arbitrary level, so
+    // remove it and scale by it. One measured position only, so both sources share it.
     presetIndex = -1;
     currentFile = file;
+    const auto wet = reverb::removeDirectSound (ir, reader->sampleRate);
     for (auto& c : convolution)
-        c.loadImpulseResponse (juce::AudioBuffer<float> (ir), reader->sampleRate, juce::dsp::Convolution::Stereo::yes,
-                               juce::dsp::Convolution::Trim::yes, juce::dsp::Convolution::Normalise::yes);
+        c.loadImpulseResponse (juce::AudioBuffer<float> (wet), reader->sampleRate, juce::dsp::Convolution::Stereo::yes,
+                               juce::dsp::Convolution::Trim::no, juce::dsp::Convolution::Normalise::no);
     const juce::ScopedLock lock (nameLock);
     currentName = file.getFileNameWithoutExtension();
     return {};

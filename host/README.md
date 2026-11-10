@@ -207,13 +207,13 @@ In the check tools, `[preset]` is a number or part of a preset's name (e.g. `rec
 
 Convolution reverb with no added latency (JUCE's non-uniform partitioned convolution). The room impulse responses are generated from room acoustics rather than recorded:
 
-- **Early reflections:** mirror images of the source in a box-shaped room, heard by two ears 17 cm apart, up to the mixing time (√V ms).
-- **Diffuse tail:** its level follows from the room volume and listener distance, and it decays with its own reverberation time at each frequency, so highs die away sooner, as in real rooms.
+- **Early reflections:** mirror images of the source in a box-shaped room, up to the mixing time (20 V/S + 12 ms, Lindau et al.) and fading out by twice that. Each wall has its own share of the room's absorption at each frequency (halls have seats on the floor and hard surfaces behind the stage), and each reflection reaches a spherical head with the delay and the frequency-dependent head shadow of its direction. Source and listener stand a little off the centre line, so the side walls' reflections don't arrive in pairs.
+- **Scattered sound and diffuse tail:** each bounce scatters part of the sound (more at high frequencies) away from the mirror direction. That part joins a noise field, which starts as separate arrivals filling the gaps between the mirror images and grows into the diffuse tail; together they keep the statistical energy level. The level follows from the room volume and listener distance, and the tail decays with its own reverberation time at each frequency, so highs die away sooner, as in real rooms. The two ears are correlated at low frequencies and independent above ~1 kHz, as in a real diffuse field.
 - **Balance:** the direct sound comes from the dry signal. At Level 0 dB the dry/reverb balance is physically right for the room's listener distance; the default is -6 dB.
 
-Rooms: small wooden room (0.4 s), studio live room (0.6 s), chamber music hall (1.4 s), concert hall (2.0 s), stone church (3.8 s); times are at 1 kHz. `ReverbCheck <dir>` verifies each room's reverberation time per octave band (within 15 % of target) and its direct-to-reverberant ratio (within 2 dB of theory). It also writes the IRs, and a short synthetic phrase through each room (`TestPhrase`, used only by this tool), as WAV files.
+Rooms: small wooden room (0.4 s), studio live room (0.6 s), chamber music hall (1.4 s), concert hall (2.0 s), stone church (3.8 s); times are at 1 kHz. `ReverbCheck <dir>` verifies each room's reverberation time per octave band (within 15 % of target), its direct-to-reverberant ratio (within 2 dB of theory), that no step of the early sound is more than 10 dB under the statistical level, and that the ears are correlated at 250 Hz. It also writes the IRs, and a short synthetic phrase through each room (`TestPhrase`, used only by this tool), as WAV files.
 
-**Load IR file...** takes any measured impulse response (WAV/AIFF/FLAC, mono or stereo). Free recordings of real halls and churches are available from the OpenAIR library (openair.hosted.york.ac.uk); check each file's licence.
+**Load IR file...** takes any measured impulse response (WAV/AIFF/FLAC, mono or stereo). Its direct sound is removed (the dry signal provides it) and the file is scaled by it, so the measured dry/reverb balance is kept at Level 0 dB. Free recordings of real halls and churches are available from the OpenAIR library (openair.hosted.york.ac.uk); check each file's licence.
 
 ## Bluetooth
 

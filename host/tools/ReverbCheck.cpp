@@ -1,7 +1,9 @@
 // Checks the generated room impulse responses objectively and renders them for listening.
 //
 // For each room: reverberation time per octave band (T30 from Schroeder backward integration) against the
-// target, and direct-to-reverberant ratio against statistical room acoustics. Writes to <output dir>:
+// target, direct-to-reverberant ratio against statistical room acoustics, early energy (no holes between the
+// reflections) and the correlation of the ears in the tail. Also tests removing the direct sound from a measured IR.
+// Writes to <output dir>:
 //   ir_<room>.wav       the impulse response
 //   phrase_<room>.wav   the test phrase, dry + reverb at the app's default level
 //
@@ -59,6 +61,19 @@ double measureT30 (const float* ir, int length, float centreHz)
         return 0.0;
     const double slope = (count * sxy - sx * sy) / (count * sxx - sx * sx);  // dB per second (negative)
     return -60.0 / slope;
+}
+
+// One octave around centreHz, as measureT30 filters it.
+std::vector<float> octaveBand (const float* signal, int length, float centreHz)
+{
+    std::vector<float> band (signal, signal + length);
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        juce::dsp::IIR::Filter<float> filter (juce::dsp::IIR::Coefficients<float>::makeBandPass (kSampleRate, centreHz, 1.414f));
+        for (auto& v : band)
+            v = filter.processSample (v);
+    }
+    return band;
 }
 
 // Plain FFT convolution of a mono signal with one IR channel.
@@ -132,6 +147,23 @@ int main (int argc, char* argv[])
     }
 
     bool ok = true;
+
+    // A measured IR, made up: silence, a direct sound of amplitude 0.5 at 50 ms, a reflection of 0.25 at 70 ms.
+    {
+        juce::AudioBuffer<float> measured (2, (int) kSampleRate);
+        measured.clear();
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            measured.setSample (ch, 2400, 0.5f);
+            measured.setSample (ch, 3360, 0.25f);
+        }
+        const auto wet = reverb::removeDirectSound (measured, kSampleRate);
+        const float reflection = wet.getSample (0, 3360 - 2400 + 24), rest = wet.getMagnitude (0, 0, 960 + 24 - 8);
+        const bool good = std::abs (reflection - 0.5f) < 1.0e-3f && rest < 1.0e-6f;
+        ok &= good;
+        std::printf ("Measured IR: reflection %.3f (should be 0.5, half the direct sound), direct sound left %.6f%s\n", reflection, rest, good ? "" : "  <-- wrong");
+    }
+
     for (const auto& room : reverb::presets())
     {
         const auto start = juce::Time::getMillisecondCounterHiRes();
@@ -190,6 +222,59 @@ int main (int argc, char* argv[])
             lr += l * r; ll += l * l; rr += r * r;
         }
         std::printf ("  left/right correlation of tail  %.2f\n", lr / std::sqrt (ll * rr + 1e-30));
+
+        // Early energy: the 1 kHz band in steps of a quarter of the mixing time, from a quarter of it to twice it, against
+        // the statistical level. A real room's early sound is uneven, but a step that is nearly empty is a hole in it.
+        {
+            const double mix = reverb::mixingTimeSeconds (room);
+            const double energyRate = 4.0 * juce::MathConstants<double>::pi * 343.0 / volume * room.distance * room.distance;
+            const double rateDecay = 13.8 / reverb::rt60At (room, 1000.0f);
+            const auto l = octaveBand (ir.getReadPointer (0), ir.getNumSamples(), 1000.0f);
+            const auto r = octaveBand (ir.getReadPointer (1), ir.getNumSamples(), 1000.0f);
+            std::vector<float> impulseBand (l.size(), 0.0f);
+            impulseBand[0] = 1.0f;
+            impulseBand = octaveBand (impulseBand.data(), (int) impulseBand.size(), 1000.0f);
+            double unitEnergy = 0.0;
+            for (auto v : impulseBand)
+                unitEnergy += (double) v * v;
+
+            double worst = 100.0;
+            std::printf ("  early energy against statistical (dB):");
+            for (int step = 1; step < 8; ++step)
+            {
+                const double from = 0.25 * step * mix, to = from + 0.25 * mix;
+                double e = 0.0;
+                for (int n = (int) (from * kSampleRate); n < (int) (to * kSampleRate) && n < (int) l.size(); ++n)
+                    e += 0.5 * ((double) l[(size_t) n] * l[(size_t) n] + (double) r[(size_t) n] * r[(size_t) n]);
+                const double expected = unitEnergy * energyRate * (std::exp (-rateDecay * from) - std::exp (-rateDecay * to)) / rateDecay;
+                const double db = 10.0 * std::log10 (e / expected + 1e-12);
+                worst = std::min (worst, db);
+                std::printf (" %+.1f", db);
+            }
+            const bool earlyGood = worst > -10.0;
+            ok &= earlyGood;
+            std::printf ("%s\n", earlyGood ? "" : "  <-- hole deeper than 10 dB");
+
+            // Ears' correlation of the tail by frequency: high where the wavelength is long compared with the head.
+            std::printf ("  ears' correlation of tail:");
+            for (float hz : { 250.0f, 500.0f, 1000.0f, 2000.0f })
+            {
+                const auto a = octaveBand (ir.getReadPointer (0), ir.getNumSamples(), hz);
+                const auto b = octaveBand (ir.getReadPointer (1), ir.getNumSamples(), hz);
+                double ab = 0, aa = 0, bb = 0;
+                for (int n = (int) (2.0 * mix * kSampleRate); n < ir.getNumSamples(); ++n)
+                {
+                    ab += (double) a[(size_t) n] * b[(size_t) n];
+                    aa += (double) a[(size_t) n] * a[(size_t) n];
+                    bb += (double) b[(size_t) n] * b[(size_t) n];
+                }
+                const double correlation = ab / std::sqrt (aa * bb + 1e-30);
+                if (hz == 250.0f)
+                    ok &= correlation > 0.4;
+                std::printf ("  %.0f Hz %+.2f", hz, correlation);
+            }
+            std::printf ("\n");
+        }
 
         // Files.
         const auto name = room.name.replaceCharacter (' ', '_').toLowerCase();
