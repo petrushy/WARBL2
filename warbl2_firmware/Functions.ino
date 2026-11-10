@@ -199,7 +199,7 @@ void getSensors(void) {
         unpacked[8] |= ((toneholePacked[11] & 0x03) << 8);
 
         // (A garbled transfer that passes the 4-bit checksum is the host's to catch: the sensor stream sends every
-        // reading at once and WARBL Stream holds back a sudden jump in one hole for one frame; see AudioEngine.)
+        // reading at once and the host app (WhistleSim) holds back a sudden jump in one hole for one frame; see AudioEngine.)
         for (byte i = 0; i < 9; i++) {
             toneholeRead[i] = unpacked[i];
             toneholeRaw[i] = unpacked[i];  // Keep the unfiltered readings for the sensor stream.

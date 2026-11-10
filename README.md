@@ -1,6 +1,6 @@
 ## WARBL2 is an open-source USB MIDI and BLE MIDI wind controller.
 
-> **This fork** adds a sensor stream to the firmware (WARBL sends its raw sensor readings over USB instead of notes) and **WARBL Stream**, a computer app that turns them into sound with a physical model of a whistle or recorder. How to build both, and what works on which system: [host/README.md, Building](host/README.md#building). The rest of this page is the original WARBL2 readme.
+> **This fork** adds a sensor stream to the firmware (WARBL sends its raw sensor readings over USB instead of notes), for [WhistleSim](https://github.com/petrushy/whistlesim), a computer app that turns them into sound with a physical model of a whistle or recorder. The protocol, and how to build and flash this firmware: [SENSOR_STREAM.md](SENSOR_STREAM.md). The rest of this page is the original WARBL2 readme.
 
 Please see the web site for more info:
 

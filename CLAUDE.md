@@ -1,8 +1,6 @@
-# WARBL2 (fork with sensor streaming and a physical-model host)
+# WARBL2 (fork with sensor streaming)
 
-WARBL2 is a MIDI wind controller. This fork adds:
-- a **sensor stream** in the firmware: raw sensor frames over USB MIDI SysEx;
-- **WARBL Stream** (`host/`): a Mac app that turns the stream into sound with a physical model of a whistle, plus room reverb.
+WARBL2 is a MIDI wind controller. This fork adds a **sensor stream** to the firmware: raw sensor frames over USB MIDI SysEx (protocol and build steps in `SENSOR_STREAM.md`). The app that plays it, **WhistleSim** (a physical model of a whistle, plus room reverb), has its own repository, petrushy/whistlesim, usually checked out at `../whistlesim`; it was split out of this repo's `host/` folder on 2026-11-10. A change to the stream protocol goes in both: bump the version byte, and keep the app decoding older versions.
 
 The upstream WARBL project is amowry/WARBL2. Fork-specific work lives on feature branches (`natural-vibrato`, `sensor-stream`).
 
@@ -15,29 +13,12 @@ The upstream WARBL project is amowry/WARBL2. Fork-specific work lives on feature
   - `WarblBLEMidi.*`: a renamed copy of Adafruit's BLEMidi (BSD) that can send a whole SysEx per BLE packet.
 - `ATmega_firmware/`: the tone-hole sensor co-processor. The nRF reads it over SPI and reflashes it when `ATMEGA_FIRMWARE_VERSION` in `Defines.h` changes.
 - `webconfig/`: the browser Config Tool, using Web MIDI. Settings travel as CC 102–106 on channel 7.
-- `host/`: the JUCE 9 / CMake Mac app and its tools. See `host/README.md`.
-  - `Source/StreamProtocol.h`: protocol decoder and encoder, no JUCE.
-  - `Source/Whistle/`: geometry, frequency-domain acoustics (`Acoustics`) and the time-domain model (`WhistleModel`).
-  - `Source/*Page`: the Monitor, Instrument and Sensors tabs.
-  - `tools/`: lowercase. WarblSimulator, ReverbCheck, WhistleCheck, stream_monitor.py.
 
 ## Build and check
 
 Firmware (board definition `adafruit:nrf52:warbl2`; the UTF-8 locale is needed by the nrfutil packaging step):
 
     LC_ALL=en_US.UTF-8 arduino-cli compile --fqbn adafruit:nrf52:warbl2 warbl2_firmware
-
-Host app:
-
-    cd host && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j8
-    ctest --test-dir build                                         # protocol and instrument-file tests
-    build/WhistleCheck_artefacts/Release/WhistleCheck chart 0       # whistle (or a name: chart recorder): predicted + played tuning
-    build/ReverbCheck_artefacts/Release/ReverbCheck <dir>          # reverb times / balance vs. targets, WAVs
-
-- The first configure downloads JUCE 9.0.5. LTO is deliberately off, because linking took many minutes.
-- To check the app without anyone at the screen, use `"build/WarblStream_artefacts/Release/WARBL Stream.app/Contents/MacOS/WARBL Stream" --simulate --instrument --snapshot out.png`. Other options: `--sensors`, `--play`, `--output <device>`. Read the PNG.
-- App state lives in `~/Library/Application Support/WARBL Stream/WARBL Stream.settings`; it's the user's real settings. A `--snapshot` run doesn't save state on exit, doesn't connect to MIDI devices (so it can't disturb the user's WARBL session; use `--simulate`), outputs silence (it still computes the sound, so the CPU figure is real), and may run alongside the user's own copy of the app. `--monitor` opens the Monitor tab, `--model` the Model tab (a live look inside the model; `--play` gives it something to show). If a test edits the file, put it back afterwards.
-- A MacBook with its lid closed runs no audio at all: the app shows "blocks 0", and even `afplay` hangs. That isn't an app bug.
 
 ## Conventions
 
@@ -47,9 +28,4 @@ Host app:
   - Use spare bits or `ED[]` entries, sent with CC 104/105 or 106 values marked unused in `Defines.h`.
   - Defaults must make existing presets behave as before.
   - The Config Tool shows a control only once WARBL reports the setting.
-- **Physical model principle:** sound comes from simulating the instrument. Never map fingerings to notes. Hole sensors give continuous openness, and pitch, half-holing, slides and overblowing must come out of the simulation. `Acoustics` (transfer-matrix method) is only a design aid, for the tuning table and hole placement.
-- **Audio-thread code:** no locks (try-lock only), no allocation. Data goes from the MIDI thread to the audio thread through `SpscQueue`, and settings through atomics. Geometry is handed over to the audio thread with a try-locked pending copy.
-- **Preset dimensions are tuned offline.** After changing the acoustics or a preset, run `WhistleCheck code` and paste the printed values into `WhistleGeometry.cpp`; `PresetTuningTest` checks them.
-- **Holes:** there are eight, one per WARBL finger sensor (LT, L1–L3, R1–R4). Each has an enabled flag, and code must skip plugged holes.
-- **Verifying model changes:** run `WhistleCheck` (`play`, `chart`, `slide`) before and after. It measures what the model actually plays.
 - Match the surrounding style: comments explain why, units are in comments, and variable names are descriptive.
