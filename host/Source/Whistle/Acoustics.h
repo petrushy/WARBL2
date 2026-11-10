@@ -40,7 +40,7 @@ std::vector<double> resonances (const Geometry&, const Openness&, double fMin = 
 std::vector<int> chartHoles (const Geometry&);
 
 // A fingering chart entry: the note a fingering should give, and which part of the instrument the tuner
-// adjusts to get it. Patterns and tuned holes are in chart fingers (see chartHoles()).
+// starts from to get it (the final values come from a fit over all the notes, see fitTuning). Patterns and tuned holes are in chart fingers (see chartHoles()).
 struct ChartFingering
 {
     static constexpr int kTunesBore = -2;
@@ -67,12 +67,31 @@ const std::vector<ChartFingering>& chartFor (FingeringChart);
 // Cents from the target note to the nearest resonance the geometry gives for this fingering.
 double predictedCents (const Geometry&, const ChartFingering&, double lowestHz);
 
-// Moves the bore length and hole positions so the instrument's chart notes that tune something are in tune
-// (equal temperament, lowest note `lowestHz`). Keeps hole diameters, except that with `tuneCrossFingerings`
-// the chart notes marked tunesDiameter set those holes' sizes, all solved together (e.g. the whistle's
-// cross-fingered C natural sets L1's diameter; on the recorder the forks and upper notes set six sizes). If they
-// can't all be reached, the closest found is kept and it returns false. With `resizeHoles`, holes that can't reach their note where they are allowed to sit also
-// get new sizes (smaller to sit higher, larger to sit lower). Returns false if it couldn't converge.
+// How much a note counts when the tuner shares the error out (its squared error is multiplied by this): the
+// notes of the plain scale 1, accidentals (forks, cross-fingerings) and the third octave 0.3; a note with two
+// fingerings counts once in all.
+double tuningWeight (FingeringChart, const ChartFingering&);
+
+// Further than this from its target a note isn't this instrument's (a plugged hole): the tuner leaves it out.
+constexpr double kCentsNotReachable = 80.0;
+
+struct TuningError
+{
+    double rms = 0.0;             // Cents, weighted as in tuningWeight, over every note in the chart
+    double worstScaleNote = 0.0;  // Cents
+};
+TuningError tuningError (const Geometry&, double lowestHz);
+
+// The weighted least-squares fit on its own, from the instrument as it stands: moves the bore length and hole
+// positions, and with `fitSizes` the hole sizes the chart marks (tunesDiameter), to minimise the squared cents
+// error over every chart note, both octaves alike.
+void fitTuning (Geometry&, double lowestHz, bool fitSizes);
+
+// Tunes the instrument to equal temperament on `lowestHz` (or the chart's own scale): places the bore and holes
+// note by note, then fitTuning shares the remaining error over all the notes rather than leaving it in the upper
+// octave. Keeps hole diameters, except that with `tuneCrossFingerings` the fit may change the sizes the chart
+// marks; with `resizeHoles`, holes that can't reach their note where they are allowed to sit also get new sizes
+// (smaller to sit higher, larger to sit lower). Returns false if the note-by-note placement couldn't converge.
 bool tuneToScale (Geometry&, double lowestHz, bool tuneCrossFingerings = false, bool resizeHoles = false);
 
 } // namespace whistle

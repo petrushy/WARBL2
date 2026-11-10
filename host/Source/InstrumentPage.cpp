@@ -298,7 +298,10 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
         if (ok)
         {
             geometry = tuned;
-            tuneStatus.setText ("Holes placed for " + noteName (hz, geometry.referenceA) + resized, juce::dontSendNotification);
+            const auto error = whistle::tuningError (geometry, hz);
+            tuneStatus.setText ("Holes placed for " + noteName (hz, geometry.referenceA) + ": error " + juce::String (error.rms, 1)
+                                    + " c rms, worst scale note " + juce::String (error.worstScaleNote, 0) + " c" + resized,
+                                juce::dontSendNotification);
             tuneStatus.setTooltip (tuneStatus.getText());
             refreshSliders();
             geometryChanged();
@@ -389,7 +392,7 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
     addHeading ("Fipple");
     addLength ("Windway height (jet thickness)", geometry.windwayHeight, 0.4, 3.0, 0.01)
         .setTooltip ("The height of the narrow channel the air leaves, which is the thickness of the jet. With the other settings unchanged, a thinner jet changes register at a lower breath.");
-    addLength ("Windway length", geometry.windwayLength, 5.0, 50.0, 0.5)
+    addLength ("Windway length", geometry.windwayLength, 5.0, 80.0, 0.5)
         .setTooltip ("The channel's length from the mouth end to the exit. It sets how much air the breath has to accelerate and how much friction it meets: longer responds a little slower and loses more when blown softly.");
     addLength ("Window length (flue to edge)", geometry.windowLength, 2.0, 14.0, 0.05)
         .setTooltip ("The distance the jet crosses from the windway's exit to the edge. Shorter: the jet grows less on the way (a purer tone) and the registers change at a lower breath.");
@@ -455,16 +458,16 @@ InstrumentPage::InstrumentPage (AudioEngine& a) : audio (a)
                      "acts as soon as the finger lifts).");
 
     addHeading ("Finger impact (works without breath)");
-    addRow ("Finger tap (air)", 0.0, 20.0, 0.1, "", [&model] { return (double) model.fingerTap.load(); },
+    addRow ("Finger tap (air)", 0.0, 2.0, 0.01, "", [&model] { return (double) model.fingerTap.load(); },
             [&model] (double v) { model.fingerTap = (float) v; }, false)
         .setTooltip ("A finger landing on a hole pushes a short puff of air into the tube, which rings at whatever note the holes make: "
                      "tapping different fingers gives different pitches, even without blowing. 1 = the physical amount for the "
-                     "finger's speed (quiet, as on a real whistle), more to hear it better, 0 = off.");
+                     "finger's speed, 0 = off. The presets use 0.2, a faint touch under the playing.");
     addRow ("Finger softness", 0.5, 15.0, 0.1, "ms", [&model] { return (double) model.fingerSoftness.load(); },
             [&model] (double v) { model.fingerSoftness = (float) v; }, false)
         .setTooltip ("How gradually a finger's push of air builds up as it comes down (at an everyday tap; a faster finger takes less time). "
                      "Then it stops in a third of that as the fingertip meets the rim. Short: a sharper tick. Long: a soft, rounded thump.");
-    addRow ("Body knock", 0.0, 20.0, 0.1, "", [&model] { return (double) model.bodyKnock.load(); },
+    addRow ("Body knock", 0.0, 2.0, 0.01, "", [&model] { return (double) model.bodyKnock.load(); },
             [&model] (double v) { model.bodyKnock = (float) v; }, false)
         .setTooltip ("The same impact shakes the instrument's body: the short knock you hear from the wood or metal itself, not from "
                      "the air inside. 0 = off.");

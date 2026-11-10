@@ -58,6 +58,7 @@ struct Geometry
     double wallThickness = 0.0005;  // Sets the height of the tone hole chimneys.
     bool bellClosesFoot = false;    // The bell sensor covers the open foot (recorder technique).
     FingeringChart chart = FingeringChart::whistle;
+    int chartTranspose = 0;  // Semitones from the chart's base pitch (recorder: C5); does not shift the audio.
     double referenceA = 440.0;  // Hz: the pitch standard the instrument is tuned to (A4)
 
     // Fipple (mouthpiece). The windway ends in a flat jet that crosses the window and hits the edge (labium).
@@ -167,7 +168,8 @@ struct Voicing
 // Starting points, tuned (see WhistleGeometry.cpp).
 const std::vector<Geometry>& presets();
 
-// The lowest note a preset is tuned to (Hz, at its reference A): recorders C5, whistles D5 (low whistles D4),
+// The lowest note a preset is tuned to (Hz, at its reference A): recorders C5 plus chartTranspose,
+// whistles D5 (low whistles D4),
 // the Härjedalspipa A#4.
 double presetLowestNote (const Geometry&);
 

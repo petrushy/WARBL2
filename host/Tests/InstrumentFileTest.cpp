@@ -50,6 +50,8 @@ int main()
                 CHECK (near (a.holes[(size_t) i].position, b.holes[(size_t) i].position) && near (a.holes[(size_t) i].diameter, b.holes[(size_t) i].diameter));
         }
         CHECK (a.chart == b.chart && a.bellClosesFoot == b.bellClosesFoot);
+        CHECK (a.chartTranspose == b.chartTranspose);
+        CHECK (near (presetLowestNote (a), presetLowestNote (b)));
         CHECK (near (a.headLength, b.headLength) && near (a.headDiameter, b.headDiameter));
         CHECK (near (a.windwayHeight, b.windwayHeight) && near (a.windwayLength, b.windwayLength) && near (a.windowLength, b.windowLength) && near (a.windowWidth, b.windowWidth)
                && near (a.edgeOffset, b.edgeOffset));
@@ -68,6 +70,7 @@ int main()
         if (partial)
         {
             CHECK (partial->geometry.name == "Short");
+            CHECK (partial->geometry.chartTranspose == 0);
             CHECK (near (partial->geometry.boreLength, 0.25));
             CHECK (near (partial->geometry.boreDiameterTop, presets().front().boreDiameterTop));
             CHECK (near (partial->geometry.holes[3].position, presets().front().holes[3].position));
@@ -100,6 +103,7 @@ int main()
     CHECK (rejected ("{ not json"));
     CHECK (rejected (R"({ "format": "something else" })"));
     CHECK (rejected (R"({ "format": "warbl-whistle", "version": 99 })"));
+    CHECK (rejected (R"({ "format": "warbl-whistle", "version": 1, "chartTranspose": -25 })"));
     CHECK (rejected (R"({ "format": "warbl-whistle", "version": 1, "bore": { "length_mm": 10 } })"));
     CHECK (rejected (R"({ "format": "warbl-whistle", "version": 1, "holes": [ { "name": "L1", "position_mm": 900, "diameter_mm": 6 } ] })"));
     CHECK (rejected (R"({ "format": "warbl-whistle", "version": 1, "fipple": { "windwayHeight_mm": 0 } })"));

@@ -195,6 +195,8 @@ const std::vector<ChartFingering>& chartFor (FingeringChart chart)
     // Recorder: the eight holes by name, LT L1 L2 L3 R1 R2 R3 R4 (fingers = hole indices); a ninth character is
     // the foot (bell). Baroque fingering in C, from the Dolmetsch chart for recorders in C, with its forks; the
     // thumb is pinched ('p', a small crack open) for the second and third octaves.
+    // The pairings below seed the tuner and say which sizes it may change; fitTuning then settles the values over
+    // all the notes, so none of these is exact any more.
     // Each hole's position is set by a note that uses it (R2 by the forked F, the thumb hole by high D: thumb
     // open, L2 covered). With cross-fingering tuning the hole sizes tune the forks and the upper notes, as a maker
     // voices them (a hole's position mostly sets its low note, its size its upper notes): R1 by the F# fork, L3
@@ -383,39 +385,87 @@ bool solveLinear (std::vector<std::vector<double>> a, std::vector<double> b, std
 }
 } // namespace
 
-bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingerings, bool resizeHoles)
+double tuningWeight (FingeringChart kind, const ChartFingering& c)
 {
-    // The notes that set a hole's size (one note per hole).
-    std::vector<const ChartFingering*> crosses;
-    std::vector<int> holes;
-    if (tuneCrossFingerings)
-        for (const auto& c : chartFor (g.chart))
-        {
-            const int hole = ChartFingering::holeFor (g, c.tunesDiameter);
-            if (hole >= 0 && g.holes[(size_t) hole].enabled && std::find (holes.begin(), holes.end(), hole) == holes.end())
-            {
-                crosses.push_back (&c);
-                holes.push_back (hole);
-            }
-        }
-
-    if (! tunePositions (g, lowestHz, resizeHoles))
-        return false;
-    if (crosses.empty())
-        return true;
-
-    // The hole sizes together, by damped Newton steps on their logarithms: the sizes interact (the thumb hole
-    // vents every pinched note; R3 and R4 both move high B and top C), so one at a time doesn't settle. Every
-    // trial gets its positions retuned, so the notes that set positions stay in tune throughout.
-    const size_t n = crosses.size();
-    auto errors = [&] (Geometry& trial, std::vector<double>& out)
+    double weight = 1.0;
+    // Accidentals (forks and cross-fingerings) and the third octave: a player leans on these anyway, and they
+    // shouldn't pull the plain scale out of tune. The Härjedalspipa's chart is its scale: every note counts.
+    if (kind != FingeringChart::harjedalspipa)
     {
-        if (! tunePositions (trial, lowestHz, resizeHoles))
-            return false;
-        out.resize (n);
-        for (size_t i = 0; i < n; ++i)
-            out[i] = predictedCents (trial, *crosses[i], lowestHz);
-        return true;
+        const int degree = ((int) std::lround (c.semitones)) % 12;
+        const bool inScale = degree == 0 || degree == 2 || degree == 4 || degree == 5 || degree == 7 || degree == 9 || degree == 11;
+        if (! inScale || c.reg >= 3)
+            weight = 0.3;
+    }
+    // A note with two fingerings (the whistle's high D) counts once in all.
+    int sameNote = 0;
+    for (const auto& other : chartFor (kind))
+        if (std::abs (other.semitones - c.semitones) < 0.01)
+            ++sameNote;
+    return weight / sameNote;
+}
+
+TuningError tuningError (const Geometry& g, double lowestHz)
+{
+    TuningError result;
+    double sum = 0.0, total = 0.0;
+    for (const auto& c : chartFor (g.chart))
+    {
+        const double cents = predictedCents (g, c, lowestHz), weight = tuningWeight (g.chart, c);
+        if (std::abs (cents) >= kCentsNotReachable)
+            continue;  // A plugged hole's note
+        sum += weight * cents * cents;
+        total += weight;
+        if (weight >= 0.5 - 1.0e-9)
+            result.worstScaleNote = std::max (result.worstScaleNote, std::abs (cents));
+    }
+    result.rms = total > 0.0 ? std::sqrt (sum / total) : 0.0;
+    return result;
+}
+
+void fitTuning (Geometry& g, double lowestHz, bool fitSizes)
+{
+    // The notes to fit, as (fingering, square root of its weight). A note far from its target isn't this
+    // instrument's (its hole is plugged): chasing it would only detune the others.
+    struct Note { const ChartFingering* fingering; double rootWeight; };
+    std::vector<Note> notes;
+    for (const auto& c : chartFor (g.chart))
+        if (std::abs (predictedCents (g, c, lowestHz)) < kCentsNotReachable)
+            notes.push_back ({ &c, std::sqrt (tuningWeight (g.chart, c)) });
+
+    // The unknowns: the bore's length, each hole's position in use, and the sizes the chart lets the tuner set.
+    constexpr int kBore = -1;
+    struct Unknown { int hole; bool isSize; };
+    std::vector<Unknown> unknowns { { kBore, false } };
+    std::vector<int> sized;
+    for (const auto& c : chartFor (g.chart))
+    {
+        const int hole = ChartFingering::holeFor (g, c.tunes);
+        if (hole >= 0 && g.holes[(size_t) hole].enabled)
+            unknowns.push_back ({ hole, false });
+        const int sizeHole = ChartFingering::holeFor (g, c.tunesDiameter);
+        if (fitSizes && sizeHole >= 0 && g.holes[(size_t) sizeHole].enabled
+            && std::find (sized.begin(), sized.end(), sizeHole) == sized.end())
+            sized.push_back (sizeHole);
+    }
+    for (int hole : sized)
+        unknowns.push_back ({ hole, true });
+    const size_t m = unknowns.size();
+
+    // Resizing a hole is a bigger change to the instrument than moving it, and changes its tone: each 10 % is
+    // charged like 1.5 cents on a note, so that a hole isn't reshaped for a fraction of a cent.
+    const auto startSizes = g.holes;
+    constexpr double kCentsPerLogSize = 15.0;
+
+    auto errors = [&] (const Geometry& trial)
+    {
+        std::vector<double> out;
+        out.reserve (notes.size() + sized.size());
+        for (const auto& n : notes)
+            out.push_back (n.rootWeight * predictedCents (trial, *n.fingering, lowestHz));
+        for (int hole : sized)
+            out.push_back (kCentsPerLogSize * std::log (trial.holes[(size_t) hole].diameter / startSizes[(size_t) hole].diameter));
+        return out;
     };
     auto cost = [] (const std::vector<double>& e)
     {
@@ -425,64 +475,87 @@ bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingerings, bool r
         return sum;
     };
 
-    std::vector<double> error;
-    if (! errors (g, error))
-        return false;
-    double damping = 0.01;
-    for (int iteration = 0; iteration < 15; ++iteration)
+    // Applies a change (m, or log size) to the unknowns and keeps the holes where a hole can be: each front hole
+    // above the next one down, the lowest above the foot. The thumb hole is on the back, so it has only the ends.
+    auto apply = [&] (Geometry& trial, const std::vector<double>& step)
     {
-        double worst = 0.0;
-        for (double v : error)
-            worst = std::max (worst, std::abs (v));
-        if (worst < 1.0)
-            break;
-
-        // Cents per unit of log diameter, by trying each hole 5 % wider.
-        std::vector<std::vector<double>> jacobian (n, std::vector<double> (n, 0.0));
-        bool ok = true;
-        for (size_t k = 0; k < n && ok; ++k)
+        for (size_t k = 0; k < m; ++k)
         {
-            auto trial = g;
-            trial.holes[(size_t) holes[k]].diameter *= std::exp (0.05);
-            std::vector<double> moved;
-            ok = errors (trial, moved);
-            for (size_t i = 0; ok && i < n; ++i)
-                jacobian[i][k] = (moved[i] - error[i]) / 0.05;
+            const auto u = unknowns[k];
+            if (u.hole == kBore)
+                trial.boreLength = juce::jlimit (0.05, 2.0, trial.boreLength + step[k]);
+            else if (u.isSize)
+            {
+                auto& hole = trial.holes[(size_t) u.hole];
+                const double widest = 0.85 * 2.0 * trial.radiusAt (hole.position);
+                hole.diameter = juce::jlimit (0.0025, widest, hole.diameter * std::exp (step[k]));
+            }
+            else
+                trial.holes[(size_t) u.hole].position += step[k];
         }
-        if (! ok)
-            break;
+        double below = trial.boreLength;
+        for (int i = kNumHoles - 1; i >= 0; --i)
+        {
+            auto& hole = trial.holes[(size_t) i];
+            if (! hole.enabled)
+                continue;
+            hole.position = juce::jlimit (0.01, std::max (0.01, below - hole.diameter), hole.position);
+            if (i != 0)
+                below = hole.position;
+        }
+    };
+
+    auto error = errors (g);
+    double damping = 0.01;
+    for (int iteration = 0; iteration < 30; ++iteration)
+    {
+        // Cents per metre or per unit of log size, from trying each unknown in turn. Big enough steps to be
+        // well above the resolution of the resonance search.
+        std::vector<std::vector<double>> jacobian (error.size(), std::vector<double> (m, 0.0));
+        for (size_t k = 0; k < m; ++k)
+        {
+            const double delta = unknowns[k].isSize ? 0.05 : 0.0004;
+            std::vector<double> step (m, 0.0);
+            step[k] = delta;
+            auto trial = g;
+            apply (trial, step);
+            const auto moved = errors (trial);
+            for (size_t i = 0; i < error.size(); ++i)
+                jacobian[i][k] = (moved[i] - error[i]) / delta;
+        }
 
         // Levenberg-Marquardt: (J'J + damping diag) step = -J'e, with more damping while a step doesn't help.
         bool improved = false;
-        for (int attempt = 0; attempt < 6 && ! improved; ++attempt)
+        double before = cost (error), after = before;
+        for (int attempt = 0; attempt < 8 && ! improved; ++attempt)
         {
-            std::vector<std::vector<double>> normal (n, std::vector<double> (n, 0.0));
-            std::vector<double> gradient (n, 0.0), step;
-            for (size_t r = 0; r < n; ++r)
-            {
-                for (size_t c = 0; c < n; ++c)
-                    for (size_t i = 0; i < n; ++i)
-                        normal[r][c] += jacobian[i][r] * jacobian[i][c];
-                for (size_t i = 0; i < n; ++i)
+            std::vector<std::vector<double>> normal (m, std::vector<double> (m, 0.0));
+            std::vector<double> gradient (m, 0.0), step;
+            for (size_t r = 0; r < m; ++r)
+                for (size_t i = 0; i < error.size(); ++i)
+                {
                     gradient[r] -= jacobian[i][r] * error[i];
-            }
-            for (size_t r = 0; r < n; ++r)
-                normal[r][r] *= 1.0 + damping;
+                    for (size_t c = 0; c < m; ++c)
+                        normal[r][c] += jacobian[i][r] * jacobian[i][c];
+                }
+            double largest = 0.0;
+            for (size_t r = 0; r < m; ++r)
+                largest = std::max (largest, normal[r][r]);
+            for (size_t r = 0; r < m; ++r)
+                normal[r][r] = normal[r][r] * (1.0 + damping) + 1.0e-9 * largest;  // A hole against its limit has no slope
             if (! solveLinear (normal, gradient, step))
                 break;
 
+            for (size_t k = 0; k < m; ++k)  // Linear predictions are only good for small changes
+                step[k] = unknowns[k].isSize ? juce::jlimit (-0.2, 0.2, step[k]) : juce::jlimit (-0.003, 0.003, step[k]);
             auto trial = g;
-            for (size_t k = 0; k < n; ++k)
-            {
-                auto& hole = trial.holes[(size_t) holes[k]];
-                const double widest = 0.85 * 2.0 * trial.radiusAt (hole.position);
-                hole.diameter = juce::jlimit (0.0025, widest, hole.diameter * std::exp (juce::jlimit (-0.3, 0.3, step[k])));
-            }
-            std::vector<double> trialError;
-            if (errors (trial, trialError) && cost (trialError) < cost (error))
+            apply (trial, step);
+            auto trialError = errors (trial);
+            if (cost (trialError) < before)
             {
                 g = trial;
-                error = trialError;
+                error = std::move (trialError);
+                after = cost (error);
                 damping = std::max (1.0e-4, damping / 3.0);
                 improved = true;
             }
@@ -491,13 +564,18 @@ bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingerings, bool r
                 damping *= 5.0;
             }
         }
-        if (! improved)
+        if (! improved || before - after < 0.001 * before)
             break;
     }
+}
 
-    for (double v : error)
-        if (std::abs (v) > 5.0)
-            return false;
+bool tuneToScale (Geometry& g, double lowestHz, bool tuneCrossFingerings, bool resizeHoles)
+{
+    // Placing each hole for its own low note finds the right neighbourhood from any starting point; the fit then
+    // shares the error out over all the notes.
+    if (! tunePositions (g, lowestHz, resizeHoles))
+        return false;
+    fitTuning (g, lowestHz, tuneCrossFingerings);
     return true;
 }
 

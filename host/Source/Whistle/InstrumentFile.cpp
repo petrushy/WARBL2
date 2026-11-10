@@ -68,6 +68,7 @@ juce::var toVar (const Instrument& instrument)
                                                             : g.chart == FingeringChart::harjedalspipa  ? "harjedalspipa"
                                                                                                         : "whistle");
     root.getDynamicObject()->setProperty ("referenceA_Hz", g.referenceA);
+    root.getDynamicObject()->setProperty ("chartTranspose", g.chartTranspose);
 
     auto fipple = object();
     set (fipple, "windwayHeight_mm", g.windwayHeight * 1000.0);
@@ -162,6 +163,8 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     }
     if (root.hasProperty ("referenceA_Hz"))
         g.referenceA = (double) root["referenceA_Hz"];
+    if (root.hasProperty ("chartTranspose"))
+        g.chartTranspose = (int) root["chartTranspose"];
 
     const auto& fipple = root["fipple"];
     read (fipple, "windwayHeight_mm", g.windwayHeight, 0.001);
@@ -205,6 +208,7 @@ std::optional<Instrument> fromVar (const juce::var& root, juce::String& error)
     bad (g.boreDiameterTop < 0.002 || g.boreDiameterFoot < 0.002 || g.headDiameter < 0.002, "Bore diameters must be at least 2 mm");
     bad (g.headLength < 0.0 || g.headLength >= g.boreLength, "The head section must be shorter than the bore");
     bad (g.referenceA < 380.0 || g.referenceA > 500.0, "The reference A must be between 380 and 500 Hz");
+    bad (g.chartTranspose < -24 || g.chartTranspose > 24, "Chart transposition must be between -24 and 24 semitones");
     bad (g.windwayHeight <= 0.0 || g.windwayLength <= 0.0 || g.windowLength <= 0.0 || g.windowWidth <= 0.0, "Fipple sizes must be positive");
     for (const auto& h : g.holes)
         if (h.enabled)
