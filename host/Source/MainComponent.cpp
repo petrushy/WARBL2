@@ -1,5 +1,7 @@
 #include "MainComponent.h"
 
+#include "AboutPanel.h"
+
 namespace
 {
 juce::var sensorsToVar (const AudioEngine& a)
@@ -98,6 +100,8 @@ MainComponent::MainComponent()
     tabs.addTab ("Model", background, new ModelPage (audio), true);
     tabs.setTabBarDepth (30);
     addAndMakeVisible (tabs);
+    aboutButton.onClick = [this] { showAbout(); };
+    addAndMakeVisible (aboutButton);  // After the tabs: it sits in the empty end of their bar.
 
     if (auto* settings = properties.getUserSettings())
     {
@@ -112,6 +116,8 @@ MainComponent::MainComponent()
 
 MainComponent::~MainComponent()
 {
+    if (aboutWindow != nullptr)
+        delete aboutWindow.getComponent();
     if (saveOnExit)
         saveState();
     tabs.clearTabs();  // Pages go before the engine they use.
@@ -167,4 +173,22 @@ void MainComponent::saveState()
 void MainComponent::resized()
 {
     tabs.setBounds (getLocalBounds());
+    aboutButton.setBounds (getWidth() - 70, 3, 62, 24);
+}
+
+void MainComponent::showAbout()
+{
+    if (aboutWindow != nullptr)
+    {
+        aboutWindow->toFront (true);
+        return;
+    }
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned (new AboutPanel());
+    options.dialogTitle = "About WARBL Stream";
+    options.dialogBackgroundColour = juce::Colour (0xff1e1f22);
+    options.componentToCentreAround = this;
+    options.useNativeTitleBar = true;
+    options.resizable = false;
+    aboutWindow = options.launchAsync();
 }

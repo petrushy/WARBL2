@@ -21,6 +21,8 @@ public:
     void showSensors() { tabs.setCurrentTabIndex (2); }
     void showModel() { tabs.setCurrentTabIndex (3); }
     void loadPreset (int index) { instrument->loadPreset (index); }
+    void showAbout();
+    juce::Component* getAboutPanel() { return aboutWindow != nullptr ? aboutWindow->getContentComponent() : nullptr; }
     void setSaveStateOnExit (bool shouldSave) { saveOnExit = shouldSave; }
     AudioEngine& getAudio() { return audio; }
 
@@ -37,6 +39,8 @@ private:
 
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     MonitorPage* monitor = nullptr;  // Owned by tabs.
+    juce::TextButton aboutButton { "About" };
+    juce::Component::SafePointer<juce::DialogWindow> aboutWindow;  // Deletes itself when closed.
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };
